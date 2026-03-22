@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- HELPER FUNCTIONS ---
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "matthias.insidiom@gmail.com" && request.auth.token.get('email_verified', false) == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true)
+      );
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isBanned() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') == 'banned';
+    }
+
+    // --- COLLECTION RULES ---
+
+    // Users: Read own. All writes via Cloud Functions.
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false; // Role changes, claims, etc. via Functions
+    }
+
+    // Fan Profiles: Publicly readable. Owner can manage.
+    match /fanProfiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId) && !isBanned();
+      allow delete: if isAdmin();
+    }
+
+    // Leagues, Clubs, Players, Fixtures: Auth read. Admin write (via Functions or direct if needed).
+    // We prefer Functions for complex logic, but Rules protect direct access.
+    match /leagues/{leagueId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /clubs/{clubId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /players/{playerId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+      
+      match /stats/current {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin(); // Only admin or backend logic
+      }
+    }
+
+    match /fixtures/{fixtureId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+      
+      match /lineups/{lineupId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
+    }
+
+    // Club QR Tokens: Admin only.
+    match /clubQrTokens/{clubId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Fixture Check-ins: Read own. Write via Cloud Function.
+    match /fixtureCheckins/{checkinId} {
+      allow read: if isAuthenticated() && (resource.data.fanUserId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    // Ratings: Read own. Write via Cloud Function.
+    match /ratings/{ratingId} {
+      allow read: if isAuthenticated() && (resource.data.fanUserId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    // Rating Aggregates: Auth read. Write via Cloud Function.
+    match /ratingAggregates/{aggregateId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+  }
+}

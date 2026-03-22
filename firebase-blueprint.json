@@ -1,0 +1,192 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core user account information.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["admin", "player", "fan"] },
+        "isAdmin": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "banned"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "claimedPlayerId": { "type": ["string", "null"] }
+      },
+      "required": ["role", "isAdmin", "status", "createdAt"]
+    },
+    "FanProfile": {
+      "title": "FanProfile",
+      "description": "Public fan profile information.",
+      "type": "object",
+      "properties": {
+        "nickname": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nickname", "createdAt"]
+    },
+    "League": {
+      "title": "League",
+      "description": "Football league container.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "region": { "type": "string" },
+        "level": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "region", "level", "active", "createdAt"]
+    },
+    "Club": {
+      "title": "Club",
+      "description": "Football club entity.",
+      "type": "object",
+      "properties": {
+        "leagueId": { "type": "string" },
+        "name": { "type": "string" },
+        "shortName": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leagueId", "name", "createdAt"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "Admin-created player entity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "team_id": { "type": "string" },
+        "full_name": { "type": "string" },
+        "position": { "type": "string" },
+        "shirt_number": { "type": "integer" },
+        "photo_url": { "type": "string" },
+        "birth_year": { "type": "integer" },
+        "is_active": { "type": "boolean" },
+        "claimed_by_user_id": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["team_id", "full_name", "is_active", "created_at"]
+    },
+    "PlayerStats": {
+      "title": "PlayerStats",
+      "description": "Dynamic player performance metrics.",
+      "type": "object",
+      "properties": {
+        "overall": { "type": "integer" },
+        "tem": { "type": "integer" },
+        "sch": { "type": "integer" },
+        "pas": { "type": "integer" },
+        "dri": { "type": "integer" },
+        "def": { "type": "integer" },
+        "phy": { "type": "integer" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["overall", "updated_at"]
+    },
+    "Fixture": {
+      "title": "Fixture",
+      "description": "Match fixture details.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "league_id": { "type": "string" },
+        "home_team_id": { "type": "string" },
+        "away_team_id": { "type": "string" },
+        "kickoff_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "finished", "cancelled"] },
+        "venue_name": { "type": "string" },
+        "home_score": { "type": ["integer", "null"] },
+        "away_score": { "type": ["integer", "null"] },
+        "checkin_code": { "type": "string" },
+        "checkin_opens_at": { "type": ["string", "null"], "format": "date-time" },
+        "checkin_closes_at": { "type": ["string", "null"], "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["league_id", "home_team_id", "away_team_id", "kickoff_at", "status", "created_at"]
+    },
+    "FixtureLineup": {
+      "title": "FixtureLineup",
+      "description": "Player entry in a match lineup.",
+      "type": "object",
+      "properties": {
+        "playerId": { "type": "string" },
+        "clubId": { "type": "string" },
+        "isStarter": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playerId", "clubId", "isStarter", "createdAt"]
+    },
+    "ClubQrToken": {
+      "title": "ClubQrToken",
+      "description": "Permanent QR token for club check-ins.",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["token", "isActive", "createdAt"]
+    },
+    "FixtureCheckIn": {
+      "title": "FixtureCheckIn",
+      "description": "Fan check-in record for a match.",
+      "type": "object",
+      "properties": {
+        "fixtureId": { "type": "string" },
+        "fanUserId": { "type": "string" },
+        "checkedInAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fixtureId", "fanUserId", "checkedInAt"]
+    },
+    "Rating": {
+      "title": "Rating",
+      "description": "Individual fan vote.",
+      "type": "object",
+      "properties": {
+        "fixtureId": { "type": "string" },
+        "playerId": { "type": "string" },
+        "fanUserId": { "type": "string" },
+        "vote": { "type": "string", "enum": ["up", "down"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fixtureId", "playerId", "fanUserId", "vote", "createdAt"]
+    },
+    "RatingAggregate": {
+      "title": "RatingAggregate",
+      "description": "Aggregated match ratings for a player.",
+      "type": "object",
+      "properties": {
+        "fixtureId": { "type": "string" },
+        "playerId": { "type": "string" },
+        "upCount": { "type": "integer" },
+        "downCount": { "type": "integer" },
+        "voteCount": { "type": "integer" },
+        "matchScore": { "type": "number" },
+        "expected": { "type": "number" },
+        "appliedDelta": { "type": "number" },
+        "computedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fixtureId", "playerId", "upCount", "downCount", "voteCount", "computedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User accounts." },
+    "/fanProfiles/{userId}": { "schema": "FanProfile", "description": "Fan public profiles." },
+    "/leagues/{leagueId}": { "schema": "League", "description": "Football leagues." },
+    "/clubs/{clubId}": { "schema": "Club", "description": "Football clubs." },
+    "/players/{playerId}": { "schema": "Player", "description": "Player entities." },
+    "/players/{playerId}/stats/current": { "schema": "PlayerStats", "description": "Current player performance stats." },
+    "/fixtures/{fixtureId}": { "schema": "Fixture", "description": "Match fixtures." },
+    "/fixtures/{fixtureId}/lineups/{lineupId}": { "schema": "FixtureLineup", "description": "Match lineups." },
+    "/clubQrTokens/{clubId}": { "schema": "ClubQrToken", "description": "Club QR tokens." },
+    "/fixtureCheckins/{checkinId}": { "schema": "FixtureCheckIn", "description": "Fan check-ins (fixtureId_userId)." },
+    "/ratings/{ratingId}": { "schema": "Rating", "description": "Fan votes (fixtureId_playerId_userId)." },
+    "/ratingAggregates/{aggregateId}": { "schema": "RatingAggregate", "description": "Match rating aggregates (fixtureId_playerId)." }
+  }
+}
