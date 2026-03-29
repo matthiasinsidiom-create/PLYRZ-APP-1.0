@@ -41,6 +41,7 @@ export interface Team {
 }
 
 export interface PlayerStats {
+  id?: string;
   player_id: string;
   overall: number;
   tem: number;
@@ -62,10 +63,13 @@ export interface Player {
   birth_year?: number;
   is_active: boolean;
   claimed_by_user_id?: string;
+  nationality?: string;
+  card_layout?: any;
   created_at: string;
   updated_at: string;
-  teams?: { name: string };
+  teams?: { name: string, club_id: string, clubs?: Club };
   player_stats?: PlayerStats[];
+  current_stats?: PlayerStats;
 }
 
 export interface Fixture {
@@ -92,6 +96,8 @@ export interface FixtureLineup {
   fixture_id: string;
   player_id: string;
   team_id: string;
+  shirt_number?: number | null;
+  lineup_role?: 'starter' | 'sub';
   created_at: string;
 }
 

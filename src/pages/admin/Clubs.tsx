@@ -31,6 +31,8 @@ const AdminClubs: React.FC = () => {
     logo_url: ''
   });
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null }>({
     isOpen: false,
     id: null
@@ -57,6 +59,7 @@ const AdminClubs: React.FC = () => {
   };
 
   const handleOpenModal = (club: any = null) => {
+    setLogoPreview(null);
     if (club) {
       setEditingClub(club);
       setFormData({
@@ -77,23 +80,57 @@ const AdminClubs: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    console.log('DEBUG: [FRONTEND] Selected file detected:', file.name, file.size, file.type);
+
+    const localUrl = URL.createObjectURL(file);
+    setLogoPreview(localUrl);
+
+    setUploading(true);
+    console.log('DEBUG: [FRONTEND] Upload started...');
+    try {
+      const publicUrl = await supabaseService.uploadClubLogo(file);
+      console.log('DEBUG: [FRONTEND] Upload success result:', publicUrl);
+      setFormData(prev => {
+        const next = { ...prev, logo_url: publicUrl };
+        console.log('DEBUG: [FRONTEND] Updated formData with logo_url:', next);
+        return next;
+      });
+    } catch (err: any) {
+      console.error('DEBUG: [FRONTEND] Upload failed:', err);
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    console.log('DEBUG: [FRONTEND] handleSubmit called. Current formData:', formData);
+    
     try {
       if (editingClub) {
-        await supabaseService.updateClub(editingClub.id, formData);
+        console.log('DEBUG: [FRONTEND] Updating club ID:', editingClub.id, 'Payload:', formData);
+        const updatedClub = await supabaseService.updateClub(editingClub.id, formData);
+        console.log('DEBUG: [FRONTEND] Final saved club response (update):', updatedClub);
       } else {
+        console.log('DEBUG: [FRONTEND] Creating new club. Payload:', formData);
         const result = await supabaseService.createClub(formData);
+        console.log('DEBUG: [FRONTEND] Final saved club response (create):', result);
         
-        if (result.teamErrors) {
+        if (result.teamErrors && result.teamErrors.length > 0) {
           const failedTeams = result.teamErrors.map((te: any) => te.name).join(', ');
           alert(`Club "${result.club.name}" was created successfully, but there were errors creating the default teams: ${failedTeams}.\n\nYou may need to create them manually in the Teams section.`);
         }
       }
       setIsModalOpen(false);
-      loadData();
+      await loadData();
     } catch (err) {
+      console.error('DEBUG: [FRONTEND] handleSubmit failed:', err);
       alert('Error saving club: ' + (err as any).message);
     } finally {
       setSubmitting(false);
@@ -129,14 +166,14 @@ const AdminClubs: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-6 text-white font-sans">
+    <div className="min-h-screen bg-transparent p-6 text-white font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin')}
-              className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors"
+              className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
@@ -164,7 +201,7 @@ const AdminClubs: React.FC = () => {
             placeholder="Search clubs..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
+            className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
           />
         </div>
 
@@ -180,11 +217,20 @@ const AdminClubs: React.FC = () => {
                 key={club.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-4"
+                className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-2xl space-y-4"
               >
                 <div className="flex items-start justify-between">
-                  <div className="p-3 bg-blue-500/10 rounded-xl">
-                    <Shield className="w-6 h-6 text-blue-500" />
+                  <div className="w-16 h-16 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
+                    {club.logo_url ? (
+                      <img 
+                        src={club.logo_url} 
+                        alt={club.name} 
+                        className="w-full h-full object-contain p-2" 
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <Shield className="w-8 h-8 text-zinc-600" />
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
@@ -217,12 +263,12 @@ const AdminClubs: React.FC = () => {
         {/* Modal */}
         <AnimatePresence>
           {isModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 w-full max-w-md shadow-2xl"
+                className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl"
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
@@ -276,20 +322,51 @@ const AdminClubs: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Logo URL</label>
-                    <input 
-                      type="url"
-                      value={formData.logo_url}
-                      onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
-                      placeholder="https://..."
-                    />
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Logo</label>
+                    <div className="flex gap-4 items-center">
+                      {(formData.logo_url || logoPreview) ? (
+                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 flex-shrink-0">
+                          <img 
+                            src={logoPreview || formData.logo_url} 
+                            alt="Logo Preview" 
+                            className="w-full h-full object-contain p-2"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0">
+                          <Shield className="w-6 h-6 text-zinc-600" />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-2">
+                        <input 
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                          id="logo-upload"
+                        />
+                        <label 
+                          htmlFor="logo-upload"
+                          className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
+                        >
+                          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                          {formData.logo_url ? 'CHANGE LOGO' : 'UPLOAD LOGO'}
+                        </label>
+                        <input 
+                          type="url"
+                          value={formData.logo_url}
+                          onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
+                          className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-blue-500/50 transition-colors"
+                          placeholder="Or enter URL directly..."
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <button
                     disabled={submitting}
                     type="submit"
-                    className="w-full bg-white text-black font-black py-4 rounded-xl hover:bg-blue-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-blue-500 text-white font-black py-4 rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                     {editingClub ? 'UPDATE CLUB' : 'CREATE CLUB'}

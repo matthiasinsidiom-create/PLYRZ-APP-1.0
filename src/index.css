@@ -6,7 +6,7 @@
 
 @layer base {
   body {
-    @apply bg-[#0A0A0A] text-white;
+    @apply bg-zinc-950 text-white;
   }
 }
 

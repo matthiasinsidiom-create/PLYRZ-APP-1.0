@@ -22,12 +22,12 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="bg-zinc-900 border border-zinc-800 rounded-[2rem] p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
+            className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
           >
             {/* Background Glow */}
             <div className="absolute -top-24 -right-24 w-48 h-48 bg-red-500/10 blur-[100px]" />
@@ -69,7 +69,7 @@ const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({
                 <button
                   disabled={loading}
                   onClick={onClose}
-                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-white/5"
                 >
                   CANCEL
                 </button>

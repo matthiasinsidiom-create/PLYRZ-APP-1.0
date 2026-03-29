@@ -1,287 +1,487 @@
 import React from 'react';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import { Player } from '../types';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
-// ==================================================
-// 1. TIER DEFINITIONS & STYLES
-// ==================================================
-type CardTier = 'bronze' | 'silver' | 'gold';
-
-interface TierStyle {
-  bgGradient: string;
-  borderColor: string;
-  textColor: string;
-  bannerBg: string;
-  statsDivider: string;
-  glowColor: string;
-  shineOpacity: string;
-  textureOpacity: string;
-}
-
-/**
- * BRONZE STYLE DEFINITION
- */
-const BRONZE_STYLE: TierStyle = {
-  bgGradient: 'from-[#5d3a1a] via-[#8b4513] to-[#2d1a0a]',
-  borderColor: 'border-[#8b4513]/40',
-  textColor: 'text-[#f5e6d3]',
-  bannerBg: 'bg-black/30',
-  statsDivider: 'bg-[#f5e6d3]/15',
-  glowColor: 'rgba(139,69,19,0.15)',
-  shineOpacity: 'opacity-10',
-  textureOpacity: 'opacity-20',
-};
-
-/**
- * SILVER STYLE DEFINITION
- */
-const SILVER_STYLE: TierStyle = {
-  bgGradient: 'from-[#3a3a3a] via-[#a0a0a0] to-[#1a1a1a]',
-  borderColor: 'border-[#a0a0a0]/40',
-  textColor: 'text-[#e8e8e8]',
-  bannerBg: 'bg-black/30',
-  statsDivider: 'bg-[#e8e8e8]/15',
-  glowColor: 'rgba(160,160,160,0.15)',
-  shineOpacity: 'opacity-15',
-  textureOpacity: 'opacity-25',
-};
-
-/**
- * GOLD STYLE DEFINITION
- */
-const GOLD_STYLE: TierStyle = {
-  bgGradient: 'from-[#6c4d0f] via-[#d4af37] to-[#2a1f00]',
-  borderColor: 'border-[#d4af37]/40',
-  textColor: 'text-[#fff4d1]',
-  bannerBg: 'bg-black/30',
-  statsDivider: 'bg-[#fff4d1]/15',
-  glowColor: 'rgba(212,175,55,0.25)',
-  shineOpacity: 'opacity-25',
-  textureOpacity: 'opacity-30',
-};
-
-const TIER_STYLES: Record<CardTier, TierStyle> = {
-  bronze: BRONZE_STYLE,
-  silver: SILVER_STYLE,
-  gold: GOLD_STYLE,
-};
-
-const getCardTier = (overall: number): CardTier => {
-  if (overall >= 75) return 'gold';
-  if (overall >= 65) return 'silver';
-  return 'bronze';
-};
-
-// ==================================================
-// 2. SHARED LAYOUT COMPONENTS (GEOMETRY)
-// ==================================================
-
-/**
- * SHARED CARD SHIELD GEOMETRY
- * Defines the silhouette and physical frame.
- */
-const CardShield: React.FC<{ children: React.ReactNode; style: TierStyle; className?: string }> = ({ children, style, className }) => (
-  <div 
-    className={cn(
-      "relative w-full h-full overflow-hidden border-[3px] transition-all duration-500 clip-fut-shield bg-gradient-to-br",
-      style.bgGradient,
-      style.borderColor,
-      className
-    )}
-    style={{ boxShadow: `0 0 40px ${style.glowColor}` }}
-  >
-    {children}
-  </div>
-);
-
-/**
- * SHARED LAYOUT STRUCTURE
- * This component defines the exact positioning for all elements.
- * It is used identically by all tiers.
- */
-const CardLayout: React.FC<{ 
-  player: Player; 
-  stats: any; 
-  style: TierStyle; 
-  clubLogo?: string;
-}> = ({ player, stats, style, clubLogo }) => {
-  const lastName = player.full_name.split(' ').pop() || player.full_name;
-
-  return (
-    <>
-      {/* Layer 1: Background Texture */}
-      <div className={cn("absolute inset-0 pointer-events-none mix-blend-overlay opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]", style.textureOpacity)} />
-      
-      {/* Layer 2: Shine Effect */}
-      <div className={cn(
-        "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transform skew-x-12", 
-        style.shineOpacity
-      )} />
-
-      {/* Layer 3: Top-Left Rating Area (Rating, Position, Flag, Club) */}
-      <div className={cn("absolute top-7 left-4 flex flex-col items-center gap-0 z-30", style.textColor)}>
-        <span className="text-[48px] font-black leading-none tracking-tighter drop-shadow-md">{stats.overall}</span>
-        <span className="text-base font-bold uppercase tracking-widest leading-none mb-2">{player.position || 'N/A'}</span>
-        
-        <div className={cn("w-8 h-[1px] mb-2 opacity-30", style.statsDivider)} />
-        
-        <img 
-          src={`https://flagcdn.com/w40/es.png`} 
-          alt="Nationality"
-          className="w-8 h-5 object-cover shadow-sm rounded-[1px] mb-2"
-          referrerPolicy="no-referrer"
-        />
-        
-        {clubLogo && (
-          <img 
-            src={clubLogo} 
-            alt="Club"
-            className="w-8 h-8 object-contain drop-shadow-lg"
-            referrerPolicy="no-referrer"
-          />
-        )}
-      </div>
-
-      {/* Layer 4: Dominant Central Player Image */}
-      <div className="absolute top-2 right-0 w-[92%] h-[75%] z-20 pointer-events-none overflow-hidden">
-        <img 
-          src={player.photo_url || `https://picsum.photos/seed/${lastName}/400/600`} 
-          alt={lastName}
-          className="w-full h-full object-contain object-bottom drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]"
-          referrerPolicy="no-referrer"
-          style={{
-            maskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, black 80%, transparent 100%)'
-          }}
-        />
-      </div>
-
-      {/* Layer 5: Lower-Middle Name Banner Area */}
-      <div className="absolute bottom-[105px] left-0 w-full flex flex-col items-center z-30">
-        <div className={cn("w-[75%] h-[1px] mb-2.5 opacity-30", style.statsDivider)} />
-        <div className="relative w-full flex justify-center px-4">
-          <div className={cn("absolute inset-0 h-8 top-1/2 -translate-y-1/2 mx-10 rounded-sm skew-x-[-10deg]", style.bannerBg)} />
-          <h3 className={cn("relative text-[22px] font-black uppercase tracking-tight text-center leading-none drop-shadow-md", style.textColor)}>
-            {lastName}
-          </h3>
-        </div>
-      </div>
-
-      {/* Layer 6: Bottom Stats Placement */}
-      <div className={cn("absolute bottom-6 left-0 w-full px-8 grid grid-cols-2 gap-x-6 gap-y-1 z-30", style.textColor)}>
-        <div className={cn("absolute top-[-10px] left-1/2 -translate-x-1/2 w-[75%] h-[1px] opacity-30", style.statsDivider)} />
-        
-        <StatItem label="TEM" value={stats.tem} />
-        <StatItem label="DRI" value={stats.dri} />
-        <StatItem label="SCH" value={stats.sch} />
-        <StatItem label="DEF" value={stats.def} />
-        <StatItem label="PAS" value={stats.pas} />
-        <StatItem label="PHY" value={stats.phy} />
-      </div>
-
-      {/* Layer 7: Inner Frame Metallic Detail */}
-      <div className={cn("absolute inset-0 pointer-events-none border-[1px] m-2 opacity-20 clip-fut-shield", style.borderColor)} />
-      <div className={cn("absolute inset-0 pointer-events-none border-[1px] m-4 opacity-10 clip-fut-shield", style.borderColor)} />
-    </>
-  );
-};
-
-const StatItem: React.FC<{ label: string; value: number }> = ({ label, value }) => (
-  <div className="flex items-center justify-between gap-2">
-    <span className="text-base font-black leading-none">{value}</span>
-    <span className="text-[10px] font-black uppercase tracking-widest opacity-70">{label}</span>
-  </div>
-);
-
-// ==================================================
-// 3. MAIN PLAYERCARD COMPONENT
-// ==================================================
+import { resolveLatestStats } from '../lib/stats';
 
 interface PlayerCardProps {
   player: Player;
   clubLogo?: string;
   className?: string;
-  forceTier?: CardTier; // For debug/preview
+  forceTier?: 'bronze' | 'silver' | 'gold';
+  shirtNumber?: number | null;
+  lineupRole?: 'starter' | 'sub';
+  onClick?: () => void;
 }
 
-export const PlayerCard: React.FC<PlayerCardProps> = ({ player, clubLogo, className, forceTier }) => {
-  const stats = player.player_stats?.[0] || {
-    overall: 50,
-    tem: 50,
-    sch: 50,
-    pas: 50,
-    dri: 50,
-    def: 50,
-    phy: 50
+const styles: { [key: string]: React.CSSProperties } = {
+  cardContainer: {
+    width: '350px',
+    height: '490px',
+    aspectRatio: '0.71',
+    position: 'relative',
+    fontFamily: '"Inter", sans-serif',
+    userSelect: 'none',
+    overflow: 'hidden',
+  },
+  frame: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 1,
+    display: 'block',
+    pointerEvents: 'none',
+    objectFit: 'contain',
+  },
+  overall: {
+    position: 'absolute',
+    fontWeight: '900',
+    color: '#ffffff',
+    zIndex: 10,
+    lineHeight: '1',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+  },
+  position: {
+    position: 'absolute',
+    fontWeight: '900',
+    color: '#ffffff',
+    zIndex: 10,
+    textTransform: 'uppercase',
+    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+  },
+  flag: {
+    position: 'absolute',
+    width: '52px',
+    height: 'auto',
+    objectFit: 'cover',
+    zIndex: 10,
+    display: 'block',
+    pointerEvents: 'none',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+  },
+  club: {
+    position: 'absolute',
+    width: '56px',
+    height: 'auto',
+    objectFit: 'contain',
+    zIndex: 10,
+    display: 'block',
+    pointerEvents: 'none',
+    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+  },
+  playerImage: {
+    position: 'absolute',
+    transform: 'translateX(-50%)',
+    objectFit: 'contain',
+    objectPosition: 'bottom',
+    zIndex: 5,
+    display: 'block',
+    pointerEvents: 'none',
+  },
+  nameContainer: {
+    position: 'absolute',
+    width: '100%',
+    height: '45px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 15,
+  },
+  name: {
+    fontWeight: '900',
+    color: '#ffffff',
+    textTransform: 'uppercase',
+    letterSpacing: '0.02em',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+    textAlign: 'center',
+  },
+  statsContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 15,
+  },
+  statsColumnLeft: {
+    position: 'absolute',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px',
+    transform: 'translateX(-50%)',
+  },
+  statsColumnRight: {
+    position: 'absolute',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '2px',
+    transform: 'translateX(-50%)',
+  },
+  statRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  statValue: {
+    fontWeight: '900',
+    color: '#ffffff',
+    lineHeight: '1',
+  },
+  statLabel: {
+    fontWeight: '700',
+    color: '#ffffff',
+    opacity: 0.9,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  shirtNumberBadge: {
+    position: 'absolute',
+    top: '15px',
+    right: '15px',
+    width: '42px',
+    height: '42px',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    zIndex: 20,
+    backdropFilter: 'blur(12px)',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+  },
+  shirtNumberText: {
+    color: '#ffffff',
+    fontSize: '18px',
+    fontWeight: '900',
+    fontFamily: '"Inter", sans-serif',
+    fontStyle: 'italic',
+    letterSpacing: '-0.05em',
+  },
+  roleBadge: {
+    position: 'absolute',
+    bottom: '100px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '4px 16px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    letterSpacing: '0.15em',
+    zIndex: 20,
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+    fontStyle: 'italic',
+  },
+  starterBadge: {
+    backgroundColor: '#10b981', // emerald-500
+    color: '#000000',
+  },
+  subBadge: {
+    backgroundColor: '#fbbf24', // amber-400
+    color: '#000000',
+  },
+};
+
+export const PlayerCard: React.FC<PlayerCardProps> = ({ player, clubLogo, forceTier, className, shirtNumber, lineupRole, onClick }) => {
+  // Use the new consistent stats resolver, prioritizing already resolved stats
+  const stats = player.current_stats || resolveLatestStats(player);
+
+  // Debug log to see what stats are being used for this player
+  console.log(`DEBUG: [UI] PlayerCard for ${player.full_name} using stats:`, stats);
+
+  const [showDebug, setShowDebug] = React.useState(false);
+
+  function getTier() {
+    if (forceTier) return forceTier;
+    const ovr = typeof stats.overall === 'string' ? parseInt(stats.overall) : stats.overall;
+    if (ovr >= 75) return 'gold';
+    if (ovr >= 65) return 'silver';
+    return 'bronze';
+  }
+
+  const layout = (() => {
+    const rawLayout = player.card_layout || {};
+    const tier = getTier();
+    
+    // Define absolute defaults
+    const defaultColor = {
+      mode: 'solid',
+      color: '#ffffff',
+      gradientStart: '#ffffff',
+      gradientEnd: '#cccccc',
+      gradientDirection: 'vertical'
+    };
+
+    const defaults = {
+      overall: { x: 18, y: 8, fontSize: 60, ...defaultColor },
+      position: { x: 18, y: 18, fontSize: 28, ...defaultColor },
+      flag: { x: 18, y: 28, width: 60, height: 36 },
+      club: { x: 18, y: 38, width: 64, height: 64 },
+      player: { x: 50, y: 5, scale: 0.95 },
+      name: { x: 50, y: 53, fontSize: 32, ...defaultColor },
+      statsLeft: { x: 24, y: 74, fontSize: 21, ...defaultColor },
+      statsRight: { x: 58, y: 74, fontSize: 21, ...defaultColor },
+      card: { scale: 1, x: 0, y: 0 },
+      frame: { scale: 1, x: 0, y: 0 }
+    };
+
+    // Determine source: tiered or flat
+    const isMultiTier = !!(rawLayout.bronze || rawLayout.silver || rawLayout.gold);
+    const tierSource = isMultiTier ? (rawLayout[tier] || {}) : rawLayout;
+    
+    // Deep merge with defaults to ensure all keys and sub-keys exist
+    const merged: any = {};
+    Object.keys(defaults).forEach(key => {
+      const elementDefaults = (defaults as any)[key];
+      const elementSource = tierSource[key] || {};
+      merged[key] = { ...elementDefaults, ...elementSource };
+    });
+    
+    return merged;
+  })();
+
+  const frameScale = layout.frame?.scale || 1;
+  const frameX = layout.frame?.x || 0;
+  const frameY = layout.frame?.y || 0;
+  const baseWidth = 350;
+  const baseHeight = 490;
+
+  const dynamicCardStyle: React.CSSProperties = {
+    ...styles.cardContainer,
+    width: `${baseWidth}px`,
+    height: `${baseHeight}px`,
   };
 
-  const tier = forceTier || getCardTier(stats.overall);
-  const style = TIER_STYLES[tier];
-
-  // Mouse tilt effect
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const mouseXSpring = useSpring(x, { stiffness: 150, damping: 20 });
-  const mouseYSpring = useSpring(y, { stiffness: 150, damping: 20 });
-  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["12deg", "-12deg"]);
-  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-12deg", "12deg"]);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const xPct = mouseX / width - 0.5;
-    const yPct = mouseY / height - 0.5;
-    x.set(xPct);
-    y.set(yPct);
+  const getFrameSrc = (tier: string) => {
+    switch (tier) {
+      case 'bronze': return '/assets/cards/bronze.png';
+      case 'silver': return '/assets/cards/silver.png';
+      case 'gold': return '/assets/cards/gold.png';
+      default: return '/assets/cards/gold.png';
+    }
   };
 
-  const handleMouseLeave = () => {
-    x.set(0);
-    y.set(0);
+  const tier = getTier();
+  const frameSrc = getFrameSrc(tier);
+  const lastName = player.full_name.split(' ').pop() || player.full_name;
+  const displayName = lastName;
+  
+  // Use nationality flag from flagcdn
+  const flagCode = (player.nationality || 'de').toLowerCase();
+  const flagSrc = `https://flagcdn.com/w80/${flagCode}.png`;
+  
+  // Use club logo from props or relation
+  const clubLogoSrc = clubLogo || player.teams?.clubs?.logo_url || "/assets/clubs/rw.png";
+
+  const getTextStyle = (config: any): React.CSSProperties => {
+    if (!config) return {};
+    
+    if (config.mode === 'gradient') {
+      let direction = 'to bottom';
+      if (config.gradientDirection === 'horizontal') direction = 'to right';
+      if (config.gradientDirection === 'diagonal') direction = 'to bottom right';
+      
+      return {
+        background: `linear-gradient(${direction}, ${config.gradientStart || '#ffffff'}, ${config.gradientEnd || '#cccccc'})`,
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
+        color: 'transparent',
+      };
+    }
+    
+    return {
+      color: config.color || '#ffffff',
+    };
   };
 
   return (
-    <motion.div
-      style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      className={cn("relative w-64 h-96 flex flex-col font-sans cursor-pointer group perspective-1000", className)}
+    <div 
+      style={dynamicCardStyle} 
+      className={`relative group ${className || ''} ${onClick ? 'cursor-pointer active:scale-95 transition-transform duration-200' : ''}`}
+      onMouseEnter={() => setShowDebug(true)}
+      onMouseLeave={() => setShowDebug(false)}
+      onClick={onClick}
     >
-      <CardShield style={style}>
-        <CardLayout 
-          player={player} 
-          stats={stats} 
-          style={style} 
-          clubLogo={clubLogo} 
-        />
-      </CardShield>
+      {/* DEBUG OVERLAY - ALWAYS VISIBLE AT BOTTOM, EXPANDS ON HOVER */}
+      <div className={`absolute bottom-0 left-0 right-0 z-[100] bg-black/95 border-t border-emerald-500/50 p-2 text-[8px] font-mono text-emerald-400 transition-all duration-300 ${showDebug ? 'max-h-[300px] opacity-100 overflow-auto' : 'max-h-[40px] opacity-80 overflow-hidden'}`}>
+        <div className="flex justify-between items-center border-b border-emerald-500/20 mb-1 pb-1">
+          <span className="font-bold uppercase tracking-widest">DEBUG: {player.full_name}</span>
+          <span className="text-zinc-500">ID: {player.id?.slice(0, 8)}...</span>
+        </div>
+        
+        <div className="flex gap-2 mb-1">
+          <span className="text-emerald-500 font-bold">FINAL:</span>
+          <span>OVR:{stats.overall}</span>
+          <span>T:{stats.tem}</span>
+          <span>S:{stats.sch}</span>
+          <span>P:{stats.pas}</span>
+          <span>D:{stats.dri}</span>
+          <span>DF:{stats.def}</span>
+          <span>PH:{stats.phy}</span>
+        </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        .clip-fut-shield {
-          clip-path: polygon(
-            0% 12%, 
-            12% 0%, 
-            88% 0%, 
-            100% 12%, 
-            100% 82%, 
-            50% 100%, 
-            0% 82%
-          );
-        }
-        .perspective-1000 {
-          perspective: 1000px;
-        }
-      `}} />
-    </motion.div>
+        {showDebug && (
+          <>
+            <div className="mt-2 text-zinc-400 uppercase font-bold text-[7px]">Raw Stats Rows: {player.player_stats?.length || 0}</div>
+            <div className="space-y-1 mt-1">
+              {(Array.isArray(player.player_stats) ? player.player_stats : []).slice().sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()).map((s, i) => (
+                <div key={i} className={`p-1 rounded ${i === 0 ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-zinc-900/50'}`}>
+                  <div className="flex justify-between">
+                    <span className={i === 0 ? 'text-emerald-300' : 'text-zinc-500'}>Row {i+1} {i === 0 ? '(LATEST)' : ''}</span>
+                    <span className="text-zinc-600">{new Date(s.updated_at || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-x-1 mt-0.5">
+                    <span>OVR:{s.overall}</span>
+                    <span>T:{s.tem}</span>
+                    <span>S:{s.sch}</span>
+                    <span>P:{s.pas}</span>
+                    <span>D:{s.dri}</span>
+                    <span>DF:{s.def}</span>
+                    <span>PH:{s.phy}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-zinc-500 italic text-[7px]">Source: {player.current_stats ? 'current_stats (pre-resolved)' : 'resolved (on-the-fly)'}</div>
+          </>
+        )}
+      </div>
+
+      {/* BASE LAYER: FRAME */}
+      <img 
+        src={frameSrc} 
+        style={{
+          ...styles.frame,
+          width: `${100 * frameScale}%`,
+          height: `${100 * frameScale}%`,
+          transform: 'translate(-50%, -50%)',
+          position: 'absolute',
+          left: `${50 + frameX}%`,
+          top: `${50 + frameY}%`,
+        }} 
+        alt={`${tier} card frame`} 
+      />
+      
+      {/* OVERALL & POSITION */}
+      <div style={{ 
+        ...styles.overall, 
+        left: `${layout.overall.x}%`, 
+        top: `${layout.overall.y}%`,
+        fontSize: `${layout.overall.fontSize || 52}px`,
+        ...getTextStyle(layout.overall)
+      }}>
+        {stats.overall}
+      </div>
+      <div style={{ 
+        ...styles.position, 
+        left: `${layout.position.x}%`, 
+        top: `${layout.position.y}%`,
+        fontSize: `${layout.position.fontSize || 24}px`,
+        ...getTextStyle(layout.position)
+      }}>
+        {player.position || 'ST'}
+      </div>
+
+      {/* SHIRT NUMBER & ROLE */}
+      {shirtNumber !== undefined && shirtNumber !== null && (
+        <div style={styles.shirtNumberBadge}>
+          <span style={styles.shirtNumberText}>#{shirtNumber}</span>
+        </div>
+      )}
+      {lineupRole && (
+        <div style={{
+          ...styles.roleBadge,
+          ...(lineupRole === 'starter' ? styles.starterBadge : styles.subBadge)
+        }}>
+          {lineupRole === 'starter' ? 'STARTER' : 'SUBSTITUTE'}
+        </div>
+      )}
+      
+      {/* NATIONALITY & CLUB */}
+      <img 
+        src={flagSrc} 
+        style={{ 
+          ...styles.flag, 
+          left: `${layout.flag.x}%`, 
+          top: `${layout.flag.y}%`,
+          width: `${layout.flag.width || 52}px`,
+          height: layout.flag.height ? `${layout.flag.height}px` : 'auto'
+        }} 
+        alt="Nationality" 
+      />
+      <img 
+        src={clubLogoSrc} 
+        style={{ 
+          ...styles.club, 
+          left: `${layout.club.width ? layout.club.x : layout.club.x}%`, 
+          top: `${layout.club.y}%`,
+          width: `${layout.club.width || 56}px`,
+          height: layout.club.height ? `${layout.club.height}px` : 'auto'
+        }} 
+        alt="Club" 
+      />
+      
+      {/* PLAYER IMAGE */}
+      <img 
+        src={player.photo_url || "/assets/players/mueller.png"} 
+        style={{ 
+          ...styles.playerImage, 
+          left: `${layout.player.x}%`, 
+          top: `${layout.player.y}%`,
+          width: `${(layout.player.scale || 0.95) * 100}%`
+        }} 
+        alt={player.full_name} 
+      />
+      
+      {/* NAME BANNER */}
+      <div style={{ ...styles.nameContainer, top: `${layout.name.y}%`, left: `${layout.name.x - 50}%` }}>
+        <div style={{ 
+          ...styles.name,
+          fontSize: `${layout.name.fontSize || 28}px`,
+          ...getTextStyle(layout.name)
+        }}>
+          {displayName}
+        </div>
+      </div>
+      
+      {/* STATS SECTION */}
+      <div style={styles.statsContainer}>
+        <div style={{ ...styles.statsColumnLeft, left: `${layout.statsLeft.x}%`, top: `${layout.statsLeft.y}%` }}>
+          <div style={styles.statRow}>
+            <span style={{ ...styles.statValue, fontSize: `${layout.statsLeft.fontSize || 18}px`, ...getTextStyle(layout.statsLeft) }}>{stats.tem}</span>
+            <span style={{ ...styles.statLabel, fontSize: `${(layout.statsLeft.fontSize || 18) * 0.7}px`, ...getTextStyle(layout.statsLeft) }}>TEM</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={{ ...styles.statValue, fontSize: `${layout.statsLeft.fontSize || 18}px`, ...getTextStyle(layout.statsLeft) }}>{stats.sch}</span>
+            <span style={{ ...styles.statLabel, fontSize: `${(layout.statsLeft.fontSize || 18) * 0.7}px`, ...getTextStyle(layout.statsLeft) }}>SCH</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={{ ...styles.statValue, fontSize: `${layout.statsLeft.fontSize || 18}px`, ...getTextStyle(layout.statsLeft) }}>{stats.pas}</span>
+            <span style={{ ...styles.statLabel, fontSize: `${(layout.statsLeft.fontSize || 18) * 0.7}px`, ...getTextStyle(layout.statsLeft) }}>PAS</span>
+          </div>
+        </div>
+        <div style={{ ...styles.statsColumnRight, left: `${layout.statsRight.x}%`, top: `${layout.statsRight.y}%` }}>
+          <div style={styles.statRow}>
+            <span style={{ ...styles.statValue, fontSize: `${layout.statsRight.fontSize || 18}px`, ...getTextStyle(layout.statsRight) }}>{stats.dri}</span>
+            <span style={{ ...styles.statLabel, fontSize: `${(layout.statsRight.fontSize || 18) * 0.7}px`, ...getTextStyle(layout.statsRight) }}>DRI</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={{ ...styles.statValue, fontSize: `${layout.statsRight.fontSize || 18}px`, ...getTextStyle(layout.statsRight) }}>{stats.def}</span>
+            <span style={{ ...styles.statLabel, fontSize: `${(layout.statsRight.fontSize || 18) * 0.7}px`, ...getTextStyle(layout.statsRight) }}>DEF</span>
+          </div>
+          <div style={styles.statRow}>
+            <span style={{ ...styles.statValue, fontSize: `${layout.statsRight.fontSize || 18}px`, ...getTextStyle(layout.statsRight) }}>{stats.phy}</span>
+            <span style={{ ...styles.statLabel, fontSize: `${(layout.statsRight.fontSize || 18) * 0.7}px`, ...getTextStyle(layout.statsRight) }}>PHY</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -75,27 +75,26 @@ export const MatchList: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white font-sans pb-24">
+    <div className="min-h-screen bg-transparent text-white font-sans pb-24">
       {/* Header */}
-      <div className="p-6 flex items-center justify-between sticky top-0 bg-[#0A0A0A]/80 backdrop-blur-md z-50 border-b border-white/5">
+      <div className="p-6 flex items-center justify-between sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => navigate('/')}
-            className="p-2 hover:bg-zinc-800 rounded-xl transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6 text-zinc-400" />
-          </button>
           <h1 className="text-xl font-black italic tracking-tighter uppercase">Matches</h1>
         </div>
-        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center rotate-6">
-          <Trophy className="w-6 h-6 text-white" />
+        <div className="flex items-center gap-2">
+          <img 
+            src="/assets/plyrzlogo.png" 
+            alt="PLYRZ Logo" 
+            className="h-24 w-auto object-contain"
+            referrerPolicy="no-referrer"
+          />
         </div>
       </div>
 
@@ -175,7 +174,24 @@ export const MatchList: React.FC = () => {
                   <MapPin className="w-3 h-3" />
                   {fixture.venue_name}
                 </div>
-                <ChevronRight className="w-4 h-4 text-zinc-700 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
+                <div className="flex items-center gap-2">
+                  {fixture.status === 'finished' && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/matches/${fixture.id}/result`);
+                      }}
+                      className="flex items-center gap-2 bg-emerald-500/10 text-emerald-500 px-3 py-1.5 rounded-xl border border-emerald-500/20 text-[10px] font-black italic uppercase tracking-tighter hover:bg-emerald-500 hover:text-black transition-all"
+                    >
+                      <Trophy className="w-3 h-3" />
+                      Results
+                    </button>
+                  )}
+                  <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-500 px-3 py-1.5 rounded-xl border border-emerald-500/20 text-[10px] font-black italic uppercase tracking-tighter group-hover:bg-emerald-500 group-hover:text-black transition-all">
+                    Open Match
+                    <ChevronRight className="w-3 h-3" />
+                  </div>
+                </div>
               </div>
             </motion.div>
           ))

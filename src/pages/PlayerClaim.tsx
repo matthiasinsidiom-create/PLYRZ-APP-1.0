@@ -68,7 +68,7 @@ export const PlayerClaim: React.FC = () => {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-6 text-center">
         <motion.div 
           initial={{ scale: 0.5, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -83,7 +83,7 @@ export const PlayerClaim: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white font-sans p-6">
+    <div className="min-h-screen bg-transparent text-white font-sans p-6">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">

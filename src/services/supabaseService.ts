@@ -1,5 +1,20 @@
 import { supabase } from '../lib/supabase';
 import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStats, PlayerRatingHistory } from '../types';
+import { mapPlayerWithStats } from '../lib/stats';
+import { User } from '@supabase/supabase-js';
+
+// Local cache for the current user to improve reliability in iframes
+let cachedUser: User | null = null;
+
+// Initialize the cache and listen for changes
+supabase.auth.getSession().then(({ data: { session } }) => {
+  cachedUser = session?.user ?? null;
+});
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  cachedUser = session?.user ?? null;
+  console.log('DEBUG: [SERVICE] Auth state changed in service:', { event: _event, hasUser: !!cachedUser });
+});
 
 export const supabaseService = {
   // Profiles
@@ -28,8 +43,33 @@ export const supabaseService = {
 
   // Helper to check admin status with email fallback
   async checkAdmin() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Authentication required');
+    // Try cached user first
+    let user = cachedUser;
+    
+    if (!user) {
+      console.log('DEBUG: [SERVICE] No cached user, trying getSession...');
+      const { data: { session } } = await supabase.auth.getSession();
+      user = session?.user ?? null;
+    }
+    
+    if (!user) {
+      console.log('DEBUG: [SERVICE] No session found via getSession, trying getUser...');
+      // Try getUser as a last resort (network request)
+      try {
+        const { data: { user: verifiedUser } } = await supabase.auth.getUser();
+        user = verifiedUser;
+      } catch (err) {
+        console.error('DEBUG: [SERVICE] getUser failed:', err);
+      }
+    }
+
+    if (!user) {
+      console.error('DEBUG: [SERVICE] Admin check failed: No user found in cache, session or via getUser');
+      throw new Error('Authentication required');
+    }
+    
+    // Update cache if we found a user
+    cachedUser = user;
     
     // Use maybeSingle to avoid error if profile doesn't exist yet
     const { data: profile, error: profileError } = await supabase
@@ -144,6 +184,7 @@ export const supabaseService = {
 
   // Clubs
   async createClub(club: Partial<Club>) {
+    await this.checkAdmin();
     console.log('DEBUG: [SERVICE] createClub payload:', club);
     const { data, error } = await supabase
       .from('clubs')
@@ -232,6 +273,8 @@ export const supabaseService = {
   },
 
   async updateClub(id: string, updates: Partial<Club>) {
+    await this.checkAdmin();
+    console.log('DEBUG: [SERVICE] updateClub payload:', { id, updates });
     const { data, error } = await supabase
       .from('clubs')
       .update({
@@ -241,7 +284,12 @@ export const supabaseService = {
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
+    
+    if (error) {
+      console.error('DEBUG: [SERVICE] updateClub error:', error);
+      throw error;
+    }
+    console.log('DEBUG: [SERVICE] updateClub success:', data);
     return data as Club;
   },
 
@@ -383,69 +431,157 @@ export const supabaseService = {
   },
 
   // Players
-  async createPlayer(player: Partial<Player>) {
-    // 1. Create the player
+  async createPlayer(player: Partial<Player>, initialStats?: Partial<PlayerStats>) {
+    console.log('DEBUG: [SERVICE] createPlayer started');
+    await this.checkAdmin();
+    
+    // 1. Create the player - only include fields that are likely in the schema
+    const playerInsertData: any = { 
+      team_id: player.team_id,
+      full_name: player.full_name,
+      position: player.position,
+      shirt_number: player.shirt_number,
+      photo_url: player.photo_url,
+      birth_year: player.birth_year,
+      is_active: player.is_active ?? true,
+      nationality: player.nationality,
+      card_layout: player.card_layout,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Only add claimed_by_user_id if it's explicitly provided
+    if (player.claimed_by_user_id !== undefined) {
+      playerInsertData.claimed_by_user_id = player.claimed_by_user_id;
+    }
+    
+    console.log('DEBUG: [SERVICE] createPlayer - Player Payload:', playerInsertData);
+
     const { data: playerData, error: playerError } = await supabase
       .from('players')
-      .insert({ 
-        team_id: player.team_id,
-        full_name: player.full_name,
-        position: player.position,
-        shirt_number: player.shirt_number,
-        photo_url: player.photo_url,
-        birth_year: player.birth_year,
-        is_active: player.is_active ?? true,
-        claimed_by_user_id: player.claimed_by_user_id || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(playerInsertData)
       .select()
       .single();
     
-    if (playerError) throw playerError;
+    if (playerError) {
+      console.error('DEBUG: [SERVICE] createPlayer - Player Insert Error:', playerError);
+      const detailedError = new Error(playerError.message);
+      (detailedError as any).details = playerError.details;
+      (detailedError as any).hint = playerError.hint;
+      (detailedError as any).code = playerError.code;
+      throw detailedError;
+    }
+
+    if (!playerData) {
+      console.error('DEBUG: [SERVICE] createPlayer - No data returned after insert');
+      throw new Error('Player creation failed: No data returned from database.');
+    }
+
+    console.log('DEBUG: [SERVICE] createPlayer - Player Insert Success:', playerData);
 
     // 2. Create initial stats for the player
-    const statsPayload = {
+    const statsPayload: any = {
       player_id: playerData.id,
-      overall: 50,
-      tem: 50,
-      sch: 50,
-      pas: 50,
-      dri: 50,
-      def: 50,
-      phy: 50,
+      overall: initialStats?.overall ?? 50,
+      tem: initialStats?.tem ?? 50,
+      sch: initialStats?.sch ?? 50,
+      pas: initialStats?.pas ?? 50,
+      dri: initialStats?.dri ?? 50,
+      def: initialStats?.def ?? 50,
+      phy: initialStats?.phy ?? 50,
       updated_at: new Date().toISOString()
     };
+    
+    console.log('DEBUG: [SERVICE] createPlayer - Stats Payload:', statsPayload);
     const { error: statsError } = await supabase
       .from('player_stats')
       .insert(statsPayload);
 
     if (statsError) {
-      console.error('CRITICAL WARNING: Player created but stats failed:', statsError);
-      return { ...playerData, statsError: statsError.message } as Player & { statsError?: string };
+      console.error('DEBUG: [SERVICE] createPlayer - Stats Insert Error:', statsError);
+      // If stats fail, it's a major issue for the app's functionality, so we throw
+      throw new Error(`Player created but stats initialization failed: ${statsError.message}`);
     }
 
+    console.log('DEBUG: [SERVICE] createPlayer - Stats Insert Success');
     return playerData as Player;
   },
 
-  async updatePlayer(id: string, updates: Partial<Player>) {
+  async updatePlayer(id: string, updates: Partial<Player>, statsUpdates?: Partial<PlayerStats>) {
+    console.log('DEBUG: [SERVICE] updatePlayer started for ID:', id);
+    await this.checkAdmin();
+    
+    const playerUpdateData: any = {
+      team_id: updates.team_id,
+      full_name: updates.full_name,
+      position: updates.position,
+      shirt_number: updates.shirt_number,
+      photo_url: updates.photo_url,
+      birth_year: updates.birth_year,
+      is_active: updates.is_active,
+      nationality: updates.nationality,
+      card_layout: updates.card_layout,
+      updated_at: new Date().toISOString()
+    };
+
+    if (updates.claimed_by_user_id !== undefined) {
+      playerUpdateData.claimed_by_user_id = updates.claimed_by_user_id;
+    }
+    
+    console.log('DEBUG: [SERVICE] updatePlayer - Player Update Payload:', playerUpdateData);
+
     const { data, error } = await supabase
       .from('players')
-      .update({
-        team_id: updates.team_id,
-        full_name: updates.full_name,
-        position: updates.position,
-        shirt_number: updates.shirt_number,
-        photo_url: updates.photo_url,
-        birth_year: updates.birth_year,
-        is_active: updates.is_active,
-        claimed_by_user_id: updates.claimed_by_user_id,
-        updated_at: new Date().toISOString()
-      })
+      .update(playerUpdateData)
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
+    
+    if (error) {
+      console.error('DEBUG: [SERVICE] updatePlayer - Player Update Error:', error);
+      const detailedError = new Error(error.message);
+      (detailedError as any).details = error.details;
+      (detailedError as any).hint = error.hint;
+      (detailedError as any).code = error.code;
+      throw detailedError;
+    }
+
+    console.log('DEBUG: [SERVICE] updatePlayer - Player Update Success:', data);
+
+    if (statsUpdates) {
+      const statsUpsertData: any = {
+        player_id: id,
+        overall: statsUpdates.overall,
+        tem: statsUpdates.tem,
+        sch: statsUpdates.sch,
+        pas: statsUpdates.pas,
+        dri: statsUpdates.dri,
+        def: statsUpdates.def,
+        phy: statsUpdates.phy,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Remove undefined fields
+      Object.keys(statsUpsertData).forEach(key => {
+        if (statsUpsertData[key] === undefined) {
+          delete statsUpsertData[key];
+        }
+      });
+
+      console.log('DEBUG: [SERVICE] updatePlayer - Stats Upsert Payload:', statsUpsertData);
+      
+      const { error: statsError } = await supabase
+        .from('player_stats')
+        .upsert(statsUpsertData, { onConflict: 'player_id' });
+      
+      if (statsError) {
+        console.error('DEBUG: [SERVICE] updatePlayer - Stats Upsert Error:', statsError);
+        throw new Error(`Player updated but stats update failed: ${statsError.message}`);
+      } else {
+        console.log('DEBUG: [SERVICE] updatePlayer - Stats Upsert Success');
+      }
+    }
+
     return data as Player;
   },
 
@@ -486,6 +622,129 @@ export const supabaseService = {
       console.log(`DEBUG: [SERVICE] Successfully deleted player ${id}`);
     }
     return true;
+  },
+
+  // Global Settings
+  async getGlobalSettings(key: string) {
+    console.log(`DEBUG: [SERVICE] getGlobalSettings request for key: ${key}`);
+    const { data, error } = await supabase
+      .from('global_settings')
+      .select('*')
+      .eq('key', key)
+      .maybeSingle();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.warn(`DEBUG: [SERVICE] Error fetching global setting "${key}":`, error);
+    }
+    
+    console.log(`DEBUG: [SERVICE] getGlobalSettings response for key ${key}:`, data);
+    return data?.value;
+  },
+
+  async updateGlobalSettings(key: string, value: any) {
+    console.log(`DEBUG: [SERVICE] updateGlobalSettings request for key: ${key}`, value);
+    await this.checkAdmin();
+    
+    // First, try to upsert with onConflict. This is the most efficient way if the constraint exists.
+    const { data, error } = await supabase
+      .from('global_settings')
+      .upsert({ 
+        key, 
+        value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'key' })
+      .select()
+      .maybeSingle(); // Use maybeSingle to avoid error if it returns nothing for some reason
+    
+    if (error) {
+      console.warn(`DEBUG: [SERVICE] Upsert failed for key "${key}", attempting manual update/insert fallback:`, error);
+      
+      // Fallback: Try update first
+      const { data: updateData, error: updateError } = await supabase
+        .from('global_settings')
+        .update({ value, updated_at: new Date().toISOString() })
+        .eq('key', key)
+        .select()
+        .maybeSingle();
+        
+      if (updateError) {
+        console.error(`DEBUG: [SERVICE] Manual update fallback failed for key "${key}":`, updateError);
+        throw updateError;
+      }
+      
+      if (updateData) {
+        console.log(`DEBUG: [SERVICE] Manual update fallback success for key ${key}:`, updateData);
+        return updateData;
+      }
+      
+      // If no row was updated, try insert
+      const { data: insertData, error: insertError } = await supabase
+        .from('global_settings')
+        .insert({ key, value, updated_at: new Date().toISOString() })
+        .select()
+        .single();
+        
+      if (insertError) {
+        console.error(`DEBUG: [SERVICE] Manual insert fallback failed for key "${key}":`, insertError);
+        throw insertError;
+      }
+      
+      console.log(`DEBUG: [SERVICE] Manual insert fallback success for key ${key}:`, insertData);
+      return insertData;
+    }
+    
+    console.log(`DEBUG: [SERVICE] updateGlobalSettings success for key ${key}:`, data);
+    return data;
+  },
+
+  async uploadPlayerPhoto(file: File) {
+    await this.checkAdmin();
+    console.log('DEBUG: [SERVICE] uploadPlayerPhoto started for file:', file.name);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `players/photos/${fileName}`;
+
+    console.log('DEBUG: [SERVICE] uploadPlayerPhoto uploading to path:', filePath);
+    const { error: uploadError } = await supabase.storage
+      .from('assets')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('DEBUG: [SERVICE] uploadPlayerPhoto upload error:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage
+      .from('assets')
+      .getPublicUrl(filePath);
+
+    console.log('DEBUG: [SERVICE] uploadPlayerPhoto success, publicUrl:', data.publicUrl);
+    return data.publicUrl;
+  },
+
+  async uploadClubLogo(file: File) {
+    await this.checkAdmin();
+    console.log('DEBUG: [SERVICE] uploadClubLogo started for file:', file.name);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `clubs/logos/${fileName}`;
+
+    console.log('DEBUG: [SERVICE] uploadClubLogo uploading to path:', filePath);
+    const { error: uploadError } = await supabase.storage
+      .from('assets')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('DEBUG: [SERVICE] uploadClubLogo upload error:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage
+      .from('assets')
+      .getPublicUrl(filePath);
+
+    console.log('DEBUG: [SERVICE] uploadClubLogo success. Public URL:', data.publicUrl);
+    return data.publicUrl;
   },
 
   // Fixtures
@@ -635,13 +894,36 @@ export const supabaseService = {
   },
 
   async getPlayersByTeam(teamId: string) {
-    const { data, error } = await supabase
+    const { data: playersData, error: playersError } = await supabase
       .from('players')
-      .select('*, player_stats(*)')
+      .select('*')
       .eq('team_id', teamId)
       .order('full_name');
-    if (error) throw error;
-    return data as (Player & { player_stats: PlayerStats[] })[];
+    
+    if (playersError) throw playersError;
+    
+    if (!playersData || playersData.length === 0) return [];
+
+    const playerIds = playersData.map(p => p.id);
+    const { data: statsData, error: statsError } = await supabase
+      .from('player_stats')
+      .select('*')
+      .in('player_id', playerIds);
+
+    const statsByPlayer: Record<string, PlayerStats[]> = {};
+    statsData?.forEach(stat => {
+      if (!statsByPlayer[stat.player_id]) {
+        statsByPlayer[stat.player_id] = [];
+      }
+      statsByPlayer[stat.player_id].push(stat);
+    });
+
+    const playersWithStats = playersData.map(p => ({
+      ...p,
+      player_stats: statsByPlayer[p.id] || []
+    }));
+
+    return mapPlayerWithStats(playersWithStats);
   },
 
   // RPC Functions
@@ -713,31 +995,70 @@ export const supabaseService = {
   },
 
   async getFixtureLineupWithPlayers(fixtureId: string) {
-    console.log('supabaseService: Fetching lineup for fixture:', fixtureId);
-    const { data, error } = await supabase
+    console.log('DEBUG: [SERVICE] getFixtureLineupWithPlayers started', { fixtureId });
+    const { data: lineupData, error: lineupError } = await supabase
       .from('fixture_lineups')
       .select(`
         *,
         players (
           *,
-          player_stats (*)
+          teams (
+            name,
+            club_id,
+            clubs (
+              name,
+              logo_url
+            )
+          )
         ),
         teams (
           name,
           clubs (
-            name
+            name,
+            logo_url
           )
         )
       `)
       .eq('fixture_id', fixtureId);
     
-    if (error) {
-      console.error('supabaseService: getFixtureLineupWithPlayers error:', error);
-      throw error;
+    if (lineupError) {
+      console.error('DEBUG: [SERVICE] getFixtureLineupWithPlayers error:', lineupError);
+      throw lineupError;
     }
     
-    console.log(`supabaseService: Loaded ${data?.length || 0} lineup entries`);
-    return data as any[];
+    if (lineupData && lineupData.length > 0) {
+      console.log(`DEBUG: [SERVICE] Loaded ${lineupData.length} lineup entries`);
+      
+      // Fetch stats separately for all players in the lineup
+      const playerIds = lineupData.map(e => e.player_id).filter(Boolean);
+      const { data: statsData, error: statsError } = await supabase
+        .from('player_stats')
+        .select('*')
+        .in('player_id', playerIds);
+      
+      if (statsError) {
+        console.error('DEBUG: [SERVICE] Error fetching stats separately for lineup:', statsError);
+      }
+
+      const statsByPlayer: Record<string, PlayerStats[]> = {};
+      statsData?.forEach(stat => {
+        if (!statsByPlayer[stat.player_id]) {
+          statsByPlayer[stat.player_id] = [];
+        }
+        statsByPlayer[stat.player_id].push(stat);
+      });
+
+      lineupData.forEach(entry => {
+        if (entry.players) {
+          // Manually merge stats
+          entry.players.player_stats = statsByPlayer[entry.player_id] || [];
+          entry.players = mapPlayerWithStats(entry.players);
+          console.log(`DEBUG: [SERVICE] Lineup Player ${entry.players.full_name} latest stats:`, entry.players.current_stats, `Rows: ${entry.players.player_stats.length}`);
+        }
+      });
+    }
+
+    return lineupData as any[];
   },
 
   async getUserVotesForFixture(userId: string, fixtureId: string) {
@@ -765,7 +1086,7 @@ export const supabaseService = {
 
     // 1. Get all players in the lineup
     const lineup = await this.getFixtureLineupWithPlayers(fixtureId);
-    console.log(`DEBUG: [SERVICE] Number of lineup players: ${lineup.length}`);
+    console.log(`DEBUG: [SERVICE] Number of lineup players from fixture_lineups: ${lineup.length}`);
     if (lineup.length === 0) {
       console.warn(`DEBUG: [SERVICE] No players found in lineup for fixture: ${fixtureId}`);
       throw new Error('No players in lineup for this fixture. Please add appearances first.');
@@ -775,19 +1096,17 @@ export const supabaseService = {
     const votes = await this.getVotesForFixture(fixtureId);
     console.log(`DEBUG: [SERVICE] Found ${votes.length} total votes for fixture: ${fixtureId}`);
 
-    // 3. Check if already processed (by checking history)
-    const { data: existingHistory, error: historyError } = await supabase
+    // 3. Clean up existing history for this fixture to allow reprocessing
+    const { error: deleteError } = await supabase
       .from('player_rating_history')
-      .select('player_id')
+      .delete()
       .eq('fixture_id', fixtureId);
     
-    if (historyError) {
-      console.error(`DEBUG: [SERVICE] Error fetching existing history:`, historyError);
-      throw historyError;
+    if (deleteError) {
+      console.warn(`DEBUG: [SERVICE] Note: Error or no existing history to delete:`, deleteError);
+    } else {
+      console.log(`DEBUG: [SERVICE] Cleaned up existing history for fixture ${fixtureId}`);
     }
-    
-    const processedPlayerIds = new Set(existingHistory?.map(h => h.player_id) || []);
-    console.log(`DEBUG: [SERVICE] ${processedPlayerIds.size} players already have rating history for this fixture.`);
 
     // 4. Get current stats for all players in lineup
     const playerIds = lineup.map(e => e.player_id);
@@ -808,30 +1127,25 @@ export const supabaseService = {
 
     for (const entry of lineup) {
       const playerId = entry.player_id;
+      const playerName = entry.players?.full_name || playerId;
       
-      // Skip if already processed
-      if (processedPlayerIds.has(playerId)) {
-        console.log(`DEBUG: [SERVICE] Skipping player ${playerId} as they are already processed.`);
-        continue;
-      }
-
       const playerVotes = votes.filter(v => v.player_id === playerId);
       const upVotes = playerVotes.filter(v => v.vote === 'up').length;
       const downVotes = playerVotes.filter(v => v.vote === 'down').length;
+      const totalVotes = playerVotes.length;
       const net = upVotes - downVotes;
 
-      // MVP Logic:
-      // net >= 3 => +2
-      // net = 1 or 2 => +1
-      // net = 0 => 0
-      // net = -1 or -2 => -1
-      // net <= -3 => -2
+      // Real Processing Logic:
+      // We calculate a delta based on the net votes relative to total votes
+      // If no votes, delta is 0.
       let delta = 0;
-      if (net >= 3) delta = 2;
-      else if (net >= 1) delta = 1;
-      else if (net === 0) delta = 0;
-      else if (net >= -2) delta = -1;
-      else delta = -2;
+      if (totalVotes > 0) {
+        const ratio = net / totalVotes;
+        if (ratio >= 0.5) delta = 2;
+        else if (ratio > 0) delta = 1;
+        else if (ratio < -0.5) delta = -2;
+        else if (ratio < 0) delta = -1;
+      }
 
       const currentStats = statsMap.get(playerId);
       const oldOverall = currentStats?.overall || 50;
@@ -840,22 +1154,35 @@ export const supabaseService = {
       // Clamp between 30 and 95
       newOverall = Math.max(30, Math.min(95, newOverall));
 
-      console.log(`DEBUG: [SERVICE] Processing player ${playerId}: Up: ${upVotes}, Down: ${downVotes}, Net: ${net}, Delta: ${delta}, Old: ${oldOverall}, New: ${newOverall}`);
+      // Stat changes: apply a fraction of the delta to other stats
+      const statDelta = delta * 0.5;
+      const newTem = Math.max(30, Math.min(95, (currentStats?.tem || 50) + statDelta));
+      const newSch = Math.max(30, Math.min(95, (currentStats?.sch || 50) + statDelta));
+      const newPas = Math.max(30, Math.min(95, (currentStats?.pas || 50) + statDelta));
+      const newDri = Math.max(30, Math.min(95, (currentStats?.dri || 50) + statDelta));
+      const newDef = Math.max(30, Math.min(95, (currentStats?.def || 50) + statDelta));
+      const newPhy = Math.max(30, Math.min(95, (currentStats?.phy || 50) + statDelta));
 
-      // Update stats using upsert to ensure row exists
+      console.log(`DEBUG: [SERVICE] Processing player ${playerName}: Votes: ${totalVotes}, Net: ${net}, Delta: ${delta}, Old: ${oldOverall}, New: ${newOverall}`);
+
+      // Update stats using upsert
       const { error: updateError } = await supabase
         .from('player_stats')
         .upsert({ 
           player_id: playerId,
+          tem: newTem,
+          sch: newSch,
+          pas: newPas,
+          dri: newDri,
+          def: newDef,
+          phy: newPhy,
           overall: newOverall,
           updated_at: new Date().toISOString()
         }, { onConflict: 'player_id' });
       
       if (updateError) {
-        console.error(`DEBUG: [SERVICE] Update result for player_stats (${playerId}): FAILED`, updateError);
-        continue; // Skip history if update failed
-      } else {
-        console.log(`DEBUG: [SERVICE] Update result for player_stats (${playerId}): SUCCESS`);
+        console.error(`DEBUG: [SERVICE] Update result for player_stats (${playerName}): FAILED`, updateError);
+        throw new Error(`Failed to update stats for ${playerName}: ${updateError.message} (${updateError.code})`);
       }
 
       // Insert history
@@ -875,16 +1202,16 @@ export const supabaseService = {
         .single();
 
       if (insertHistoryError) {
-        console.error(`DEBUG: [SERVICE] Insert result for player_rating_history (${playerId}): FAILED`, insertHistoryError);
+        console.error(`DEBUG: [SERVICE] Insert result for player_rating_history (${playerName}): FAILED`, insertHistoryError);
+        throw new Error(`Failed to save rating history for ${playerName}: ${insertHistoryError.message} (${insertHistoryError.code})`);
       } else {
-        console.log(`DEBUG: [SERVICE] Insert result for player_rating_history (${playerId}): SUCCESS`, history);
+        console.log(`DEBUG: [SERVICE] Insert result for player_rating_history (${playerName}): SUCCESS`);
         results.push(history);
         processedCount++;
       }
     }
 
     console.log(`DEBUG: [SERVICE] Total processed players: ${processedCount}`);
-    console.log(`DEBUG: [SERVICE] Finished processing ratings for fixture: ${fixtureId}`);
     return results;
   },
 
@@ -904,6 +1231,48 @@ export const supabaseService = {
     return counts;
   },
 
+  async getFixtureRatingHistory(fixtureId: string) {
+    const { data: historyData, error: historyError } = await supabase
+      .from('player_rating_history')
+      .select('*, players(*, teams(name, clubs(logo_url)))')
+      .eq('fixture_id', fixtureId)
+      .order('delta_overall', { ascending: false })
+      .order('new_overall', { ascending: false });
+    
+    if (historyError) throw historyError;
+
+    if (!historyData || historyData.length === 0) return [];
+
+    // Fetch stats separately for all players in the history
+    const playerIds = historyData.map(h => h.player_id);
+    const { data: statsData, error: statsError } = await supabase
+      .from('player_stats')
+      .select('*')
+      .in('player_id', playerIds);
+    
+    if (statsError) {
+      console.error('DEBUG: [SERVICE] Error fetching stats for history:', statsError);
+    }
+
+    const statsByPlayer: Record<string, PlayerStats[]> = {};
+    statsData?.forEach(stat => {
+      if (!statsByPlayer[stat.player_id]) {
+        statsByPlayer[stat.player_id] = [];
+      }
+      statsByPlayer[stat.player_id].push(stat);
+    });
+
+    const results = historyData.map(h => {
+      if (h.players) {
+        h.players.player_stats = statsByPlayer[h.player_id] || [];
+        h.players = mapPlayerWithStats(h.players);
+      }
+      return h;
+    });
+
+    return results as any[];
+  },
+
   // Queries
   async getLeagues() {
     const { data, error } = await supabase.from('leagues').select('*').order('name');
@@ -920,7 +1289,7 @@ export const supabaseService = {
   },
 
   async getTeams(clubId?: string) {
-    let query = supabase.from('teams').select('*, clubs(name)').order('name');
+    let query = supabase.from('teams').select('*, clubs(name, logo_url)').order('name');
     if (clubId) query = query.eq('club_id', clubId);
     const { data, error } = await query;
     if (error) throw error;
@@ -928,38 +1297,133 @@ export const supabaseService = {
   },
 
   async getPlayers(teamId?: string) {
-    let query = supabase.from('players').select('*, teams(name, clubs(logo_url)), player_stats(*)').order('full_name');
-    if (teamId) query = query.eq('team_id', teamId);
-    const { data, error } = await query;
-    if (error) throw error;
-    return data as (Player & { teams: { name: string, clubs: { logo_url: string } }, player_stats: PlayerStats[] })[];
+    console.log('DEBUG: [SERVICE] getPlayers started', { teamId });
+    
+    // 1. Fetch players
+    let playersQuery = supabase.from('players').select('*, teams(name, club_id, clubs(logo_url))').order('full_name');
+    if (teamId) playersQuery = playersQuery.eq('team_id', teamId);
+    const { data: playersData, error: playersError } = await playersQuery;
+    
+    if (playersError) {
+      console.error('DEBUG: [SERVICE] getPlayers error:', playersError);
+      throw playersError;
+    }
+
+    if (!playersData || playersData.length === 0) return [];
+
+    // 2. Fetch all stats for these players separately to ensure they are loaded
+    const playerIds = playersData.map(p => p.id);
+    console.log(`DEBUG: [SERVICE] Fetching stats for ${playerIds.length} players:`, playerIds);
+
+    // DEBUG: Check if we can fetch ANY stats at all to diagnose RLS
+    const { data: anyStats, error: anyStatsError } = await supabase
+      .from('player_stats')
+      .select('*')
+      .limit(5);
+    
+    console.log(`DEBUG: [SERVICE] RLS Check - Can fetch any stats? Count: ${anyStats?.length || 0}, Error:`, anyStatsError);
+
+    const { data: statsData, error: statsError } = await supabase
+      .from('player_stats')
+      .select('*')
+      .in('player_id', playerIds);
+
+    if (statsError) {
+      console.error('DEBUG: [SERVICE] Error fetching stats separately:', statsError);
+    }
+
+    console.log(`DEBUG: [SERVICE] Stats rows found for these players: ${statsData?.length || 0}`);
+
+    // 3. Group stats by player_id
+    const statsByPlayer: Record<string, PlayerStats[]> = {};
+    statsData?.forEach(stat => {
+      if (!statsByPlayer[stat.player_id]) {
+        statsByPlayer[stat.player_id] = [];
+      }
+      statsByPlayer[stat.player_id].push(stat);
+    });
+
+    // 4. Merge stats into players manually
+    const playersWithStats = playersData.map(p => ({
+      ...p,
+      player_stats: statsByPlayer[p.id] || []
+    }));
+
+    // 5. Map with current_stats
+    const mapped = mapPlayerWithStats(playersWithStats);
+    
+    mapped.forEach(p => {
+      if (p.player_stats.length === 0) {
+        console.warn(`DEBUG: [SERVICE] Player ${p.full_name} (${p.id}) has 0 stats rows!`);
+      } else {
+        console.log(`DEBUG: [SERVICE] Player ${p.full_name} resolved stats:`, p.current_stats, `Rows: ${p.player_stats.length}`);
+      }
+    });
+
+    return mapped;
   },
 
   async getTopPlayers(limit: number = 6) {
-    const { data, error } = await supabase
-      .from('players')
-      .select('*, teams(name, clubs(logo_url)), player_stats!inner(*)')
-      .order('overall', { foreignTable: 'player_stats', ascending: false })
-      .limit(limit);
+    console.log('DEBUG: [SERVICE] getTopPlayers started', { limit });
     
-    if (error) throw error;
-    return data as (Player & { teams: { name: string, clubs: { logo_url: string } }, player_stats: PlayerStats[] })[];
+    try {
+      // Fetch all players with their stats to ensure we have the latest for everyone
+      // This is the most reliable way to ensure consistency across the app
+      const allPlayers = await this.getPlayers();
+      
+      const sorted = allPlayers
+        .sort((a, b) => (b.current_stats?.overall || 0) - (a.current_stats?.overall || 0))
+        .slice(0, limit);
+        
+      console.log(`DEBUG: [SERVICE] getTopPlayers returning ${sorted.length} unique top players`);
+      return sorted as (Player & { teams: { name: string, clubs: { logo_url: string } }, player_stats: PlayerStats[], current_stats: PlayerStats })[];
+    } catch (err) {
+      console.error('DEBUG: [SERVICE] Unexpected error in getTopPlayers:', err);
+      return [];
+    }
   },
 
   async getPlayerById(id: string) {
-    const { data, error } = await supabase
+    console.log('DEBUG: [SERVICE] getPlayerById started', { id });
+    const { data: playerData, error: playerError } = await supabase
       .from('players')
-      .select('*, teams(name, club_id, clubs(name, logo_url)), player_stats(*)')
+      .select('*, teams(name, club_id, clubs(name, logo_url))')
       .eq('id', id)
       .single();
-    if (error) throw error;
-    return data as (Player & { teams: Team & { clubs: Club }, player_stats: PlayerStats[] });
+    
+    if (playerError) {
+      console.error('DEBUG: [SERVICE] getPlayerById error:', playerError);
+      throw playerError;
+    }
+
+    if (playerData) {
+      // Fetch stats separately for the player
+      const { data: statsData, error: statsError } = await supabase
+        .from('player_stats')
+        .select('*')
+        .eq('player_id', id);
+      
+      if (statsError) {
+        console.error('DEBUG: [SERVICE] Error fetching stats for single player:', statsError);
+      }
+
+      const playerWithStats = {
+        ...playerData,
+        player_stats: statsData || []
+      };
+
+      const mapped = mapPlayerWithStats(playerWithStats);
+      console.log(`DEBUG: [SERVICE] Player ${mapped.full_name} resolved stats:`, mapped.current_stats, `Rows: ${mapped.player_stats.length}`);
+      return mapped;
+    }
+
+    return null;
   },
 
   async getFixtures() {
     const { data, error } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name)), away_team:teams!away_team_id(name, club_id, clubs(name)), leagues(name)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name)')
       .order('kickoff_at', { ascending: false });
     if (error) throw error;
     return data as Fixture[];
@@ -969,7 +1433,7 @@ export const supabaseService = {
     console.log('supabaseService: getFixtureById called with id:', id);
     const { data, error } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name)), away_team:teams!away_team_id(name, club_id, clubs(name)), leagues(name)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name)')
       .eq('id', id)
       .single();
     
@@ -983,16 +1447,43 @@ export const supabaseService = {
   },
 
   async getPlayersByClubs(clubIds: string[]) {
+    console.log('DEBUG: [SERVICE] getPlayersByClubs started', { clubIds });
     // We use !inner to ensure we only get players who belong to a team that belongs to one of the clubs
     // Note: Filtering on joined tables in PostgREST requires the !inner hint and the correct path
-    const { data, error } = await supabase
+    const { data: playersData, error: playersError } = await supabase
       .from('players')
       .select('*, teams!inner(name, club_id, clubs(name))')
       .filter('teams.club_id', 'in', `(${clubIds.join(',')})`)
       .order('full_name');
     
-    if (error) throw error;
-    return data as any[];
+    if (playersError) throw playersError;
+    
+    if (!playersData || playersData.length === 0) return [];
+
+    const playerIds = playersData.map(p => p.id);
+    const { data: statsData, error: statsError } = await supabase
+      .from('player_stats')
+      .select('*')
+      .in('player_id', playerIds);
+
+    if (statsError) {
+      console.error('DEBUG: [SERVICE] Error fetching stats for clubs:', statsError);
+    }
+
+    const statsByPlayer: Record<string, PlayerStats[]> = {};
+    statsData?.forEach(stat => {
+      if (!statsByPlayer[stat.player_id]) {
+        statsByPlayer[stat.player_id] = [];
+      }
+      statsByPlayer[stat.player_id].push(stat);
+    });
+
+    const playersWithStats = playersData.map(p => ({
+      ...p,
+      player_stats: statsByPlayer[p.id] || []
+    }));
+
+    return mapPlayerWithStats(playersWithStats);
   },
 
   async getUserCheckins(userId: string) {
@@ -1005,10 +1496,10 @@ export const supabaseService = {
   async getPlayerRatingHistory(playerId: string) {
     const { data, error } = await supabase
       .from('player_rating_history')
-      .select('*, fixtures(kickoff_at)')
+      .select('*, fixtures(kickoff_at, home_team:home_team_id(name), away_team:away_team_id(name))')
       .eq('player_id', playerId)
       .order('processed_at', { ascending: false });
     if (error) throw error;
-    return data as (PlayerRatingHistory & { fixtures: { kickoff_at: string } })[];
+    return data as (PlayerRatingHistory & { fixtures: { kickoff_at: string, home_team: { name: string }, away_team: { name: string } } })[];
   }
 };

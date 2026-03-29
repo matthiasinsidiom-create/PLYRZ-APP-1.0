@@ -1,5 +1,4 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, ScrollView, SafeAreaView } from 'react-native';
 
 interface PlayerCardProps {
   type: 'bronze' | 'silver' | 'gold';
@@ -16,51 +15,217 @@ interface PlayerCardProps {
   };
 }
 
+const styles: { [key: string]: React.CSSProperties } = {
+  screen: {
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: '#f0f0f0',
+    minHeight: '100vh',
+    width: '100%',
+  },
+  scrollContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '20px 0',
+    overflowY: 'auto',
+  },
+  cardContainer: {
+    width: '280px',
+    height: '410px',
+    marginBottom: '30px',
+    position: 'relative',
+    fontFamily: '"Inter", sans-serif',
+    userSelect: 'none',
+  },
+  frame: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 1,
+    display: 'block',
+    pointerEvents: 'none',
+  },
+  overall: {
+    position: 'absolute',
+    left: '18%',
+    top: '8%',
+    fontSize: '52px',
+    fontWeight: '900',
+    color: '#ffffff',
+    zIndex: 10,
+    lineHeight: '1',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+  },
+  position: {
+    position: 'absolute',
+    left: '18%',
+    top: '18%',
+    fontSize: '24px',
+    fontWeight: '900',
+    color: '#ffffff',
+    zIndex: 10,
+    textTransform: 'uppercase',
+    textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+  },
+  flag: {
+    position: 'absolute',
+    left: '18%',
+    top: '28%',
+    width: '52px',
+    height: 'auto',
+    objectFit: 'cover',
+    zIndex: 10,
+    display: 'block',
+    pointerEvents: 'none',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+  },
+  club: {
+    position: 'absolute',
+    left: '18%',
+    top: '38%',
+    width: '56px',
+    height: 'auto',
+    objectFit: 'contain',
+    zIndex: 10,
+    display: 'block',
+    pointerEvents: 'none',
+    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+  },
+  playerImage: {
+    position: 'absolute',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    top: '5%',
+    width: '95%',
+    height: 'auto',
+    objectFit: 'contain',
+    objectPosition: 'bottom',
+    zIndex: 5,
+    display: 'block',
+    pointerEvents: 'none',
+  },
+  nameContainer: {
+    position: 'absolute',
+    top: '53%',
+    width: '100%',
+    height: '45px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 15,
+  },
+  name: {
+    fontSize: '28px',
+    fontWeight: '900',
+    color: '#ffffff',
+    textTransform: 'uppercase',
+    letterSpacing: '0.02em',
+    textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+    textAlign: 'center',
+  },
+  statsContainer: {
+    position: 'absolute',
+    top: '66%',
+    width: '100%',
+    zIndex: 15,
+  },
+  statsColumnLeft: {
+    position: 'absolute',
+    left: '20%',
+    top: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  statsColumnRight: {
+    position: 'absolute',
+    left: '55%',
+    top: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  statText: {
+    fontSize: '24px',
+    fontWeight: '900',
+    color: '#ffffff',
+    margin: '0px 0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    height: '32px',
+  },
+};
+
 export const PlayerCard = ({ type, overall, position, name, stats }: PlayerCardProps) => {
   const getFrame = () => {
     switch (type) {
-      case 'bronze': return require('../assets/cards/bronze.png');
-      case 'silver': return require('../assets/cards/silver.png');
-      case 'gold': return require('../assets/cards/gold.png');
+      case 'bronze': return '/assets/cards/bronze.png';
+      case 'silver': return '/assets/cards/silver.png';
+      case 'gold': return '/assets/cards/gold.png';
+      default: return '/assets/cards/gold.png';
     }
   };
 
   return (
-    <View style={styles.cardContainer}>
-      <Image source={getFrame()} style={styles.frame} />
+    <div style={styles.cardContainer}>
+      <img src={getFrame()} style={styles.frame} alt="Card Frame" />
       
-      <Text style={styles.overall}>{overall}</Text>
-      <Text style={styles.position}>{position}</Text>
+      <div style={styles.overall}>{overall}</div>
+      <div style={styles.position}>{position}</div>
       
-      <Image source={require('../assets/flags/de.png')} style={styles.flag} />
-      <Image source={require('../assets/clubs/rw.png')} style={styles.club} />
+      <img src="/assets/flags/de.png" style={styles.flag} alt="Flag" />
+      <img src="/assets/clubs/rw.png" style={styles.club} alt="Club" />
       
-      <Image source={require('../assets/players/mueller.png')} style={styles.playerImage} />
+      <img src="/assets/players/mueller.png" style={styles.playerImage} alt="Player" />
       
-      <View style={styles.nameContainer}>
-        <Text style={styles.name}>{name.toUpperCase()}</Text>
-      </View>
+      <div style={styles.nameContainer}>
+        <div style={styles.name}>{name.toUpperCase()}</div>
+      </div>
       
-      <View style={styles.statsContainer}>
-        <View style={styles.statsColumn}>
-          <Text style={styles.statText}>{stats.tem} TEM</Text>
-          <Text style={styles.statText}>{stats.sch} SCH</Text>
-          <Text style={styles.statText}>{stats.pas} PAS</Text>
-        </View>
-        <View style={styles.statsColumn}>
-          <Text style={styles.statText}>{stats.dri} DRI</Text>
-          <Text style={styles.statText}>{stats.def} DEF</Text>
-          <Text style={styles.statText}>{stats.phy} PHY</Text>
-        </View>
-      </View>
-    </View>
+      <div style={styles.statsContainer}>
+        <div style={styles.statsColumnLeft}>
+          <div style={styles.statText}>
+            <span>{stats.tem}</span>
+            <span style={{ fontSize: '16px', opacity: 0.9 }}>TEM</span>
+          </div>
+          <div style={styles.statText}>
+            <span>{stats.sch}</span>
+            <span style={{ fontSize: '16px', opacity: 0.9 }}>SCH</span>
+          </div>
+          <div style={styles.statText}>
+            <span>{stats.pas}</span>
+            <span style={{ fontSize: '16px', opacity: 0.9 }}>PAS</span>
+          </div>
+        </div>
+        <div style={styles.statsColumnRight}>
+          <div style={styles.statText}>
+            <span>{stats.dri}</span>
+            <span style={{ fontSize: '16px', opacity: 0.9 }}>DRI</span>
+          </div>
+          <div style={styles.statText}>
+            <span>{stats.def}</span>
+            <span style={{ fontSize: '16px', opacity: 0.9 }}>DEF</span>
+          </div>
+          <div style={styles.statText}>
+            <span>{stats.phy}</span>
+            <span style={{ fontSize: '16px', opacity: 0.9 }}>PHY</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
 export const PlayerCardTestScreen = () => {
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <div style={styles.screen}>
+      <div style={styles.scrollContent}>
         <PlayerCard 
           type="gold"
           overall={91}
@@ -82,98 +247,7 @@ export const PlayerCardTestScreen = () => {
           name="Müller"
           stats={{ tem: 60, sch: 64, pas: 58, dri: 62, def: 32, phy: 58 }}
         />
-      </ScrollView>
-    </SafeAreaView>
+      </div>
+    </div>
   );
 };
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#f0f0f0',
-  },
-  scrollContent: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  cardContainer: {
-    width: 300,
-    height: 440,
-    marginBottom: 30,
-    position: 'relative',
-  },
-  frame: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
-  },
-  overall: {
-    position: 'absolute',
-    left: '12%',
-    top: '10%',
-    fontSize: 42,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  position: {
-    position: 'absolute',
-    left: '12%',
-    top: '20%',
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  flag: {
-    position: 'absolute',
-    left: '13%',
-    top: '27%',
-    width: 35,
-    height: 22,
-    resizeMode: 'contain',
-  },
-  club: {
-    position: 'absolute',
-    left: '13%',
-    top: '34%',
-    width: 35,
-    height: 35,
-    resizeMode: 'contain',
-  },
-  playerImage: {
-    position: 'absolute',
-    right: '5%',
-    top: '10%',
-    width: '70%',
-    height: '55%',
-    resizeMode: 'contain',
-  },
-  nameContainer: {
-    position: 'absolute',
-    top: '60%',
-    width: '100%',
-    alignItems: 'center',
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statsContainer: {
-    position: 'absolute',
-    top: '72%',
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingHorizontal: '10%',
-  },
-  statsColumn: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginVertical: 2,
-  },
-});

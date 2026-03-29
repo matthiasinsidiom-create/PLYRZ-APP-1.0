@@ -273,14 +273,14 @@ const AdminFixtures: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-6 text-white font-sans">
+    <div className="min-h-screen bg-transparent p-6 text-white font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/admin')}
-              className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors"
+              className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
@@ -308,7 +308,7 @@ const AdminFixtures: React.FC = () => {
             placeholder="Search fixtures..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+            className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
           />
         </div>
 
@@ -324,7 +324,7 @@ const AdminFixtures: React.FC = () => {
                 key={fixture.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-6"
+                className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-2xl space-y-6"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 uppercase tracking-widest">
@@ -441,12 +441,12 @@ const AdminFixtures: React.FC = () => {
         {/* Create/Edit Modal */}
         <AnimatePresence>
           {isModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]"
+                className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]"
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
@@ -631,7 +631,7 @@ const AdminFixtures: React.FC = () => {
                   <button
                     disabled={submitting}
                     type="submit"
-                    className="w-full bg-white text-black font-black py-4 rounded-xl hover:bg-red-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="w-full bg-red-500 text-white font-black py-4 rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                     {editingFixture ? 'UPDATE FIXTURE' : 'CREATE FIXTURE'}

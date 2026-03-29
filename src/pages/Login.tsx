@@ -95,21 +95,23 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6 text-white font-sans">
+    <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-6 text-white font-sans">
       <motion.div 
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="w-full max-w-md space-y-8 text-center"
       >
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20 rotate-12">
-            <Trophy className="w-12 h-12 text-white" />
-          </div>
-          <h1 className="text-6xl font-black tracking-tighter italic">PLYRZ</h1>
-          <p className="text-zinc-400 font-medium">The Premium Football Platform</p>
+        <div className="flex flex-col items-center gap-2">
+          <img 
+            src="/assets/plyrzlogo.png" 
+            alt="PLYRZ Logo" 
+            className="h-64 w-auto object-contain mb-8"
+            referrerPolicy="no-referrer"
+          />
+          <p className="text-zinc-400 font-medium tracking-widest uppercase text-[10px]">The Premium Football Platform</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4 bg-zinc-900/50 p-8 rounded-3xl border border-white/5 backdrop-blur-xl">
+        <form onSubmit={handleAuth} className="space-y-4 bg-black/40 p-8 rounded-3xl border border-white/10 backdrop-blur-xl">
           {isRegister && (
             <div className="space-y-2 text-left">
               <label className="text-xs font-bold uppercase tracking-widest text-zinc-500 ml-1">Display Name</label>
@@ -151,7 +153,7 @@ export const Login: React.FC = () => {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-white text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition-colors disabled:opacity-50"
+            className="w-full bg-emerald-500 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-400 transition-colors disabled:opacity-50"
           >
             {loading ? (
               <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-5 h-5 border-2 border-black border-t-transparent rounded-full" />
@@ -165,7 +167,7 @@ export const Login: React.FC = () => {
 
           <div className="relative py-4">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#0A0A0A] px-2 text-zinc-500 font-bold tracking-widest">Optional</span></div>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-transparent px-2 text-zinc-500 font-bold tracking-widest">Optional</span></div>
           </div>
 
           <div className="space-y-3">

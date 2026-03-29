@@ -18,7 +18,7 @@ const AdminCard = ({ title, icon: Icon, count, onClick, color }: any) => (
     whileHover={{ scale: 1.02 }}
     whileTap={{ scale: 0.98 }}
     onClick={onClick}
-    className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-start gap-4 text-left w-full group transition-all hover:border-emerald-500/30"
+    className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-2xl flex flex-col items-start gap-4 text-left w-full group transition-all hover:border-emerald-500/30"
   >
     <div className={`p-3 rounded-xl ${color} bg-opacity-10 group-hover:bg-opacity-20 transition-all`}>
       <Icon className={`w-6 h-6 ${color.replace('bg-', 'text-')}`} />
@@ -66,13 +66,13 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-6 text-white font-sans">
+    <div className="min-h-screen bg-transparent p-6 text-white font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/')}
-              className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors"
+              className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
@@ -86,7 +86,7 @@ const AdminDashboard: React.FC = () => {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-48 bg-zinc-900 border border-zinc-800 rounded-2xl animate-pulse" />
+              <div key={i} className="h-48 bg-black/20 backdrop-blur-sm border border-white/10 rounded-2xl animate-pulse" />
             ))}
           </div>
         ) : (

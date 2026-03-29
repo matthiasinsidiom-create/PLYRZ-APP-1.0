@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -13,13 +13,19 @@ import AdminLineups from './pages/admin/Lineups';
 import { PlayerClaim } from './pages/PlayerClaim';
 import { MatchList } from './pages/fan/MatchList';
 import { MatchDetail } from './pages/fan/MatchDetail';
+import MatchResult from './pages/fan/MatchResult';
 import PlayerList from './pages/fan/PlayerList';
 import PlayerDetail from './pages/fan/PlayerDetail';
+import { Leaderboard } from './pages/Leaderboard';
+import { Profile } from './pages/fan/Profile';
+import { VoteList } from './pages/fan/VoteList';
+import { BottomNav } from './components/BottomNav';
 import { Debug } from './pages/Debug';
 import { motion } from 'framer-motion';
 
 const AppContent: React.FC = () => {
   const { user, profile, loading, isAdmin, profileError, refreshProfile, signOut } = useAuth();
+  const location = useLocation();
   const [showForceStart, setShowForceStart] = React.useState(false);
   
   React.useEffect(() => {
@@ -41,7 +47,7 @@ const AppContent: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-6 text-center">
         <motion.div 
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -96,7 +102,7 @@ const AppContent: React.FC = () => {
                               profileError?.code === '42501';
     
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-transparent flex flex-col items-center justify-center p-6 text-center">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -111,7 +117,7 @@ const AppContent: React.FC = () => {
             {isPermissionError ? 'ACCESS DENIED' : 'PROFILE ISSUE'}
           </h1>
           
-          <div className="bg-zinc-900/50 border border-white/5 p-4 rounded-xl text-left space-y-2">
+          <div className="bg-black/40 backdrop-blur-md border border-white/10 p-4 rounded-xl text-left space-y-2">
             <p className="text-zinc-400 text-sm">
               {isPermissionError 
                 ? "Your account is authenticated, but we don't have permission to read your profile data from the database. This is likely due to Supabase Row Level Security (RLS) policies."
@@ -165,42 +171,65 @@ const AppContent: React.FC = () => {
   }
   
   return (
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/debug" element={<Debug />} />
+    <div className="h-full w-full flex flex-col">
+      <div className="flex-1 overflow-auto">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/debug" element={<Debug />} />
+          
+          {/* Admin Routes */}
+          {isAdmin && (
+            <>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/leagues" element={<AdminLeagues />} />
+              <Route path="/admin/clubs" element={<AdminClubs />} />
+              <Route path="/admin/teams" element={<AdminTeams />} />
+              <Route path="/admin/players" element={<AdminPlayers />} />
+              <Route path="/admin/fixtures" element={<AdminFixtures />} />
+              <Route path="/admin/lineups" element={<AdminLineups />} />
+            </>
+          )}
+          
+          <Route path="/claim" element={<PlayerClaim />} />
+          <Route path="/matches" element={<MatchList />} />
+          <Route path="/matches/:id" element={<MatchDetail />} />
+          <Route path="/matches/:id/result" element={<MatchResult />} />
+          <Route path="/players" element={<PlayerList />} />
+          <Route path="/players/:id" element={<PlayerDetail />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/vote" element={<VoteList />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
       
-      {/* Admin Routes */}
-      {isAdmin && (
-        <>
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/leagues" element={<AdminLeagues />} />
-          <Route path="/admin/clubs" element={<AdminClubs />} />
-          <Route path="/admin/teams" element={<AdminTeams />} />
-          <Route path="/admin/players" element={<AdminPlayers />} />
-          <Route path="/admin/fixtures" element={<AdminFixtures />} />
-          <Route path="/admin/lineups" element={<AdminLineups />} />
-        </>
+      {/* Only show bottom nav for fan routes, not admin or login */}
+      {!location.pathname.startsWith('/admin') && (
+        <BottomNav />
       )}
-      
-      <Route path="/claim" element={<PlayerClaim />} />
-      <Route path="/matches" element={<MatchList />} />
-      <Route path="/matches/:id" element={<MatchDetail />} />
-      <Route path="/players" element={<PlayerList />} />
-      <Route path="/players/:id" element={<PlayerDetail />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    </div>
   );
 };
 
 export default function App() {
   console.log('App: Rendering BrowserRouter...');
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <div className="min-h-screen bg-[#0A0A0A] selection:bg-emerald-500 selection:text-white">
-          <AppContent />
-        </div>
-      </AuthProvider>
-    </BrowserRouter>
+    <div 
+      className="h-screen w-full bg-zinc-950 overflow-hidden"
+      style={{
+        backgroundImage: 'linear-gradient(rgba(9, 9, 11, 0.8), rgba(9, 9, 11, 0.8)), url("/assets/background.png")',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      <BrowserRouter>
+        <AuthProvider>
+          <div className="h-full w-full overflow-auto selection:bg-emerald-500 selection:text-white">
+            <AppContent />
+          </div>
+        </AuthProvider>
+      </BrowserRouter>
+    </div>
   );
 }

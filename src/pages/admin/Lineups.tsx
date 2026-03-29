@@ -15,13 +15,19 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 
+interface LineupEntryState {
+  player_id: string;
+  shirt_number: number | null;
+  lineup_role: 'starter' | 'sub';
+}
+
 const AdminLineups: React.FC = () => {
   const navigate = useNavigate();
   const [fixtures, setFixtures] = useState<any[]>([]);
   const [selectedFixture, setSelectedFixture] = useState<any>(null);
   const [homePlayers, setHomePlayers] = useState<any[]>([]);
   const [awayPlayers, setAwayPlayers] = useState<any[]>([]);
-  const [lineup, setLineup] = useState<{ home: string[], away: string[] }>({ home: [], away: [] });
+  const [lineup, setLineup] = useState<{ home: LineupEntryState[], away: LineupEntryState[] }>({ home: [], away: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,13 +105,25 @@ const AdminLineups: React.FC = () => {
       setHomePlayers(homeClubPlayers);
       setAwayPlayers(awayClubPlayers);
       
-      const homeIds = currentLineup.filter(l => l.team_id === fixture.home_team_id).map(l => l.player_id);
-      const awayIds = currentLineup.filter(l => l.team_id === fixture.away_team_id).map(l => l.player_id);
+      const homeEntries = currentLineup
+        .filter(l => l.team_id === fixture.home_team_id)
+        .map(l => ({ 
+          player_id: l.player_id, 
+          shirt_number: l.shirt_number || null, 
+          lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter' 
+        }));
+      const awayEntries = currentLineup
+        .filter(l => l.team_id === fixture.away_team_id)
+        .map(l => ({ 
+          player_id: l.player_id, 
+          shirt_number: l.shirt_number || null, 
+          lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter' 
+        }));
       
-      console.log('DEBUG: Mapped home appearance IDs:', homeIds.length);
-      console.log('DEBUG: Mapped away appearance IDs:', awayIds.length);
+      console.log('DEBUG: Mapped home appearance entries:', homeEntries.length);
+      console.log('DEBUG: Mapped away appearance entries:', awayEntries.length);
       
-      setLineup({ home: homeIds, away: awayIds });
+      setLineup({ home: homeEntries, away: awayEntries });
     } catch (err) {
       console.error('DEBUG: Error loading appearance data:', err);
       alert('Error loading data: ' + (err as any).message);
@@ -122,16 +140,57 @@ const AdminLineups: React.FC = () => {
       const current = prev[team];
       const other = prev[otherTeam];
 
-      if (current.includes(playerId)) {
-        return { ...prev, [team]: current.filter(id => id !== playerId) };
+      const isAlreadyInCurrent = current.some(e => e.player_id === playerId);
+
+      if (isAlreadyInCurrent) {
+        return { ...prev, [team]: current.filter(e => e.player_id !== playerId) };
       } else {
+        // Check 11 starters limit
+        const starterCount = current.filter(e => e.lineup_role === 'starter').length;
+        const defaultRole = starterCount < 11 ? 'starter' : 'sub';
+
         // Add to current team, and remove from other team if they were there
+        const newEntry: LineupEntryState = {
+          player_id: playerId,
+          shirt_number: null,
+          lineup_role: defaultRole
+        };
         return {
           ...prev,
-          [team]: [...current, playerId],
-          [otherTeam]: other.filter(id => id !== playerId)
+          [team]: [...current, newEntry],
+          [otherTeam]: other.filter(e => e.player_id !== playerId)
         };
       }
+    });
+  };
+
+  const updatePlayerDetail = (team: 'home' | 'away', playerId: string, updates: Partial<LineupEntryState>) => {
+    setLineup(prev => {
+      // If changing to starter, check 11 limit
+      if (updates.lineup_role === 'starter') {
+        const starterCount = prev[team].filter(e => e.lineup_role === 'starter').length;
+        if (starterCount >= 11) {
+          alert('Maximum 11 starters allowed per team.');
+          return prev;
+        }
+      }
+
+      // If changing shirt number, check for duplicates in the same team
+      if (updates.shirt_number !== undefined && updates.shirt_number !== null) {
+        const isDuplicate = prev[team].some(e => e.player_id !== playerId && e.shirt_number === updates.shirt_number);
+        if (isDuplicate) {
+          alert(`Shirt number ${updates.shirt_number} is already assigned to another player in this team.`);
+          // We'll still allow it in state but warn, or we can block it. 
+          // The user said "If possible, prevent duplicate shirt numbers".
+          // Let's block it for better UX.
+          return prev;
+        }
+      }
+
+      return {
+        ...prev,
+        [team]: prev[team].map(e => e.player_id === playerId ? { ...e, ...updates } : e)
+      };
     });
   };
 
@@ -140,8 +199,20 @@ const AdminLineups: React.FC = () => {
     setSaving(true);
     try {
       const lineupData = [
-        ...lineup.home.map(id => ({ fixture_id: selectedFixture.id, team_id: selectedFixture.home_team_id, player_id: id })),
-        ...lineup.away.map(id => ({ fixture_id: selectedFixture.id, team_id: selectedFixture.away_team_id, player_id: id }))
+        ...lineup.home.map(e => ({ 
+          fixture_id: selectedFixture.id, 
+          team_id: selectedFixture.home_team_id, 
+          player_id: e.player_id,
+          shirt_number: e.shirt_number,
+          lineup_role: e.lineup_role
+        })),
+        ...lineup.away.map(e => ({ 
+          fixture_id: selectedFixture.id, 
+          team_id: selectedFixture.away_team_id, 
+          player_id: e.player_id,
+          shirt_number: e.shirt_number,
+          lineup_role: e.lineup_role
+        }))
       ];
       console.log('DEBUG: Final fixture_lineups payload:', JSON.stringify(lineupData, null, 2));
       await supabaseService.updateFixtureLineup(selectedFixture.id, lineupData);
@@ -182,13 +253,13 @@ const AdminLineups: React.FC = () => {
 
   if (selectedFixture) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] p-6 text-white font-sans">
+      <div className="min-h-screen bg-transparent p-6 text-white font-sans">
         <div className="max-w-7xl mx-auto space-y-8">
           <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button 
                     onClick={() => setSelectedFixture(null)}
-                    className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors"
+                    className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
                   >
                     <ArrowLeft className="w-5 h-5 text-zinc-400" />
                   </button>
@@ -219,8 +290,8 @@ const AdminLineups: React.FC = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {homePlayers.length === 0 && awayPlayers.length === 0 ? (
-              <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-12 text-center">
-                <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="lg:col-span-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
+                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Users className="w-8 h-8 text-zinc-600" />
                 </div>
                 <h3 className="text-xl font-black italic uppercase tracking-tight text-white mb-2">No Players Found</h3>
@@ -233,51 +304,133 @@ const AdminLineups: React.FC = () => {
               <>
                 {/* Home Team */}
             <div className="space-y-4">
-              <div className="flex flex-col gap-1 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
+              <div className="flex flex-col gap-1 p-4 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl">
                 <div className="flex items-center gap-3">
                   <Shield className="w-6 h-6 text-emerald-500" />
                   <div className="flex flex-col">
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">{selectedFixture.home_team?.clubs?.name}</span>
                     <h3 className="text-lg font-black uppercase italic tracking-tight leading-none text-white">{selectedFixture.home_team?.name}</h3>
                   </div>
-                  <span className="ml-auto text-xs font-bold text-zinc-500">{lineup.home.length} Players</span>
+                  <div className="ml-auto flex flex-col items-end">
+                    <span className="text-xs font-bold text-zinc-500">{lineup.home.length} Total</span>
+                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">{lineup.home.filter(e => e.lineup_role === 'starter').length} Starters</span>
+                  </div>
                 </div>
                 <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mt-2 border-t border-zinc-800 pt-2">
-                  Select players from {selectedFixture.home_team?.clubs?.name} who played in this match
+                  Select players, assign shirt numbers and roles
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-2">
-                {/* Selected Players */}
-                {homePlayers.filter(p => lineup.home.includes(p.id)).length > 0 && (
+                {/* Starters */}
+                {lineup.home.filter(e => e.lineup_role === 'starter').length > 0 && (
                   <div className="space-y-2 mb-4">
-                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest px-2">Selected Appearances</p>
-                    {homePlayers.filter(p => lineup.home.includes(p.id)).map(player => (
-                      <button
-                        key={player.id}
-                        onClick={() => togglePlayer('home', player.id)}
-                        className="w-full flex items-center justify-between p-4 rounded-xl border bg-emerald-500/10 border-emerald-500/50 text-emerald-500 transition-all"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-emerald-500 text-black">
-                            {player.shirt_number || '?'}
-                          </div>
-                          <div className="text-left">
-                            <p className="font-bold">{player.full_name}</p>
-                            <p className="text-[10px] uppercase tracking-wider opacity-60">
-                              {player.position} • {player.teams?.name || 'No Team'}
-                            </p>
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest px-2">Starting XI</p>
+                    {lineup.home.filter(e => e.lineup_role === 'starter').map(entry => {
+                      const player = homePlayers.find(p => p.id === entry.player_id);
+                      if (!player) return null;
+                      return (
+                        <div key={player.id} className="flex gap-2">
+                          <button
+                            onClick={() => togglePlayer('home', player.id)}
+                            className="flex-1 flex items-center justify-between p-4 rounded-xl border bg-emerald-500/10 border-emerald-500/50 text-emerald-500 transition-all"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-emerald-500 text-black">
+                                {entry.shirt_number || '#'}
+                              </div>
+                              <div className="text-left">
+                                <p className="font-bold">{player.full_name}</p>
+                                <p className="text-[10px] uppercase tracking-wider opacity-60">
+                                  {player.position} • {player.teams?.name || 'No Team'}
+                                </p>
+                              </div>
+                            </div>
+                            <Check className="w-5 h-5" />
+                          </button>
+                          <div className="flex flex-col gap-1">
+                            <input 
+                              type="number"
+                              placeholder="#"
+                              min="1"
+                              max="99"
+                              value={entry.shirt_number || ''}
+                              onChange={(e) => {
+                                const val = e.target.value ? parseInt(e.target.value) : null;
+                                if (val !== null && (val < 1 || val > 99)) return;
+                                updatePlayerDetail('home', player.id, { shirt_number: val });
+                              }}
+                              className="w-12 h-1/2 bg-zinc-900 border border-zinc-800 rounded-lg text-center text-xs font-bold focus:border-emerald-500 outline-none"
+                            />
+                            <button 
+                              onClick={() => updatePlayerDetail('home', player.id, { lineup_role: 'sub' })}
+                              className="w-12 h-1/2 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center text-[8px] font-bold uppercase hover:bg-zinc-800"
+                            >
+                              SUB
+                            </button>
                           </div>
                         </div>
-                        <Check className="w-5 h-5" />
-                      </button>
-                    ))}
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Substitutes */}
+                {lineup.home.filter(e => e.lineup_role === 'sub').length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2">Substitutes</p>
+                    {lineup.home.filter(e => e.lineup_role === 'sub').map(entry => {
+                      const player = homePlayers.find(p => p.id === entry.player_id);
+                      if (!player) return null;
+                      return (
+                        <div key={player.id} className="flex gap-2">
+                          <button
+                            onClick={() => togglePlayer('home', player.id)}
+                            className="flex-1 flex items-center justify-between p-4 rounded-xl border bg-zinc-800/50 border-zinc-700 text-zinc-400 transition-all"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800">
+                                {entry.shirt_number || '#'}
+                              </div>
+                              <div className="text-left">
+                                <p className="font-bold">{player.full_name}</p>
+                                <p className="text-[10px] uppercase tracking-wider opacity-60">
+                                  {player.position} • {player.teams?.name || 'No Team'}
+                                </p>
+                              </div>
+                            </div>
+                            <Check className="w-5 h-5 opacity-40" />
+                          </button>
+                          <div className="flex flex-col gap-1">
+                            <input 
+                              type="number"
+                              placeholder="#"
+                              min="1"
+                              max="99"
+                              value={entry.shirt_number || ''}
+                              onChange={(e) => {
+                                const val = e.target.value ? parseInt(e.target.value) : null;
+                                if (val !== null && (val < 1 || val > 99)) return;
+                                updatePlayerDetail('home', player.id, { shirt_number: val });
+                              }}
+                              className="w-12 h-1/2 bg-zinc-900 border border-zinc-800 rounded-lg text-center text-xs font-bold focus:border-zinc-500 outline-none"
+                            />
+                            <button 
+                              onClick={() => updatePlayerDetail('home', player.id, { lineup_role: 'starter' })}
+                              className="w-12 h-1/2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center justify-center text-[8px] font-bold uppercase hover:bg-emerald-500/20 text-emerald-500"
+                            >
+                              START
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
                 {/* Available Players */}
                 <div className="space-y-2">
                   <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-2">Available Pool</p>
-                  {homePlayers.filter(p => !lineup.home.includes(p.id)).map(player => (
+                  {homePlayers.filter(p => !lineup.home.some(e => e.player_id === p.id)).map(player => (
                     <button
                       key={player.id}
                       onClick={() => togglePlayer('home', player.id)}
@@ -285,7 +438,7 @@ const AdminLineups: React.FC = () => {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800">
-                          {player.shirt_number || '?'}
+                          #
                         </div>
                         <div className="text-left">
                           <p className="font-bold">{player.full_name}</p>
@@ -309,10 +462,13 @@ const AdminLineups: React.FC = () => {
                         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">{selectedFixture.away_team?.clubs?.name}</span>
                         <h3 className="text-lg font-black uppercase italic tracking-tight leading-none text-white">{selectedFixture.away_team?.name}</h3>
                       </div>
-                      <span className="ml-auto text-xs font-bold text-zinc-500">{lineup.away.length} Players</span>
+                      <div className="ml-auto flex flex-col items-end">
+                        <span className="text-xs font-bold text-zinc-500">{lineup.away.length} Total</span>
+                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{lineup.away.filter(e => e.lineup_role === 'starter').length} Starters</span>
+                      </div>
                     </div>
                     <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mt-2 border-t border-zinc-800 pt-2">
-                      Select players from {selectedFixture.away_team?.clubs?.name} who played in this match
+                      Select players, assign shirt numbers and roles
                     </p>
                   </div>
                   {awayPlayers.length === 0 ? (
@@ -321,37 +477,116 @@ const AdminLineups: React.FC = () => {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-2">
-                      {/* Selected Players */}
-                      {awayPlayers.filter(p => lineup.away.includes(p.id)).length > 0 && (
+                      {/* Starters */}
+                      {lineup.away.filter(e => e.lineup_role === 'starter').length > 0 && (
                         <div className="space-y-2 mb-4">
-                          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest px-2">Selected Appearances</p>
-                          {awayPlayers.filter(p => lineup.away.includes(p.id)).map(player => (
-                            <button
-                              key={player.id}
-                              onClick={() => togglePlayer('away', player.id)}
-                              className="w-full flex items-center justify-between p-4 rounded-xl border bg-blue-500/10 border-blue-500/50 text-blue-500 transition-all"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-blue-500 text-white">
-                                  {player.shirt_number || '?'}
-                                </div>
-                                <div className="text-left">
-                                  <p className="font-bold">{player.full_name}</p>
-                                  <p className="text-[10px] uppercase tracking-wider opacity-60">
-                                    {player.position} • {player.teams?.name || 'No Team'}
-                                  </p>
+                          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest px-2">Starting XI</p>
+                          {lineup.away.filter(e => e.lineup_role === 'starter').map(entry => {
+                            const player = awayPlayers.find(p => p.id === entry.player_id);
+                            if (!player) return null;
+                            return (
+                              <div key={player.id} className="flex gap-2">
+                                <button
+                                  onClick={() => togglePlayer('away', player.id)}
+                                  className="flex-1 flex items-center justify-between p-4 rounded-xl border bg-blue-500/10 border-blue-500/50 text-blue-500 transition-all"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-blue-500 text-white">
+                                      {entry.shirt_number || '#'}
+                                    </div>
+                                    <div className="text-left">
+                                      <p className="font-bold">{player.full_name}</p>
+                                      <p className="text-[10px] uppercase tracking-wider opacity-60">
+                                        {player.position} • {player.teams?.name || 'No Team'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Check className="w-5 h-5" />
+                                </button>
+                                <div className="flex flex-col gap-1">
+                                  <input 
+                                    type="number"
+                                    placeholder="#"
+                                    min="1"
+                                    max="99"
+                                    value={entry.shirt_number || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value ? parseInt(e.target.value) : null;
+                                      if (val !== null && (val < 1 || val > 99)) return;
+                                      updatePlayerDetail('away', player.id, { shirt_number: val });
+                                    }}
+                                    className="w-12 h-1/2 bg-zinc-900 border border-zinc-800 rounded-lg text-center text-xs font-bold focus:border-blue-500 outline-none"
+                                  />
+                                  <button 
+                                    onClick={() => updatePlayerDetail('away', player.id, { lineup_role: 'sub' })}
+                                    className="w-12 h-1/2 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center text-[8px] font-bold uppercase hover:bg-zinc-800"
+                                  >
+                                    SUB
+                                  </button>
                                 </div>
                               </div>
-                              <Check className="w-5 h-5" />
-                            </button>
-                          ))}
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Substitutes */}
+                      {lineup.away.filter(e => e.lineup_role === 'sub').length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2">Substitutes</p>
+                          {lineup.away.filter(e => e.lineup_role === 'sub').map(entry => {
+                            const player = awayPlayers.find(p => p.id === entry.player_id);
+                            if (!player) return null;
+                            return (
+                              <div key={player.id} className="flex gap-2">
+                                <button
+                                  onClick={() => togglePlayer('away', player.id)}
+                                  className="flex-1 flex items-center justify-between p-4 rounded-xl border bg-zinc-800/50 border-zinc-700 text-zinc-400 transition-all"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800">
+                                      {entry.shirt_number || '#'}
+                                    </div>
+                                    <div className="text-left">
+                                      <p className="font-bold">{player.full_name}</p>
+                                      <p className="text-[10px] uppercase tracking-wider opacity-60">
+                                        {player.position} • {player.teams?.name || 'No Team'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Check className="w-5 h-5 opacity-40" />
+                                </button>
+                                <div className="flex flex-col gap-1">
+                                  <input 
+                                    type="number"
+                                    placeholder="#"
+                                    min="1"
+                                    max="99"
+                                    value={entry.shirt_number || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value ? parseInt(e.target.value) : null;
+                                      if (val !== null && (val < 1 || val > 99)) return;
+                                      updatePlayerDetail('away', player.id, { shirt_number: val });
+                                    }}
+                                    className="w-12 h-1/2 bg-zinc-900 border border-zinc-800 rounded-lg text-center text-xs font-bold focus:border-zinc-500 outline-none"
+                                  />
+                                  <button 
+                                    onClick={() => updatePlayerDetail('away', player.id, { lineup_role: 'starter' })}
+                                    className="w-12 h-1/2 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center justify-center text-[8px] font-bold uppercase hover:bg-blue-500/20 text-blue-500"
+                                  >
+                                    START
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
                       {/* Available Players */}
                       <div className="space-y-2">
                         <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-2">Available Pool</p>
-                        {awayPlayers.filter(p => !lineup.away.includes(p.id)).map(player => (
+                        {awayPlayers.filter(p => !lineup.away.some(e => e.player_id === p.id)).map(player => (
                           <button
                             key={player.id}
                             onClick={() => togglePlayer('away', player.id)}
@@ -359,7 +594,7 @@ const AdminLineups: React.FC = () => {
                           >
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold bg-zinc-800">
-                                {player.shirt_number || '?'}
+                                #
                               </div>
                               <div className="text-left">
                                 <p className="font-bold">{player.full_name}</p>
@@ -383,7 +618,7 @@ const AdminLineups: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-6 text-white font-sans">
+    <div className="min-h-screen bg-transparent p-6 text-white font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex items-center gap-4">
           <button 

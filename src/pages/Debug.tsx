@@ -7,7 +7,7 @@ export const Debug: React.FC = () => {
   const supabaseAnonKey = appConfig.supabaseAnonKey;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-8 text-zinc-300 font-mono text-sm">
+    <div className="min-h-screen bg-transparent p-8 text-zinc-300 font-mono text-sm">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="space-y-2">
           <h1 className="text-2xl font-black italic uppercase tracking-tight text-white">Environment Debug</h1>
