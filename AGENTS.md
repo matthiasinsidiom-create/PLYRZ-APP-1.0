@@ -12,3 +12,8 @@ The following files and folders are critical for the CI/CD pipeline (Codemagic/i
 3. **Manual Maintenance Only**: These files are considered manually maintained release/CI infrastructure.
 4. **Folder Stability**: The `/ios` directory must be treated as stable infrastructure and not be periodically cleared or rebuilt in a way that removes these protected files.
 5. **No Changes Without Permission**: Any modification to these files requires an explicit user request targeting these specific files.
+
+## Root Directory Structure
+1. **Flat Structure**: The project uses a flat root directory structure (`/src`, `/public`, `/ios`, `/android`, `/supabase` must exist directly in the root).
+2. **No Nested Project Folders**: NEVER create, scaffold, or restore a `/PLYRZ--main` folder or project sub-folder. All code and configurations belong directly in the root.
+3. **Clean Root**: Do not place generic or temporary `.sql` migration files in the root directory permanently. Keep it strictly clean.
