@@ -1,0 +1,11 @@
+{
+	"appId": "at.plyrz.app",
+	"appName": "PLYRZ",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "https"
+	},
+	"plugins": {
+		"Geolocation": {}
+	}
+}

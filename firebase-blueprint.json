@@ -104,6 +104,13 @@
         "checkin_code": { "type": "string" },
         "checkin_opens_at": { "type": ["string", "null"], "format": "date-time" },
         "checkin_closes_at": { "type": ["string", "null"], "format": "date-time" },
+        "voting_open_at": { "type": ["string", "null"], "format": "date-time" },
+        "voting_close_at": { "type": ["string", "null"], "format": "date-time" },
+        "results_processed_at": { "type": ["string", "null"], "format": "date-time" },
+        "match_phase": { "type": ["string", "null"], "enum": ["first_half", "halftime", "second_half", "full_time"] },
+        "first_half_started_at": { "type": ["string", "null"], "format": "date-time" },
+        "halftime_started_at": { "type": ["string", "null"], "format": "date-time" },
+        "second_half_started_at": { "type": ["string", "null"], "format": "date-time" },
         "created_at": { "type": "string", "format": "date-time" },
         "updated_at": { "type": "string", "format": "date-time" }
       },
@@ -114,12 +121,14 @@
       "description": "Player entry in a match lineup.",
       "type": "object",
       "properties": {
-        "playerId": { "type": "string" },
-        "clubId": { "type": "string" },
-        "isStarter": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "fixture_id": { "type": "string" },
+        "player_id": { "type": "string" },
+        "team_id": { "type": "string" },
+        "shirt_number": { "type": ["integer", "null"] },
+        "lineup_role": { "type": "string", "enum": ["starter", "sub"] },
+        "created_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["playerId", "clubId", "isStarter", "createdAt"]
+      "required": ["fixture_id", "player_id", "team_id", "created_at"]
     },
     "ClubQrToken": {
       "title": "ClubQrToken",

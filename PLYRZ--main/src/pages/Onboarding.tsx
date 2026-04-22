@@ -1,0 +1,555 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Users, 
+  Shield, 
+  Search, 
+  ChevronRight, 
+  CheckCircle2, 
+  Loader2, 
+  ArrowLeft,
+  Trophy,
+  Star,
+  Zap
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { supabaseService } from '../services/supabaseService';
+import { Club, Player } from '../types';
+import { getPositionShort } from '../lib/positions';
+import { PlayerCard } from '../components/PlayerCard';
+import { CardRevealWrapper } from '../components/CardRevealWrapper';
+
+type OnboardingStep = 
+  | 'role-selection' 
+  | 'club-selection' 
+  | 'player-search' 
+  | 'card-preview' 
+  | 'complete';
+
+export const Onboarding: React.FC = () => {
+  const { user, profile, refreshProfile } = useAuth();
+  const navigate = useNavigate();
+  
+  const [step, setStep] = useState<OnboardingStep>(() => {
+    const savedStep = localStorage.getItem('onboarding_step');
+    return (savedStep as OnboardingStep) || 'role-selection';
+  });
+
+  const [role, setRole] = useState<'player' | 'fan' | null>(() => {
+    const savedRole = localStorage.getItem('onboarding_role');
+    return (savedRole as 'player' | 'fan') || null;
+  });
+
+  const [selectedClub, setSelectedClub] = useState<Club | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [hasSeenReveal, setHasSeenReveal] = useState(false);
+
+  useEffect(() => {
+    if (step) {
+      localStorage.setItem('onboarding_step', step);
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (role) {
+      localStorage.setItem('onboarding_role', role);
+    }
+  }, [role]);
+
+  useEffect(() => {
+    if (step === 'club-selection') {
+      loadClubs();
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step === 'player-search' && selectedClub) {
+      loadPlayers(selectedClub.id);
+    }
+  }, [step, selectedClub]);
+
+  const loadClubs = async () => {
+    setLoading(true);
+    try {
+      const data = await supabaseService.getClubs();
+      setClubs(data);
+    } catch (err) {
+      console.error('Error loading clubs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPlayers = async (clubId: string) => {
+    setLoading(true);
+    try {
+      const data = await supabaseService.getPlayersByClub(clubId);
+      // Only show unclaimed players
+      setPlayers(data.filter(p => !p.claimed_by_user_id));
+    } catch (err) {
+      console.error('Error loading players:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRoleSelect = async (selectedRole: 'player' | 'fan') => {
+    setRole(selectedRole);
+    // Both players and fans now need to select a club
+    setStep('club-selection');
+  };
+
+  const handleClubSelect = (club: Club) => {
+    setSelectedClub(club);
+    if (role === 'player') {
+      setStep('player-search');
+    } else {
+      // For fans, club selection is now mandatory to move to complete
+      setStep('complete');
+    }
+  };
+
+  const handlePlayerSelect = (player: Player) => {
+    setSelectedPlayer(player);
+    // We don't auto-claim here anymore to give the user a chance to confirm via the button
+    console.log('Onboarding: Player selected:', player.id);
+  };
+
+  const handleClaimPlayer = async () => {
+    if (!selectedPlayer) return;
+    
+    setSaving(true);
+    try {
+      console.log('Onboarding: Claiming player...', selectedPlayer.id);
+      await supabaseService.claimPlayerCard(selectedPlayer.id);
+      
+      console.log('Onboarding: Fetching full player data...');
+      // Fetch the full player data again to ensure we have stats for the preview
+      const fullPlayer = await supabaseService.getPlayerById(selectedPlayer.id);
+      setSelectedPlayer(fullPlayer);
+      
+      console.log('Onboarding: Moving to card-preview');
+      setStep('card-preview');
+    } catch (err: any) {
+      console.error('Onboarding: Claim failed', err);
+      alert(`Beanspruchung fehlgeschlagen: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    if (!user) {
+      console.error('Onboarding: No user found during completion');
+      return;
+    }
+    
+    if (!role) {
+      console.error('Onboarding: No role selected during completion');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      console.log('Onboarding: Completing for role:', role);
+      const updates: any = {
+        role: role,
+        onboarding_completed: true,
+        updated_at: new Date().toISOString()
+      };
+
+      if (role === 'fan' && selectedClub) {
+        updates.favorite_club_id = selectedClub.id;
+      }
+      
+      console.log('Onboarding: Updating profile with:', updates);
+      
+      try {
+        const updatedProfile = await supabaseService.updateProfile(user.id, updates);
+        console.log('Onboarding: Profile updated successfully:', updatedProfile);
+      } catch (dbErr: any) {
+        // Check if error is specifically about the missing column
+        if (dbErr.message?.includes('favorite_club_id') || dbErr.code === '42703') {
+          console.warn('Onboarding: favorite_club_id column missing in DB. Retrying without it...');
+          
+          // Fallback: Try saving without the favorite_club_id
+          const fallbackUpdates = { ...updates };
+          delete fallbackUpdates.favorite_club_id;
+          
+          await supabaseService.updateProfile(user.id, fallbackUpdates);
+          console.log('Onboarding: Profile updated successfully (fallback mode)');
+          
+          // Inform the user/admin about the missing column
+          alert('Hinweis: Dein Verein konnte nicht dauerhaft gespeichert werden, da die Datenbank noch aktualisiert werden muss. Du kannst trotzdem fortfahren, aber bitte informiere den Administrator.');
+        } else {
+          throw dbErr;
+        }
+      }
+      
+      // Clear onboarding state
+      localStorage.removeItem('onboarding_step');
+      localStorage.removeItem('onboarding_role');
+      
+      await refreshProfile();
+      console.log('Onboarding: Profile refreshed in context');
+      
+      if (role === 'fan') {
+        console.log('Onboarding: Navigating to /matches');
+        navigate('/matches');
+      } else {
+        console.log('Onboarding: Navigating to /');
+        navigate('/');
+      }
+    } catch (err: any) {
+      console.error('Onboarding: Error completing onboarding:', err);
+      alert(`Fehler beim Abschluss: ${err.message || 'Unbekannter Fehler'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredClubs = clubs.filter(c => 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredPlayers = players.filter(p => 
+    p.full_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const renderStep = () => {
+    switch (step) {
+      case 'role-selection':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="space-y-8"
+          >
+            <div className="text-center space-y-2">
+              <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white">Willkommen bei PLYRZ</h1>
+              <p className="text-zinc-500 font-medium">Bist du Spieler oder Fan?</p>
+            </div>
+
+            <div className="grid gap-4">
+              <button 
+                onClick={() => handleRoleSelect('player')}
+                className="group relative overflow-hidden bg-zinc-900 border border-white/5 p-8 rounded-3xl text-left transition-all hover:border-emerald-500/50 active:scale-[0.98]"
+              >
+                <div className="relative z-10 flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-2xl font-black italic uppercase text-white group-hover:text-emerald-400 transition-colors">Ich bin Spieler</h3>
+                    <p className="text-zinc-500 text-sm">Verwalte deine Karte und steigere dein Rating.</p>
+                  </div>
+                  <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center group-hover:bg-emerald-500 transition-all">
+                    <Trophy className="w-6 h-6 text-emerald-500 group-hover:text-black" />
+                  </div>
+                </div>
+                <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl group-hover:bg-emerald-500/10 transition-all" />
+              </button>
+
+              <button 
+                onClick={() => handleRoleSelect('fan')}
+                className="group relative overflow-hidden bg-zinc-900 border border-white/5 p-8 rounded-3xl text-left transition-all hover:border-blue-500/50 active:scale-[0.98]"
+              >
+                <div className="relative z-10 flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-2xl font-black italic uppercase text-white group-hover:text-blue-400 transition-colors">Ich bin Fan</h3>
+                    <p className="text-zinc-500 text-sm">Bewerte Spieler und beeinflusse das Leaderboard.</p>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center group-hover:bg-blue-500 transition-all">
+                    <Users className="w-6 h-6 text-blue-500 group-hover:text-black" />
+                  </div>
+                </div>
+                <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl group-hover:bg-blue-500/10 transition-all" />
+              </button>
+            </div>
+          </motion.div>
+        );
+
+      case 'club-selection':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="flex items-center gap-4">
+              <button onClick={() => setStep('role-selection')} className="p-2 bg-zinc-900 rounded-full text-zinc-400">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h2 className="text-2xl font-black italic uppercase text-white">
+                  Wähle deinen Verein
+                </h2>
+                <p className="text-zinc-500 text-sm">Suche nach deinem Club in der Datenbank.</p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <input 
+                type="text"
+                placeholder="Verein suchen..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-white focus:outline-none focus:border-emerald-500 transition-all"
+              />
+            </div>
+
+            <div className="grid gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+              {loading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+                </div>
+              ) : filteredClubs.length > 0 ? (
+                filteredClubs.map(club => (
+                  <button 
+                    key={club.id}
+                    onClick={() => handleClubSelect(club)}
+                    className="flex items-center gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl hover:bg-zinc-800 transition-all text-left group"
+                  >
+                    <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center overflow-hidden border border-white/5">
+                      {club.logo_url ? (
+                        <img src={club.logo_url} alt={club.name} className="w-full h-full object-contain p-2" />
+                      ) : (
+                        <Shield className="w-6 h-6 text-zinc-600" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-white font-bold">{club.name}</h4>
+                      <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">{club.leagues?.name || 'Regionalliga'}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-12 text-zinc-600">
+                  Keine Vereine gefunden.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        );
+
+      case 'player-search':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="flex items-center gap-4">
+              <button onClick={() => setStep('club-selection')} className="p-2 bg-zinc-900 rounded-full text-zinc-400">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h2 className="text-2xl font-black italic uppercase text-white">Suche deinen Spieler</h2>
+                <p className="text-zinc-500 text-sm">Wähle dein Profil bei {selectedClub?.name}.</p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <input 
+                type="text"
+                placeholder="Dein Name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-white focus:outline-none focus:border-emerald-500 transition-all"
+              />
+            </div>
+
+            <div className="grid gap-3 max-h-[45vh] overflow-y-auto pr-2 custom-scrollbar">
+              {loading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+                </div>
+              ) : filteredPlayers.length > 0 ? (
+                filteredPlayers.map(player => {
+                  const isSelected = selectedPlayer?.id === player.id;
+                  return (
+                    <button 
+                      key={player.id}
+                      onClick={() => handlePlayerSelect(player)}
+                      disabled={saving}
+                      className={`flex items-center gap-4 p-4 rounded-2xl transition-all text-left group disabled:opacity-50 border ${
+                        isSelected 
+                          ? 'bg-emerald-500/10 border-emerald-500' 
+                          : 'bg-zinc-900/50 border-white/5 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden border transition-all ${
+                        isSelected ? 'border-emerald-500/50' : 'border-white/5'
+                      }`}>
+                        {player.photo_url ? (
+                          <img 
+                            src={player.photo_url} 
+                            alt={player.full_name} 
+                            className={`w-full h-full object-cover transition-all ${isSelected ? 'grayscale-0' : 'grayscale group-hover:grayscale-0'}`} 
+                          />
+                        ) : (
+                          <Users className={`w-6 h-6 ${isSelected ? 'text-emerald-500' : 'text-zinc-600'}`} />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className={`font-bold transition-colors ${isSelected ? 'text-emerald-400' : 'text-white'}`}>{player.full_name}</h4>
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
+                          {getPositionShort(player.position)} • {player.teams?.name}
+                        </p>
+                      </div>
+                      {isSelected ? (
+                        <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
+                          <CheckCircle2 className="w-4 h-4 text-black" />
+                        </div>
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+                      )}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12 text-zinc-600">
+                  Keine Spieler gefunden.
+                </div>
+              )}
+            </div>
+
+            {selectedPlayer && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="pt-4"
+              >
+                <button
+                  onClick={handleClaimPlayer}
+                  disabled={saving}
+                  className="w-full bg-emerald-500 text-black font-black py-4 rounded-2xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <>
+                      PROFIL BEANSPRUCHEN
+                      <ChevronRight className="w-6 h-6" />
+                    </>
+                  )}
+                </button>
+              </motion.div>
+            )}
+          </motion.div>
+        );
+
+      case 'card-preview':
+        if (!selectedPlayer) return null;
+        
+        if (hasSeenReveal) {
+          return (
+            <div className="flex flex-col items-center space-y-8">
+              <PlayerCard player={selectedPlayer} />
+              <button
+                onClick={() => setStep('complete')}
+                className="w-full max-w-sm bg-emerald-500 text-black font-black py-4 rounded-2xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+              >
+                WEITER
+              </button>
+            </div>
+          );
+        }
+
+        return (
+          <CardRevealWrapper 
+            player={selectedPlayer} 
+            onComplete={() => {
+              setHasSeenReveal(true);
+              setStep('complete');
+            }} 
+          />
+        );
+
+      case 'complete':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center space-y-8 py-12"
+          >
+            <div className="relative inline-block">
+              <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/40">
+                <CheckCircle2 className="w-12 h-12 text-black" />
+              </div>
+              <motion.div 
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute -top-2 -right-2 w-8 h-8 bg-zinc-900 rounded-full flex items-center justify-center border border-emerald-500/50"
+              >
+                <Star className="w-4 h-4 text-emerald-500 fill-emerald-500" />
+              </motion.div>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-4xl font-black italic uppercase text-white">Du bist bereit.</h2>
+              <p className="text-zinc-500">Starte jetzt mit deiner PLYRZ Reise.</p>
+            </div>
+
+            <button 
+              onClick={handleComplete}
+              disabled={saving}
+              className="w-full bg-white text-black font-black py-5 rounded-2xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : (
+                <>
+                  ZUR APP
+                  <ChevronRight className="w-6 h-6" />
+                </>
+              )}
+            </button>
+          </motion.div>
+        );
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col p-6">
+      <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full">
+        <AnimatePresence mode="wait">
+          {renderStep()}
+        </AnimatePresence>
+      </div>
+
+      {/* Progress Indicator */}
+      <div className="flex justify-center gap-2 mt-8">
+        {['role-selection', 'club-selection', 'player-search', 'card-preview', 'complete'].map((s, i) => {
+          const steps = role === 'player' 
+            ? ['role-selection', 'club-selection', 'player-search', 'card-preview', 'complete']
+            : ['role-selection', 'complete'];
+          
+          if (!steps.includes(s)) return null;
+          
+          const currentIndex = steps.indexOf(step);
+          const stepIndex = steps.indexOf(s);
+          
+          return (
+            <div 
+              key={s}
+              className={`h-1 rounded-full transition-all duration-500 ${
+                stepIndex <= currentIndex ? 'w-8 bg-emerald-500' : 'w-4 bg-zinc-800'
+              }`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default Onboarding;
