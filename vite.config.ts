@@ -11,10 +11,10 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './PLYRZ--main/src'),
+        '@': path.resolve(__dirname, './src'),
       },
     },
-    publicDir: 'PLYRZ--main/public',
+    publicDir: 'public',
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

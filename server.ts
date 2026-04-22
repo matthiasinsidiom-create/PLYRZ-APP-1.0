@@ -5,9 +5,9 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { supabaseAdmin } from "./PLYRZ--main/src/lib/supabaseAdmin";
-import { processFixtureRatings } from "./PLYRZ--main/src/services/matchProcessor";
-import { runAutoProcessor } from "./PLYRZ--main/src/services/backgroundProcessor";
+import { supabaseAdmin } from "./src/lib/supabaseAdmin";
+import { processFixtureRatings } from "./src/services/matchProcessor";
+import { runAutoProcessor } from "./src/services/backgroundProcessor";
 
 async function startServer() {
   const app = express();

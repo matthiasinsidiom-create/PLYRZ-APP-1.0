@@ -17,7 +17,7 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": [
-        "./PLYRZ--main/src/*"
+        "./src/*"
       ]
     },
     "allowImportingTsExtensions": true,
