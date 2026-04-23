@@ -38,7 +38,8 @@ workflows:
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME" \
-            --archive-flags "-destination 'generic/platform=iOS'"
+            --archive-flags "-destination 'generic/platform=iOS'" \
+            --export-options-plist ios/exportOptions.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
