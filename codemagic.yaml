@@ -1,56 +1,52 @@
 workflows:
-ios-release:
-name: iOS Release Build
-max_build_duration: 60
+  ios-release:
+    name: iOS Release Build
+    max_build_duration: 60
 
-```
-environment:
-  vars:
-    BUNDLE_ID: "at.plyrz.app"
-    XCODE_PROJECT: "ios/App/App.xcodeproj"
-    XCODE_SCHEME: "App"
-  groups:
-    - app_store_credentials  # <-- deine API Keys in Codemagic
+    environment:
+      vars:
+        BUNDLE_ID: "at.plyrz.app"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+      groups:
+        - app_store_credentials
 
-scripts:
-  - name: Install dependencies
-    script: |
-      npm install
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install
 
-  - name: Build Web App
-    script: |
-      npm run build
+      - name: Build Web App
+        script: |
+          npm run build
 
-  - name: Sync Capacitor
-    script: |
-      npx cap sync ios
+      - name: Sync Capacitor
+        script: |
+          npx cap sync ios
 
-  - name: Set iOS build number
-    script: |
-      BUILD_NUMBER=$(date +%s)
-      echo "Setting build number to $BUILD_NUMBER"
-      /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist || \
-      /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" ios/App/App/Info.plist
+      - name: Set iOS build number
+        script: |
+          BUILD_NUMBER=$(date +%s)
+          echo "Setting build number to $BUILD_NUMBER"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" ios/App/App/Info.plist
 
-  - name: Verify Scheme
-    script: |
-      xcodebuild -list -project "$XCODE_PROJECT"
+      - name: Verify Scheme
+        script: |
+          xcodebuild -list -project "$XCODE_PROJECT"
 
-  - name: Build iOS app
-    script: |
-      xcode-project build-ipa \
-        --project "$XCODE_PROJECT" \
-        --scheme "$XCODE_SCHEME" \
-        --archive-flags "-destination 'generic/platform=iOS'"
+      - name: Build iOS app
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags "-destination 'generic/platform=iOS'"
 
-artifacts:
-  - build/ios/ipa/*.ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
 
-publishing:
-  app_store_connect:
-    api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-    key_id: $APP_STORE_CONNECT_KEY_ID
-    issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-    submit_to_testflight: true
-```
-
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_ID
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
