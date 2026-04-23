@@ -207,7 +207,7 @@ export default function App() {
     <div 
       className="h-screen w-full bg-zinc-950 overflow-hidden"
       style={{
-        backgroundImage: 'linear-gradient(rgba(9, 9, 11, 0.8), rgba(9, 9, 11, 0.8)), url("/assets/background.png")',
+        backgroundImage: 'linear-gradient(rgba(9, 9, 11, 0.8), rgba(9, 9, 11, 0.8)), url("https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/background/background.png")',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat'
