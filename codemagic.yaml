@@ -4,6 +4,9 @@ workflows:
     max_build_duration: 60
 
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: at.plyrz.app
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
@@ -32,6 +35,10 @@ workflows:
       - name: Verify Scheme
         script: |
           xcodebuild -list -project "$XCODE_PROJECT"
+
+      - name: Apply provisioning profiles
+        script: |
+          xcode-project use-profiles --project "$XCODE_PROJECT"
 
       - name: Build iOS app
         script: |
