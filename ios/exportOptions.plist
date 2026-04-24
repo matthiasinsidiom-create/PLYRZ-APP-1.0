@@ -4,12 +4,22 @@
   <dict>
     <key>method</key>
     <string>app-store</string>
+
     <key>signingStyle</key>
-    <string>automatic</string>
-    <key>stripSwiftSymbols</key>
-    <true/>
+    <string>manual</string>
+
     <key>teamID</key>
     <string>Y2Y64P58P7</string>
+
+    <key>provisioningProfiles</key>
+    <dict>
+      <key>at.plyrz.app</key>
+      <string>plyrz_appstore_profile</string>
+    </dict>
+
+    <key>stripSwiftSymbols</key>
+    <true/>
+
     <key>uploadSymbols</key>
     <true/>
   </dict>
