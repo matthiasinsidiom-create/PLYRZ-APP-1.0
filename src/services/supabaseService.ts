@@ -1532,20 +1532,21 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
-    const baseUrl = window.location.origin;
-    const url = `${baseUrl}/api/admin/process-fixture-results`;
+    const url = `${appConfig.supabaseUrl}/functions/v1/match-processor`;
+    console.log(`DEBUG: [FETCH] fixtureId: ${fixtureId}`);
     console.log(`DEBUG: [FETCH] Request URL: ${url}`);
     console.log(`DEBUG: [FETCH] Method: POST`);
     console.log(`DEBUG: [FETCH] Request Body:`, JSON.stringify({ fixtureId }));
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: appConfig.supabaseAnonKey,
         },
-        body: JSON.stringify({ fixtureId })
+        body: JSON.stringify({ fixtureId }),
       });
 
       console.log(`DEBUG: [FETCH] Response Status: ${response.status}`);
