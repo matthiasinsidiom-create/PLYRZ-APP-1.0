@@ -909,7 +909,7 @@ export const MatchDetail: React.FC = () => {
             )}
           </div>
         </div>
-        <img src="/assets/plyrzlogo.png" alt="PLYRZ Logo" className="h-8 w-auto object-contain opacity-50" referrerPolicy="no-referrer" />
+        <img src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" alt="PLYRZ Logo" className="h-8 w-auto object-contain opacity-50" referrerPolicy="no-referrer" />
       </div>
 
       {/* Live Compact Header */}

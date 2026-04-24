@@ -53,7 +53,7 @@ export const Login: React.FC = () => {
       >
         <div className="flex flex-col items-center gap-2">
           <img 
-            src="/assets/plyrzlogo.png" 
+            src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ Logo" 
             className="h-64 w-auto object-contain mb-8"
             referrerPolicy="no-referrer"

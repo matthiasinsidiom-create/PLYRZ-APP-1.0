@@ -50,7 +50,7 @@ export const Profile: React.FC = () => {
         <h1 className="text-xl font-black italic tracking-tighter uppercase">Profil</h1>
         <div className="flex items-center gap-2">
           <img 
-            src="/assets/plyrzlogo.png" 
+            src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ Logo" 
             className="h-24 w-auto object-contain"
             referrerPolicy="no-referrer"

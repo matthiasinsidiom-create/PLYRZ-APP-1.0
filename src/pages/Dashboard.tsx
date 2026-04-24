@@ -390,7 +390,7 @@ export const Dashboard: React.FC = () => {
       <div className="fixed top-0 left-0 right-0 h-24 px-8 flex items-center justify-between bg-zinc-950/40 backdrop-blur-2xl z-50 border-b border-white/10">
         <div className="flex items-center">
           <img 
-            src="/assets/plyrzlogo.png" 
+            src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ" 
             className="h-16 w-auto object-contain brightness-125 drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]"
             referrerPolicy="no-referrer"

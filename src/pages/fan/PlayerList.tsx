@@ -64,7 +64,7 @@ const PlayerList: React.FC = () => {
             </button>
             <div className="flex items-center gap-2">
               <img 
-                src="/assets/plyrzlogo.png" 
+                src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
                 alt="PLYRZ Logo" 
                 className="h-16 w-auto object-contain"
                 referrerPolicy="no-referrer"
