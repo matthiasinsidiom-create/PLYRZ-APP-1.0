@@ -24,3 +24,10 @@ The following files and folders are critical for the CI/CD pipeline (Codemagic/i
    - Create a ZIP file containing all these modified directories/files using bestzip: `npx -y bestzip update-backup.zip [list_of_modified_folders_and_files]`
    - Move the ZIP file into the `public/` folder: `mv /update-backup.zip /public/update-backup.zip` (using the default_api:move tool).
    - Provide the user with the direct download link: `https://ais-dev-[id].run.app/update-backup.zip`.
+
+## Export & Download Workflow
+1. **Manual ZIP Export Request**: If the user requests a download of the changes (e.g., "Ich benötige den Download", "Stell mir den Download bereit"), the agent MUST automatically:
+   - Identify **ALL** files and folders that were modified during the session (e.g., `src/`, `public/`, `supabase/`, `package.json`, etc. - not just `src/`).
+   - Create a ZIP file containing all these modified directories/files using bestzip: `npx -y bestzip update-backup.zip [list_of_modified_folders_and_files]`
+   - Move the ZIP file into the `public/` folder: `mv /update-backup.zip /public/update-backup.zip` (using the default_api:move tool).
+   - Provide the user with the direct download link: `https://ais-dev-[id].run.app/update-backup.zip`.
