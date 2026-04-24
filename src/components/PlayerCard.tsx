@@ -288,10 +288,10 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
 
   const getFrameSrc = (tier: string) => {
     switch (tier) {
-      case 'bronze': return '/assets/cards/bronze.png';
-      case 'silver': return '/assets/cards/silver.png';
-      case 'gold': return '/assets/cards/gold.png';
-      default: return '/assets/cards/gold.png';
+      case 'bronze': return 'https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/cards/bronze.png';
+      case 'silver': return 'https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/cards/silver.png';
+      case 'gold': return 'https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/cards/gold.png';
+      default: return 'https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/cards/gold.png';
     }
   };
 
@@ -362,9 +362,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       onClick={onClick}
     >
       {/* BASE LAYER: FRAME */}
-      <img 
-        src={frameSrc} 
-        referrerPolicy="no-referrer"
+      <div
         style={{
           ...styles.frame,
           width: `${100 * frameScale}%`,
@@ -373,8 +371,12 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           position: 'absolute',
           left: `${50 + frameX}%`,
           top: `${50 + frameY}%`,
+          backgroundImage: `url("${frameSrc}")`,
+          backgroundSize: '100% 100%',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }} 
-        alt={`${tier} card frame`} 
+        title={`${tier} card frame`} 
       />
       
       {/* OVERALL & POSITION */}
@@ -437,6 +439,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       <img 
         src={flagSrc} 
         referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
         style={{ 
           ...styles.flag, 
           left: `${layout.flag.x}%`, 
@@ -449,6 +452,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       <img 
         src={clubLogoSrc} 
         referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
         style={{ 
           ...styles.club, 
           left: `${layout.club.width ? layout.club.x : layout.club.x}%`, 
@@ -463,6 +467,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       <img 
         src={player.photo_url || "/assets/players/mueller.png"} 
         referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
         style={{ 
           ...styles.playerImage, 
           left: `${layout.player.x}%`, 

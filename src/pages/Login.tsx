@@ -56,7 +56,7 @@ export const Login: React.FC = () => {
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ Logo" 
             className="h-64 w-auto object-contain mb-8"
-            referrerPolicy="no-referrer"
+            
           />
           <p className="text-zinc-400 font-medium tracking-widest uppercase text-[10px]">Die Premium Fußball Plattform</p>
         </div>

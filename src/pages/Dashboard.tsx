@@ -393,7 +393,7 @@ export const Dashboard: React.FC = () => {
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ" 
             className="h-16 w-auto object-contain brightness-125 drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]"
-            referrerPolicy="no-referrer"
+            
           />
         </div>
         
