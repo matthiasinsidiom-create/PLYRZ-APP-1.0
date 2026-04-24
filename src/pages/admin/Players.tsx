@@ -409,8 +409,15 @@ const AdminPlayers: React.FC = () => {
       // 4. Update local globalDefaultLayout state from the read-back result
       setGlobalDefaultLayout(verifiedLayout);
       
-      console.log('DEBUG: [ADMIN] Final success: Global default layout persisted and verified.');
-      alert('Global default layout saved and verified successfully!');
+      // 5. Apply to all existing players by clearing their individual custom layouts
+      console.log('DEBUG: [ADMIN] Clearing individual player layouts to apply global default...');
+      await supabaseService.clearAllPlayerLayouts();
+      
+      // 6. Reload players
+      loadData();
+      
+      console.log('DEBUG: [ADMIN] Final success: Global default layout persisted and applied to all players.');
+      alert('Global default layout saved and applied to all players successfully!');
     } catch (err: any) {
       console.error('DEBUG: [ADMIN] Global default save failed:', err);
       const errorMessage = err.message || 'Unknown error';

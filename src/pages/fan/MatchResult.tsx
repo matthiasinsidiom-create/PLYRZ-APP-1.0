@@ -519,48 +519,49 @@ const MatchResult: React.FC = () => {
               </motion.div>
 
               <div className="flex flex-col items-center w-full">
-                <div className="relative mb-16">
-                  <div className="absolute -inset-8 bg-amber-500/20 blur-[50px] rounded-full animate-pulse" />
+                <div className="relative mb-16 w-full flex flex-col items-center justify-center min-h-[500px]">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-amber-500/20 blur-[50px] rounded-full animate-pulse z-0" />
                   <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3, type: "spring", damping: 15 }}
-                    className="relative z-20 transform scale-110 sm:scale-125"
+                    className="z-20 w-full flex items-center justify-center scale-[0.8] sm:scale-[0.9] md:scale-100"
                   >
-                    <PlayerCard 
-                      player={mvp.players} 
-                      clubLogo={mvp.players.teams?.clubs?.logo_url}
-                      jerseyNumber={mvp.jersey_number}
-                      lineupRole={mvp.lineup_role}
-                      isTopPerformer={true}
-                      onClick={() => navigate(`/players/${mvp.player_id}`)}
-                      className="shadow-[0_20px_60px_rgba(251,191,36,0.2)] border-2 border-amber-500/30"
-                    />
-                  </motion.div>
-                  
-                  <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.6 }}
-                    className="absolute -right-6 -top-6 z-30"
-                  >
-                    <div className="bg-gradient-to-br from-amber-300 to-amber-600 text-black px-4 py-2 rounded-xl font-black italic text-2xl shadow-2xl border-4 border-zinc-950 flex items-center gap-1.5">
-                      <TrendingUp className="w-6 h-6" />
-                      +{safeFixed(mvp.delta_overall)}
+                    <div className="relative flex items-center justify-center origin-center">
+                      <PlayerCard 
+                        player={mvp.players} 
+                        clubLogo={mvp.players.teams?.clubs?.logo_url}
+                        jerseyNumber={mvp.jersey_number}
+                        lineupRole={mvp.lineup_role}
+                        isTopPerformer={true}
+                        onClick={() => navigate(`/players/${mvp.player_id}`)}
+                        className="shadow-[0_20px_60px_rgba(251,191,36,0.2)] border-2 border-amber-500/30"
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.6 }}
+                        className="absolute -right-6 -top-6 z-30"
+                      >
+                        <div className="bg-gradient-to-br from-amber-300 to-amber-600 text-black px-4 py-2 rounded-xl font-black italic text-2xl shadow-2xl border-4 border-zinc-950 flex items-center gap-1.5">
+                          <TrendingUp className="w-6 h-6" />
+                          +{safeFixed(mvp.delta_overall)}
+                        </div>
+                      </motion.div>
+
+                      {/* MVP Event Badges */}
+                      {(mvp.goal_count > 0 || mvp.yellow_count > 0 || mvp.red_count > 0) && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.8 }}
+                          className="absolute -bottom-[110px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-white/10 rounded-full shadow-2xl"
+                        >
+                          <EventBadges goals={mvp.goal_count} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
+                        </motion.div>
+                      )}
                     </div>
                   </motion.div>
-
-                  {/* MVP Event Badges */}
-                  {(mvp.goal_count > 0 || mvp.yellow_count > 0 || mvp.red_count > 0) && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.8 }}
-                      className="absolute -bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-white/10 rounded-full shadow-2xl"
-                    >
-                      <EventBadges goals={mvp.goal_count} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
-                    </motion.div>
-                  )}
                 </div>
 
                 <div className="w-full bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-8 space-y-6">

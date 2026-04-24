@@ -641,8 +641,21 @@ export const supabaseService = {
     return data?.value;
   },
 
+  async clearAllPlayerLayouts() {
+    console.log('DEBUG: [SERVICE] clearAllPlayerLayouts started');
+    await this.checkAdmin();
+    // Update all players to have empty card_layout
+    const { error } = await supabase
+      .from('players')
+      .update({ card_layout: {} })
+      .not('id', 'is', null); // Match all rows safely
+    if (error) {
+      console.error('DEBUG: [SERVICE] Error clearing player layouts:', error);
+      throw error;
+    }
+  },
+
   async updateGlobalSettings(key: string, value: any) {
-    console.log(`DEBUG: [SERVICE] updateGlobalSettings request for key: ${key}`, value);
     await this.checkAdmin();
     
     // First, try to upsert with onConflict. This is the most efficient way if the constraint exists.
@@ -859,10 +872,17 @@ export const supabaseService = {
       statsByPlayer[stat.player_id].push(stat);
     });
 
-    const playersWithStats = playersData.map(p => ({
-      ...p,
-      player_stats: statsByPlayer[p.id] || []
-    }));
+    const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+
+    const playersWithStats = playersData.map(p => {
+      const pLayout = p.card_layout || {};
+      const hasSpecificLayout = Object.keys(pLayout).length > 0;
+      return {
+        ...p,
+        card_layout: hasSpecificLayout ? pLayout : globalLayout,
+        player_stats: statsByPlayer[p.id] || []
+      };
+    });
 
     return mapPlayerWithStats(playersWithStats);
   },
@@ -1165,10 +1185,17 @@ export const supabaseService = {
       statsByPlayer[stat.player_id].push(stat);
     });
 
-    const playersWithStats = playersData.map(p => ({
-      ...p,
-      player_stats: statsByPlayer[p.id] || []
-    }));
+    const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+
+    const playersWithStats = playersData.map(p => {
+      const pLayout = p.card_layout || {};
+      const hasSpecificLayout = Object.keys(pLayout).length > 0;
+      return {
+        ...p,
+        card_layout: hasSpecificLayout ? pLayout : globalLayout,
+        player_stats: statsByPlayer[p.id] || []
+      };
+    });
 
     return mapPlayerWithStats(playersWithStats);
   },
@@ -1413,8 +1440,15 @@ export const supabaseService = {
         statsByPlayer[stat.player_id].push(stat);
       });
 
+      const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+
       filteredLineupData.forEach(entry => {
         if (entry.players) {
+          // Check global layout
+          const pLayout = entry.players.card_layout || {};
+          const hasSpecificLayout = Object.keys(pLayout).length > 0;
+          entry.players.card_layout = hasSpecificLayout ? pLayout : globalLayout;
+
           // Manually merge stats
           entry.players.player_stats = statsByPlayer[entry.player_id] || [];
           entry.players = mapPlayerWithStats(entry.players);
@@ -1612,8 +1646,14 @@ export const supabaseService = {
       statsByPlayer[stat.player_id].push(stat);
     });
 
+    const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+
     const results = historyData.map(h => {
       if (h.players) {
+        const pLayout = h.players.card_layout || {};
+        const hasSpecificLayout = Object.keys(pLayout).length > 0;
+        h.players.card_layout = hasSpecificLayout ? pLayout : globalLayout;
+
         h.players.player_stats = statsByPlayer[h.player_id] || [];
         h.players = mapPlayerWithStats(h.players);
       }
@@ -1725,13 +1765,22 @@ export const supabaseService = {
       statsByPlayer[stat.player_id].push(stat);
     });
 
-    // 4. Merge stats into players manually
-    const playersWithStats = playersData.map(p => ({
-      ...p,
-      player_stats: statsByPlayer[p.id] || []
-    }));
+    // 4. Fetch global default layout
+    const globalLayout = await this.getGlobalSettings('default_player_card_layout');
 
-    // 5. Map with current_stats
+    // 5. Merge stats into players manually and inject global layout if missing
+    const playersWithStats = playersData.map(p => {
+      const pLayout = p.card_layout || {};
+      const hasSpecificLayout = Object.keys(pLayout).length > 0;
+      
+      return {
+        ...p,
+        card_layout: hasSpecificLayout ? pLayout : globalLayout,
+        player_stats: statsByPlayer[p.id] || []
+      };
+    });
+
+    // 6. Map with current_stats
     const mapped = mapPlayerWithStats(playersWithStats);
     
     mapped.forEach(p => {
@@ -1789,8 +1838,14 @@ export const supabaseService = {
         console.error('DEBUG: [SERVICE] Error fetching stats for single player:', statsError);
       }
 
+      // Fetch global default layout
+      const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+      const pLayout = playerData.card_layout || {};
+      const hasSpecificLayout = Object.keys(pLayout).length > 0;
+
       const playerWithStats = {
         ...playerData,
+        card_layout: hasSpecificLayout ? pLayout : globalLayout,
         player_stats: statsData || []
       };
 

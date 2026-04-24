@@ -189,8 +189,8 @@ export const Dashboard: React.FC = () => {
 
           <div className="flex flex-col items-center justify-center w-full gap-6">
             {mvpPlayer && (
-              <div className="w-full flex justify-center items-center overflow-visible">
-                <div className="relative flex justify-center items-center w-[350px] scale-[0.85] origin-center -my-14 pointer-events-none">
+              <div className="w-full flex justify-center items-center h-[420px] -my-6">
+                <div className="relative flex items-center justify-center pointer-events-none origin-center scale-[0.9]">
                   <PlayerCard player={mvpPlayer} />
                 </div>
               </div>
@@ -490,8 +490,8 @@ export const Dashboard: React.FC = () => {
             
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-8 -mx-5 px-5">
               {topPlayers.slice(0, 6).map(p => (
-                <div key={p.id} className="flex-shrink-0 w-[170px] h-[240px] relative">
-                   <div className="absolute inset-0 scale-[0.48] origin-top-left">
+                <div key={p.id} className="flex-shrink-0 w-[168px] h-[236px] relative">
+                   <div className="absolute top-0 left-0 scale-[0.48] origin-top-left">
                     <PlayerCard 
                       player={p}
                       clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
@@ -512,12 +512,14 @@ export const Dashboard: React.FC = () => {
                   <h2 className="text-[10px] font-black italic uppercase tracking-[0.2em] text-zinc-500">Deine Karte</h2>
                   <div className="h-px flex-1 bg-white/5" />
                 </div>
-                <div className="flex justify-center scale-[0.9] -my-6">
-                  <PlayerCard 
-                    player={playerData} 
-                    clubLogo={teams.find(t => t.id === playerData.team_id)?.clubs?.logo_url}
-                    onClick={() => navigate(`/players/${playerData.id}`)}
-                  />
+                <div className="w-full flex justify-center items-center h-[420px] -my-10">
+                  <div className="relative flex items-center justify-center scale-[0.9] origin-center">
+                    <PlayerCard 
+                      player={playerData} 
+                      clubLogo={teams.find(t => t.id === playerData.team_id)?.clubs?.logo_url}
+                      onClick={() => navigate(`/players/${playerData.id}`)}
+                    />
+                  </div>
                 </div>
               </section>
             )}

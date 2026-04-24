@@ -23,7 +23,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'relative',
     fontFamily: '"Inter", sans-serif',
     userSelect: 'none',
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   frame: {
     width: '100%',
@@ -167,18 +167,20 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   roleBadge: {
     position: 'absolute',
-    bottom: '100px',
+    bottom: '-48px',
     left: '50%',
     transform: 'translateX(-50%)',
-    padding: '4px 16px',
-    borderRadius: '6px',
-    fontSize: '12px',
+    padding: '8px 24px',
+    borderRadius: '12px',
+    fontSize: '16px',
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: '0.15em',
-    zIndex: 20,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+    zIndex: 50,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
     fontStyle: 'italic',
+    whiteSpace: 'nowrap',
+    border: '2px solid rgba(255,255,255,0.2)',
   },
   starterBadge: {
     backgroundColor: '#10b981', // emerald-500
@@ -253,8 +255,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       club: { x: 18, y: 38, width: 64, height: 64 },
       player: { x: 50, y: 5, scale: 0.95 },
       name: { x: 50, y: 53, fontSize: 32, ...defaultColor },
-      statsLeft: { x: 24, y: 74, fontSize: 21, ...defaultColor },
-      statsRight: { x: 58, y: 74, fontSize: 21, ...defaultColor },
+      statsLeft: { x: 28, y: 74, fontSize: 21, ...defaultColor },
+      statsRight: { x: 72, y: 74, fontSize: 21, ...defaultColor },
       card: { scale: 1, x: 0, y: 0 },
       frame: { scale: 1, x: 0, y: 0 }
     };
