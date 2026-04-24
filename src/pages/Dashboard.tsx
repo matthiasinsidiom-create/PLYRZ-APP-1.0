@@ -389,7 +389,7 @@ export const Dashboard: React.FC = () => {
       {/* Remove previous redundant dark overlay to restore App.tsx background */}
 
       {/* Header - Fixed Top Anchor */}
-      <div className="fixed top-0 left-0 right-0 h-24 px-8 flex items-center justify-between bg-zinc-950/40 backdrop-blur-2xl z-50 border-b border-white/10">
+      <div className="fixed top-0 left-0 right-0 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
         <div className="flex items-center">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
@@ -430,7 +430,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Main Content Area - Top Aligned */}
-      <div className="relative z-10 w-full pt-[120px] pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 w-full pt-[calc(8rem+env(safe-area-inset-top))] pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <div className="max-w-xl mx-auto px-5 space-y-12">
           
           {/* A. HERO SECTION (ONLY ONE) */}

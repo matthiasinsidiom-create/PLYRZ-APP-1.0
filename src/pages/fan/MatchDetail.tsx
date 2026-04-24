@@ -892,7 +892,7 @@ export const MatchDetail: React.FC = () => {
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans pb-32">
       {/* Header */}
-      <div className="p-3 flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
+      <div className="p-3 pt-[calc(0.75rem+env(safe-area-inset-top))] flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate('/matches')} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5 text-zinc-400" />

@@ -53,7 +53,7 @@ const PlayerList: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans pb-24">
       {/* Header */}
-      <div className="p-6 sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
+      <div className="p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <button 

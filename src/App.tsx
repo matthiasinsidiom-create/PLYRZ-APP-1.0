@@ -161,7 +161,7 @@ const AppContent: React.FC = () => {
   
   return (
     <div className="h-full w-full flex flex-col">
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/onboarding" element={<Onboarding />} />

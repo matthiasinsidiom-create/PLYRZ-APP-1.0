@@ -412,9 +412,9 @@ const MatchResult: React.FC = () => {
   const awayWinner = (fixture.away_score || 0) > (fixture.home_score || 0);
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
       {/* Premium Header */}
-      <div className="relative pt-6 pb-10 overflow-hidden">
+      <div className="relative pt-[calc(1.5rem+env(safe-area-inset-top))] pb-10 overflow-hidden">
         <div className="relative z-10 max-w-xl mx-auto px-4 flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <button 

@@ -106,7 +106,7 @@ export const MatchList: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans pb-24">
       {/* Round Header */}
-      <div className="sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-2xl">
+      <div className="sticky top-0 pt-[env(safe-area-inset-top)] bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-2xl">
         <div className="p-4 flex items-center justify-between max-w-2xl mx-auto">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 

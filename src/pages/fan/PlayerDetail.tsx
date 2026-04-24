@@ -140,9 +140,9 @@ export const PlayerDetail: React.FC = () => {
   const glowColor = tier === 'gold' ? '#fbbf24' : tier === 'silver' ? '#94a3b8' : '#b45309';
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-24">
+    <div className="min-h-screen bg-transparent text-white font-sans pb-24 overflow-x-hidden w-full max-w-full">
       {/* Header */}
-      <div className="p-6 sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
+      <div className="p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate(-1)}
@@ -216,7 +216,7 @@ export const PlayerDetail: React.FC = () => {
                     <div className="flex items-center gap-4 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 backdrop-blur-md">
                       <div className="text-center">
                         <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Vorher</div>
-                        <div className="text-lg font-black italic text-zinc-400">{latestChange.previous}</div>
+                        <div className="text-lg font-black italic text-zinc-400">{Number(latestChange.previous).toFixed(1)}</div>
                       </div>
                       <div className="w-px h-8 bg-white/10" />
                       <div className="text-center">
@@ -227,7 +227,7 @@ export const PlayerDetail: React.FC = () => {
                           ) : latestChange.delta < 0 ? (
                             <TrendingDown className="w-4 h-4" />
                           ) : null}
-                          {latestChange.delta > 0 ? `+${latestChange.delta}` : latestChange.delta}
+                          {latestChange.delta > 0 ? `+${Number(latestChange.delta).toFixed(1)}` : Number(latestChange.delta).toFixed(1)}
                         </div>
                       </div>
                     </div>
