@@ -62,6 +62,9 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
 
+    environment:
+      java: 21
+
     scripts:
       - name: Install dependencies
         script: |
