@@ -1,23 +1,28 @@
 workflows:
   ios-release:
-    name: iOS Release Build
+    name: PLYRZ iOS Release Build
     max_build_duration: 60
-    instance_type: mac_mini_m2
+    instance_type: mac_mini_m1
+
+    integrations:
+      app_store_connect: plyrz_appstore
 
     environment:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: at.plyrz.app
+      groups:
+        - apple_credentials
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-      groups:
-        - app_store_credentials
+      node: 22
+      xcode: latest
 
     scripts:
       - name: Install dependencies
         script: |
-          npm install
+          npm ci || npm install
 
       - name: Build Web App
         script: |
@@ -27,17 +32,11 @@ workflows:
         script: |
           npx cap sync ios
 
-      - name: Set iOS build number
-        script: |
-          BUILD_NUMBER=$(date +%s)
-          echo "Setting build number to $BUILD_NUMBER"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" ios/App/App/Info.plist
-
       - name: Verify Scheme
         script: |
           xcodebuild -list -project "$XCODE_PROJECT"
 
-      - name: Apply provisioning profiles
+      - name: Apply signing
         script: |
           xcode-project use-profiles --project "$XCODE_PROJECT"
 
@@ -45,15 +44,12 @@ workflows:
         script: |
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME" \
-            --archive-flags "-destination 'generic/platform=iOS'"
+            --scheme "$XCODE_SCHEME"
 
     artifacts:
       - build/ios/ipa/*.ipa
 
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_ID
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_testflight: true
