@@ -38,9 +38,6 @@ export const Profile: React.FC = () => {
 
   const menuItems = [
     { id: 'settings', label: 'Einstellungen', icon: Settings, path: '/settings' },
-    { id: 'claim', label: 'Spielerprofil beanspruchen', icon: Shield, path: '/claim' },
-    { id: 'achievements', label: 'Erfolge', icon: Trophy, path: '/achievements' },
-    { id: 'stats', label: 'Meine Stats', icon: Star, path: '/stats' },
   ];
 
   return (
@@ -90,34 +87,8 @@ export const Profile: React.FC = () => {
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-4 text-center space-y-1">
-            <div className="text-2xl font-black italic text-emerald-500">12</div>
-            <div className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Spiele absolviert</div>
-          </div>
-          <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-4 text-center space-y-1">
-            <div className="text-2xl font-black italic text-emerald-500">8.4</div>
-            <div className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Ø Rating</div>
-          </div>
-        </div>
-
         {/* Menu Items */}
         <div className="space-y-2">
-          <button
-            onClick={handleResetTutorial}
-            disabled={resetting}
-            className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-all text-left"
-          >
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-zinc-800 rounded-xl group-hover:bg-emerald-500/10 transition-colors">
-                <RotateCcw className="w-5 h-5 text-zinc-400 group-hover:text-emerald-500" />
-              </div>
-              <span className="font-bold text-sm text-zinc-300 group-hover:text-white">Tutorial zurücksetzen</span>
-            </div>
-            <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-white transition-all" />
-          </button>
-
           {menuItems.map((item, index) => (
             <motion.button
               key={item.id}
