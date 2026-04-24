@@ -37,17 +37,19 @@ export const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({
   const reds = events.filter(e => e.event_type === 'red_card').length;
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-[350px] transform-gpu">
-      <div className="scale-[0.7] sm:scale-[0.8] origin-top h-[350px] sm:h-[400px] will-change-transform">
-        <PlayerCard 
-          player={player} 
-          jerseyNumber={jerseyNumber}
-          lineupRole={lineupRole}
-          onClick={onClick}
-        />
+    <div className="flex flex-col items-center w-full max-w-[350px] transform-gpu">
+      <div className="w-full flex justify-center items-center">
+        <div className="relative flex justify-center items-center origin-top scale-[0.75] sm:scale-[0.85] -mb-[122px] sm:-mb-[73px] will-change-transform">
+          <PlayerCard 
+            player={player} 
+            jerseyNumber={jerseyNumber}
+            lineupRole={lineupRole}
+            onClick={onClick}
+          />
+        </div>
       </div>
       <div 
-        className={`text-center -mt-12 sm:-mt-16 mb-2 z-10 ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+        className={`text-center mt-2 mb-2 z-10 ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
         onClick={onClick}
       >
         <h4 className="text-lg font-black italic uppercase tracking-tight">

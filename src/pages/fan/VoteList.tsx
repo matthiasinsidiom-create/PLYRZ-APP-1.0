@@ -54,7 +54,7 @@ export const VoteList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-32">
+    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))]">
       {/* Header */}
       <div className="p-6 flex items-center justify-between sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
         <h1 className="text-xl font-black italic tracking-tighter uppercase">Offene Votings</h1>

@@ -412,7 +412,7 @@ const MatchResult: React.FC = () => {
   const awayWinner = (fixture.away_score || 0) > (fixture.home_score || 0);
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-24 selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30">
       {/* Premium Header */}
       <div className="relative pt-6 pb-10 overflow-hidden">
         <div className="relative z-10 max-w-xl mx-auto px-4 flex flex-col">
@@ -519,15 +519,15 @@ const MatchResult: React.FC = () => {
               </motion.div>
 
               <div className="flex flex-col items-center w-full">
-                <div className="relative mb-16 w-full flex flex-col items-center justify-center min-h-[500px]">
+                <div className="relative mb-16 w-full flex flex-col items-center justify-center py-6">
                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-amber-500/20 blur-[50px] rounded-full animate-pulse z-0" />
                   <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3, type: "spring", damping: 15 }}
-                    className="z-20 w-full flex items-center justify-center scale-[0.8] sm:scale-[0.9] md:scale-100"
+                    className="z-20 w-full flex items-center justify-center"
                   >
-                    <div className="relative flex items-center justify-center origin-center">
+                    <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
                       <PlayerCard 
                         player={mvp.players} 
                         clubLogo={mvp.players.teams?.clubs?.logo_url}
@@ -555,7 +555,7 @@ const MatchResult: React.FC = () => {
                           initial={{ opacity: 0, y: 10 }}
                           whileInView={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.8 }}
-                          className="absolute -bottom-[110px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-white/10 rounded-full shadow-2xl"
+                          className="absolute -bottom-[80px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-white/10 rounded-full shadow-2xl"
                         >
                           <EventBadges goals={mvp.goal_count} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
                         </motion.div>
@@ -674,20 +674,24 @@ const MatchResult: React.FC = () => {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex flex-col items-center group"
+                  className="flex flex-col items-center group w-full"
                 >
-                  <div className="transform scale-[0.82] group-hover:scale-[0.85] transition-transform duration-500 origin-center mb-[-55px] relative z-10">
-                    <PlayerCard 
-                      player={entry.players} 
-                      clubLogo={entry.players.teams?.clubs?.logo_url}
-                      jerseyNumber={entry.jersey_number}
-                      lineupRole={entry.lineup_role}
-                      onClick={() => navigate(`/players/${entry.player_id}`)}
-                      className="shadow-2xl"
-                    />
+                  <div className="w-full flex justify-center items-center">
+                    <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
+                      <PlayerCard 
+                        player={entry.players} 
+                        clubLogo={entry.players.teams?.clubs?.logo_url}
+                        jerseyNumber={entry.jersey_number}
+                        lineupRole={entry.lineup_role}
+                        onClick={() => navigate(`/players/${entry.player_id}`)}
+                        className="shadow-2xl"
+                      />
+                    </div>
                   </div>
                   
-                  <PerformancePanel entry={entry} />
+                  <div className="mt-4 w-full flex justify-center items-center">
+                    <PerformancePanel entry={entry} />
+                  </div>
                 </motion.div>
               ))}
             </div>
@@ -726,20 +730,24 @@ const MatchResult: React.FC = () => {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05 }}
-                  className="flex flex-col items-center group"
+                  className="flex flex-col items-center group w-full"
                 >
-                  <div className="transform scale-[0.82] group-hover:scale-[0.85] transition-transform duration-500 origin-center mb-[-55px] relative z-10">
-                    <PlayerCard 
-                      player={entry.players} 
-                      clubLogo={entry.players.teams?.clubs?.logo_url}
-                      jerseyNumber={entry.jersey_number}
-                      lineupRole={entry.lineup_role}
-                      onClick={() => navigate(`/players/${entry.player_id}`)}
-                      className="shadow-2xl"
-                    />
+                  <div className="w-full flex justify-center items-center">
+                    <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
+                      <PlayerCard 
+                        player={entry.players} 
+                        clubLogo={entry.players.teams?.clubs?.logo_url}
+                        jerseyNumber={entry.jersey_number}
+                        lineupRole={entry.lineup_role}
+                        onClick={() => navigate(`/players/${entry.player_id}`)}
+                        className="shadow-2xl"
+                      />
+                    </div>
                   </div>
                   
-                  <PerformancePanel entry={entry} />
+                  <div className="mt-4 w-full flex justify-center items-center">
+                    <PerformancePanel entry={entry} />
+                  </div>
                 </motion.div>
               ))}
             </div>

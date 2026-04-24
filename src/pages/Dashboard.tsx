@@ -189,9 +189,11 @@ export const Dashboard: React.FC = () => {
 
           <div className="flex flex-col items-center justify-center w-full gap-6">
             {mvpPlayer && (
-              <div className="w-full flex justify-center items-center h-[420px] -my-6">
-                <div className="relative flex items-center justify-center pointer-events-none origin-center scale-[0.9]">
-                  <PlayerCard player={mvpPlayer} />
+              <div className="w-full flex flex-1 justify-center items-center py-6">
+                <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
+                  <div className="pointer-events-none">
+                    <PlayerCard player={mvpPlayer} />
+                  </div>
                 </div>
               </div>
             )}
@@ -428,7 +430,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Main Content Area - Top Aligned */}
-      <div className="relative z-10 w-full pt-[120px] pb-32">
+      <div className="relative z-10 w-full pt-[120px] pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <div className="max-w-xl mx-auto px-5 space-y-12">
           
           {/* A. HERO SECTION (ONLY ONE) */}
@@ -512,8 +514,8 @@ export const Dashboard: React.FC = () => {
                   <h2 className="text-[10px] font-black italic uppercase tracking-[0.2em] text-zinc-500">Deine Karte</h2>
                   <div className="h-px flex-1 bg-white/5" />
                 </div>
-                <div className="w-full flex justify-center items-center h-[420px] -my-10">
-                  <div className="relative flex items-center justify-center scale-[0.9] origin-center">
+                <div className="w-full flex justify-center items-center py-6">
+                  <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
                     <PlayerCard 
                       player={playerData} 
                       clubLogo={teams.find(t => t.id === playerData.team_id)?.clubs?.logo_url}
