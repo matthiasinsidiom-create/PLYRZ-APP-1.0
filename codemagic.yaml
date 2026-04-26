@@ -9,7 +9,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APPLE_TEAM_ID: $APPLE_TEAM_ID
-      node: 20
+      node: 22
       xcode: latest
     scripts:
       - name: Install dependencies
