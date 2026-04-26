@@ -1,46 +1,35 @@
 workflows:
   ios-release:
-    name: PLYRZ iOS Release Build
+    name: iOS Release (TestFlight)
     max_build_duration: 60
-    instance_type: mac_mini_m1
-
-    integrations:
-      app_store_connect: plyrz_appstore
-
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: at.plyrz.app
       groups:
-        - apple_credentials
+        - app_store_credentials
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-      node: 22
+        APPLE_TEAM_ID: $APPLE_TEAM_ID
+      node: 20
       xcode: latest
-
     scripts:
       - name: Install dependencies
         script: |
-          npm ci || npm install
+          npm install
 
-      - name: Build Web App
+      - name: Build web app
         script: |
           npm run build
 
-      - name: Sync Capacitor
+      - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
 
-      - name: Verify Scheme
+      - name: Set iOS Team ID
         script: |
-          xcodebuild -list -project "$XCODE_PROJECT"
+          cd ios/App
+          sed -i '' "s/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = $APPLE_TEAM_ID;/g" App.xcodeproj/project.pbxproj
 
-      - name: Apply signing
-        script: |
-          xcode-project use-profiles --project "$XCODE_PROJECT"
-
-      - name: Build iOS app
+      - name: Build IPA
         script: |
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
@@ -51,5 +40,33 @@ workflows:
 
     publishing:
       app_store_connect:
-        auth: integration
-        submit_to_testflight: true
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+
+
+  android-release:
+    name: Android Release (APK)
+    max_build_duration: 60
+    environment:
+      node: 20
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install
+
+      - name: Build web app
+        script: |
+          npm run build
+
+      - name: Sync Capacitor Android
+        script: |
+          npx cap sync android
+
+      - name: Build APK
+        script: |
+          cd android
+          ./gradlew assembleRelease
+
+    artifacts:
+      - android/app/build/outputs/**/*.apk
