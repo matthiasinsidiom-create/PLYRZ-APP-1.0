@@ -49,7 +49,7 @@ workflows:
     name: Android Release (APK)
     max_build_duration: 60
     environment:
-      node: 20
+      node: 22
     scripts:
       - name: Install dependencies
         script: |
