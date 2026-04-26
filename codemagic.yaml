@@ -44,31 +44,3 @@ workflows:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-
-
-  android-release:
-    name: Android Release (APK)
-    max_build_duration: 60
-    environment:
-      node: 22
-
-    scripts:
-      - name: Install dependencies
-        script: |
-          npm install
-
-      - name: Build web app
-        script: |
-          npm run build
-
-      - name: Sync Capacitor Android
-        script: |
-          npx cap sync android
-
-      - name: Build APK
-        script: |
-          cd android
-          ./gradlew assembleRelease
-
-    artifacts:
-      - android/app/build/outputs/**/*.apk
