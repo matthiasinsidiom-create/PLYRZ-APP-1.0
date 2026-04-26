@@ -21,7 +21,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     height: '490px',
     aspectRatio: '0.71',
     position: 'relative',
-    fontFamily: '"Inter", sans-serif',
     userSelect: 'none',
     overflow: 'visible',
   },
@@ -157,7 +156,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#ffffff',
     fontSize: '20px',
     fontWeight: '900',
-    fontFamily: '"Inter", sans-serif',
     fontStyle: 'italic',
     letterSpacing: '-0.02em',
     textShadow: '0 2px 4px rgba(0,0,0,0.5)',
@@ -214,7 +212,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
 };
 
-export const PlayerCard: React.FC<PlayerCardProps> = ({ 
+export const PlayerCard = React.memo(({ 
   player, 
   clubLogo, 
   forceTier, 
@@ -223,7 +221,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   lineupRole, 
   isTopPerformer,
   onClick 
-}) => {
+}: PlayerCardProps) => {
   // Use the new consistent stats resolver, prioritizing already resolved stats
   const stats = player.current_stats || resolveLatestStats(player);
 
@@ -523,5 +521,5 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
       </div>
     </div>
   );
-};
+});
 

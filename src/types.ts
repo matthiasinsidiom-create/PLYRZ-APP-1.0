@@ -137,7 +137,7 @@ export interface PlayerVote {
   fixture_id: string;
   player_id: string;
   user_id: string;
-  vote: 'up' | 'down';
+  vote: 'up' | 'down' | 'neutral';
   created_at: string;
 }
 
@@ -150,6 +150,7 @@ export interface PlayerRatingHistory {
   delta_overall: number;
   votes_up: number;
   votes_down: number;
+  votes_neutral?: number;
   expected_score?: number;
   actual_score?: number;
   participation_multiplier: number;
@@ -162,6 +163,15 @@ export interface PlayerRatingHistory {
   rating_version?: string;
   processed_at: string;
   created_at?: string;
+  is_mvp?: boolean;
+  mvp_score?: number;
+  vote_score?: number;
+  positive_votes?: number;
+  negative_votes?: number;
+  neutral_votes?: number;
+  raw_delta?: number;
+  final_delta?: number;
+  mvp_bonus?: number;
 }
 
 export interface MatchEvent {

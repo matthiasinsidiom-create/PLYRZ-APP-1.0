@@ -24,9 +24,10 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { useAuth } from '../../context/AuthContext';
-import { Fixture, Player, PlayerStats, Team, Club, PlayerRatingHistory } from '../../types';
+import { Fixture, Player, PlayerStats, Team, Club, PlayerRatingHistory, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
 import { VotingCountdown } from '../../components/VotingCountdown';
+import { calculateMatchScore } from '../../lib/score';
 
 const safeFixed = (val: any, decimals: number = 1): string => {
   if (val === undefined || val === null || isNaN(Number(val))) return '0.0';
@@ -190,13 +191,17 @@ const PerformancePanel: React.FC<{ entry: any }> = ({ entry }) => {
       {/* Footer: Votes & Event Badges */}
       <div className="flex items-center justify-between pt-2 border-t border-white/5">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <ThumbsUp className="w-3 h-3 text-zinc-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_up}</span>
+          <div className="flex items-center gap-1.5" title="Upvotes">
+            <ThumbsUp className="w-3 h-3 text-emerald-500" />
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_up || entry.positive_votes || 0}</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <ThumbsDown className="w-3 h-3 text-zinc-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_down}</span>
+          <div className="flex items-center gap-1.5" title="Neutral Votes">
+            <div className="w-3 h-3 rounded-full bg-zinc-500" />
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_neutral || entry.neutral_votes || 0}</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Downvotes">
+            <ThumbsDown className="w-3 h-3 text-red-500" />
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_down || entry.negative_votes || 0}</span>
           </div>
         </div>
         <EventBadges goals={entry.goal_count} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
@@ -213,6 +218,7 @@ const MatchResult: React.FC = () => {
   const [fixture, setFixture] = useState<Fixture | null>(null);
   const [results, setResults] = useState<RatingHistoryEntry[]>([]);
   const [lineup, setLineup] = useState<any[]>([]);
+  const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -233,18 +239,26 @@ const MatchResult: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [fixtureData, resultsData, lineupData] = await Promise.all([
+      const [fixtureData, resultsData, lineupData, eventsData] = await Promise.all([
         supabaseService.getFixtureById(id!),
         supabaseService.getFixtureRatingHistory(id!),
-        supabaseService.getFixtureLineupWithPlayers(id!)
+        supabaseService.getFixtureLineupWithPlayers(id!),
+        supabaseService.getMatchEvents(id!)
       ]);
       
       setFixture(fixtureData);
+      setMatchEvents(eventsData);
       
       const mergedResults = resultsData.map((result: any) => {
         const lineupEntry = lineupData.find((l: any) => l.player_id === result.player_id);
+        // Use final_delta if available (Rating 3.0), fallback to delta_overall
+        const displayDelta = result.final_delta !== undefined && result.final_delta !== null 
+          ? result.final_delta 
+          : result.delta_overall;
+
         return {
           ...result,
+          delta_overall: displayDelta,
           jersey_number: lineupEntry?.jersey_number || result.jersey_number,
           lineup_role: lineupEntry?.lineup_role || result.lineup_role
         };
@@ -414,7 +428,7 @@ const MatchResult: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
       {/* Premium Header */}
-      <div className="relative pt-[calc(1.5rem+env(safe-area-inset-top))] pb-10 overflow-hidden">
+      <div className="relative pt-[calc(env(safe-area-inset-top)+10px)] pb-10 overflow-hidden">
         <div className="relative z-10 max-w-xl mx-auto px-4 flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <button 
@@ -460,9 +474,16 @@ const MatchResult: React.FC = () => {
                 className="flex flex-col items-center"
               >
                 <div className="text-5xl sm:text-7xl font-black italic tracking-tighter flex items-center gap-3 sm:gap-6 text-white leading-none">
-                  <span className={homeWinner ? 'text-white' : 'text-zinc-500'}>{fixture.home_score ?? '0'}</span>
-                  <span className="text-zinc-800 opacity-30">:</span>
-                  <span className={awayWinner ? 'text-white' : 'text-zinc-500'}>{fixture.away_score ?? '0'}</span>
+                  {(() => {
+                    const { homeScore, awayScore } = calculateMatchScore(fixture, matchEvents);
+                    return (
+                      <>
+                        <span className={homeWinner ? 'text-white' : 'text-zinc-500'}>{homeScore}</span>
+                        <span className="text-zinc-800 opacity-30">:</span>
+                        <span className={awayWinner ? 'text-white' : 'text-zinc-500'}>{awayScore}</span>
+                      </>
+                    );
+                  })()}
                 </div>
               </motion.div>
               

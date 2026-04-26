@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Fixture } from '../types';
+import { calculateMatchScore } from '../lib/score';
 
 interface MatchCardProps {
   fixture: Fixture;
@@ -93,30 +94,32 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                 {new Date(fixture.kickoff_at).toLocaleDateString([], { day: '2-digit', month: 'short' })}
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              <div className={`flex items-center gap-2 whitespace-nowrap text-2xl sm:text-3xl font-black italic tracking-tighter transition-colors ${
-                isLive ? 'text-white' : 'text-zinc-400'
-              }`}>
-                <span>{fixture.home_score}</span>
-                <span className="text-zinc-600">-</span>
-                <span>{fixture.away_score}</span>
-              </div>
-              {isLive && (
-                <div className="flex flex-col items-center mt-1">
-                  <div className="bg-red-500 px-2 py-0.5 rounded-full mb-1">
-                    <span className="text-[7px] font-black text-white uppercase tracking-widest animate-pulse">Live</span>
+          ) : (() => {
+            const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+            return (
+              <div className="flex flex-col items-center">
+                <div className={`flex items-center gap-2 whitespace-nowrap text-2xl sm:text-3xl font-black italic tracking-tighter transition-colors ${
+                  isLive ? 'text-white' : 'text-zinc-400'
+                }`}>
+                  <span>{homeScore}</span>
+                  <span className="text-zinc-600">-</span>
+                  <span>{awayScore}</span>
+                </div>
+                {isLive && (
+                  <div className="flex flex-col items-center mt-1">
+                    <div className="bg-red-500 px-2 py-0.5 rounded-full mb-1">
+                      <span className="text-[7px] font-black text-white uppercase tracking-widest animate-pulse">Live</span>
+                    </div>
                   </div>
-                  {/* Minute display would go here if available in fixture, otherwise we show status */}
-                </div>
-              )}
-              {isFinished && (
-                <div className={`text-[8px] font-black uppercase tracking-widest mt-1 ${isVoting ? 'text-emerald-500 animate-pulse' : 'text-zinc-600'}`}>
-                  {isVoting ? 'Voten' : 'Beendet'}
-                </div>
-              )}
-            </div>
-          )}
+                )}
+                {isFinished && (
+                  <div className={`text-[8px] font-black uppercase tracking-widest mt-1 ${isVoting ? 'text-emerald-500 animate-pulse' : 'text-zinc-600'}`}>
+                    {isVoting ? 'Voten' : 'Beendet'}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Away Team */}
