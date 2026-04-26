@@ -1,46 +1,95 @@
 workflows:
   ios-release:
-    name: iOS Release (TestFlight)
+    name: iOS Release Build
     max_build_duration: 60
+    instance_type: mac_mini_m2
+
     environment:
-      groups:
-        - app_store_credentials
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: at.plyrz.app
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APPLE_TEAM_ID: $APPLE_TEAM_ID
-      node: 22
-      xcode: latest
+      groups:
+        - app_store_credentials
 
     scripts:
       - name: Install dependencies
         script: |
           npm install
 
-      - name: Build web app
+      - name: Build Web App
         script: |
           npm run build
 
-      - name: Sync Capacitor iOS
+      - name: Sync Capacitor
         script: |
           npx cap sync ios
 
-      - name: Set iOS Team ID
+      - name: Set iOS build number
         script: |
-          cd ios/App
-          sed -i '' "s/DEVELOPMENT_TEAM = .*/DEVELOPMENT_TEAM = $APPLE_TEAM_ID;/g" App.xcodeproj/project.pbxproj
+          BUILD_NUMBER=$(date +%s)
+          echo "Setting build number to $BUILD_NUMBER"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" ios/App/App/Info.plist
 
-      - name: Build IPA
+      - name: Verify Scheme
+        script: |
+          xcodebuild -list -project "$XCODE_PROJECT"
+
+      - name: Apply provisioning profiles
+        script: |
+          xcode-project use-profiles --project "$XCODE_PROJECT"
+
+      - name: Build iOS app
         script: |
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME"
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags "-destination 'generic/platform=iOS'"
 
     artifacts:
       - build/ios/ipa/*.ipa
 
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        api_key: $APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_ID
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+
+
+  android-apk:
+    name: Android APK Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      java: 17
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install
+
+      - name: Build Web App
+        script: |
+          npm run build
+
+      - name: Sync Capacitor Android
+        script: |
+          npx cap sync android
+
+      - name: Fix Java version (IMPORTANT)
+        script: |
+          echo "org.gradle.java.home=$JAVA_HOME" >> android/gradle.properties
+
+      - name: Build APK
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+    artifacts:
+      - android/app/build/outputs/apk/debug/*.apk
