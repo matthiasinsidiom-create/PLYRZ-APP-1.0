@@ -318,8 +318,8 @@ const AdminClubs: React.FC = () => {
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter uppercase">CLUBS</h1>
-              <p className="text-zinc-500 font-medium text-sm">Manage organizations</p>
+              <h1 className="text-3xl font-black italic tracking-tighter uppercase">VEREINE</h1>
+              <p className="text-zinc-500 font-medium text-sm">Organisationen verwalten</p>
             </div>
           </div>
           <motion.button
@@ -329,7 +329,7 @@ const AdminClubs: React.FC = () => {
             className="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-5 h-5" />
-            NEW CLUB
+            NEUER VEREIN
           </motion.button>
         </div>
 
@@ -338,7 +338,7 @@ const AdminClubs: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text"
-            placeholder="Search clubs..."
+            placeholder="Vereine suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
@@ -389,11 +389,11 @@ const AdminClubs: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white">{club.name}</h3>
-                  <p className="text-zinc-500 text-sm">{club.short_name || 'No short name'}</p>
+                  <p className="text-zinc-500 text-sm">{club.short_name || 'Kein Kurzname'}</p>
                 </div>
                 <div className="flex items-center gap-2 text-xs font-bold text-zinc-400">
                   <Trophy className="w-3 h-3 text-emerald-500" />
-                  {club.leagues?.name || 'No league'}
+                  {club.leagues?.name || 'Keine Liga'}
                 </div>
               </motion.div>
             ))}
@@ -412,7 +412,7 @@ const AdminClubs: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingClub ? 'EDIT CLUB' : 'NEW CLUB'}
+                    {editingClub ? 'VEREIN BEARBEITEN' : 'NEUER VEREIN'}
                   </h2>
                   <button 
                     onClick={() => setIsModalOpen(false)}
@@ -424,37 +424,37 @@ const AdminClubs: React.FC = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Club Name</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Vereinsname</label>
                     <input 
                       required
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
-                      placeholder="e.g. Manchester United"
+                      placeholder="z.B. Bayern München"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Short Name</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Kurzname</label>
                     <input 
                       type="text"
                       value={formData.short_name}
                       onChange={(e) => setFormData({ ...formData, short_name: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
-                      placeholder="e.g. MUN"
+                      placeholder="z.B. FCB"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">League</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga</label>
                     <select
                       required
                       value={formData.league_id}
                       onChange={(e) => setFormData({ ...formData, league_id: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
                     >
-                      <option value="">Select a league</option>
+                      <option value="">Liga auswählen</option>
                       {leagues.map(l => (
                         <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
@@ -490,14 +490,14 @@ const AdminClubs: React.FC = () => {
                           className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
                         >
                           {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                          {formData.logo_url ? 'CHANGE LOGO' : 'UPLOAD LOGO'}
+                          {formData.logo_url ? 'LOGO ÄNDERN' : 'LOGO HOCHLADEN'}
                         </label>
                         <input 
                           type="url"
                           value={formData.logo_url}
                           onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
                           className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-blue-500/50 transition-colors"
-                          placeholder="Or enter URL directly..."
+                          placeholder="Oder URL direkt eingeben..."
                         />
                       </div>
                     </div>
@@ -506,23 +506,23 @@ const AdminClubs: React.FC = () => {
                   <div className="space-y-4 pt-4 border-t border-white/10">
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-blue-500" />
-                      <h3 className="text-sm font-black uppercase tracking-widest">Location & Voting Radius</h3>
+                      <h3 className="text-sm font-black uppercase tracking-widest">Standort & Abstimmungsradius</h3>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Pitch Name</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Spielfeldname</label>
                       <input 
                         type="text"
                         value={formData.pitch_name}
                         onChange={(e) => setFormData({ ...formData, pitch_name: e.target.value })}
                         className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
-                        placeholder="e.g. Anfield Road"
+                        placeholder="z.B. Allianz Arena"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Latitude</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Breitengrad (Latitude)</label>
                         <input 
                           type="number"
                           step="any"
@@ -533,7 +533,7 @@ const AdminClubs: React.FC = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Longitude</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Längengrad (Longitude)</label>
                         <input 
                           type="number"
                           step="any"
@@ -553,7 +553,7 @@ const AdminClubs: React.FC = () => {
                         className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors border border-zinc-700 text-xs"
                       >
                         {gettingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
-                        SET HERE
+                        HIER FESTLEGEN
                       </button>
                       <button
                         type="button"
@@ -562,7 +562,7 @@ const AdminClubs: React.FC = () => {
                         className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors border border-zinc-700 text-xs disabled:opacity-50"
                       >
                         {testingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                        TEST RADIUS
+                        RADIUS TESTEN
                       </button>
                     </div>
 
@@ -575,13 +575,13 @@ const AdminClubs: React.FC = () => {
 
                     {testResult && (
                       <div className={`p-3 rounded-xl border ${testResult.inRadius ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-red-500/10 border-red-500/20 text-red-500'} text-[10px] font-bold text-center uppercase tracking-widest`}>
-                        {testResult.inRadius ? 'You are in radius' : 'You are outside'} ({testResult.distance}m)
+                        {testResult.inRadius ? 'Du bist im Radius' : 'Du bist außerhalb'} ({testResult.distance}m)
                       </div>
                     )}
 
                     <div className="space-y-2">
                       <div className="flex justify-between">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Voting Radius (meters)</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Abstimmungsradius (Meter)</label>
                         <span className="text-xs font-bold text-blue-500">{formData.radius_meters}m</span>
                       </div>
                       <input 
@@ -601,8 +601,8 @@ const AdminClubs: React.FC = () => {
 
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Interactive Map</label>
-                        <span className="text-[10px] text-zinc-500 italic">Click map to set location</span>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Interaktive Karte</label>
+                        <span className="text-[10px] text-zinc-500 italic">Auf Karte klicken, um Standort festzulegen</span>
                       </div>
                       <div className="relative h-64 w-full rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900">
                         <MapContainer 
@@ -642,7 +642,7 @@ const AdminClubs: React.FC = () => {
                     className="w-full bg-blue-500 text-white font-black py-4 rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                    {editingClub ? 'UPDATE CLUB' : 'CREATE CLUB'}
+                    {editingClub ? 'VEREIN AKTUALISIEREN' : 'VEREIN ERSTELLEN'}
                   </button>
                 </form>
               </motion.div>
@@ -654,8 +654,8 @@ const AdminClubs: React.FC = () => {
           isOpen={deleteModal.isOpen}
           onClose={() => setDeleteModal({ isOpen: false, id: null })}
           onConfirm={handleConfirmDelete}
-          title="Delete Club?"
-          message="Are you sure you want to delete this club? This will also delete all teams and players associated with it. This action cannot be undone."
+          title="Verein löschen?"
+          message="Bist du sicher, dass du diesen Verein löschen möchtest? Dies löscht auch alle Teams und Spieler, die damit verbunden sind. Diese Aktion kann nicht rückgängig gemacht werden."
           loading={deleting}
         />
       </div>

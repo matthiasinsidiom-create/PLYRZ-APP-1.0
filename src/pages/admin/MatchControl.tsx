@@ -562,7 +562,7 @@ const AdminMatchControl: React.FC = () => {
           </button>
           <div className="text-center">
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{fixture.leagues?.name}</p>
-            <h1 className="text-xl font-black italic uppercase tracking-tighter">MATCH CONTROL</h1>
+            <h1 className="text-xl font-black italic uppercase tracking-tighter">SPIELSTEUERUNG</h1>
           </div>
           <button 
             onClick={() => loadMatchData()}
@@ -646,7 +646,7 @@ const AdminMatchControl: React.FC = () => {
                 <Zap className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-xl font-black italic uppercase tracking-tighter leading-none">Live Match Control</h2>
+                <h2 className="text-xl font-black italic uppercase tracking-tighter leading-none">Live Match-Steuerung</h2>
                 <p className="text-[10px] font-bold text-amber-500/60 uppercase tracking-widest mt-1">Primäre Live-Aktionen</p>
               </div>
             </div>
@@ -670,7 +670,7 @@ const AdminMatchControl: React.FC = () => {
                  </div>
                  <div className="text-left">
                    <p className="text-sm font-black uppercase italic tracking-tighter">Tor {fixture.home_team?.clubs?.name || 'Eigenes Team'}</p>
-                   <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Spieler Auswahl</p>
+                   <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest">Spielerauswahl</p>
                  </div>
               </button>
 
@@ -694,7 +694,7 @@ const AdminMatchControl: React.FC = () => {
                  </div>
                  <div className="text-left">
                    <p className="text-sm font-black uppercase italic tracking-tighter">Tor Gegner</p>
-                   <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Lightweight Log</p>
+                   <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest">Schnelleingabe</p>
                  </div>
               </button>
             </div>
@@ -702,12 +702,12 @@ const AdminMatchControl: React.FC = () => {
             {events.length > 0 && (
               <div className="mt-6 pt-6 border-t border-white/5">
                 <div className="flex items-center justify-between mb-3 px-1">
-                  <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Recent Events</span>
+                  <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Letzte Ereignisse</span>
                   <button 
                     onClick={() => setActiveSection('events')}
                     className="text-[8px] font-black text-emerald-500 uppercase tracking-widest"
                   >
-                    View All
+                    Alle anzeigen
                   </button>
                 </div>
                 <div className="space-y-1.5 text-left">
@@ -748,7 +748,7 @@ const AdminMatchControl: React.FC = () => {
         <div className="grid grid-cols-1 gap-4">
           {/* 1. Lineups Hub */}
           <HubCard 
-            title="Lineups" 
+            title="Aufstellungen" 
             icon={<Users className="w-5 h-5" />}
             status={hasHomeLineup && hasAwayLineup ? 'complete' : 'pending'}
             isActive={activeSection === 'lineups'}
@@ -779,14 +779,14 @@ const AdminMatchControl: React.FC = () => {
                 className="w-full bg-emerald-500 text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-                SAVE LINEUPS
+                AUFSTELLUNG SPEICHERN
               </button>
             </div>
           </HubCard>
 
           {/* 2. Match Events Hub */}
           <HubCard 
-            title="Match Events" 
+            title="Spielereignisse" 
             icon={<Trophy className="w-5 h-5" />}
             status={hasEvents ? 'complete' : 'pending'}
             isActive={activeSection === 'events'}
@@ -887,7 +887,7 @@ const AdminMatchControl: React.FC = () => {
 
           {/* 3. Votes & Status Hub */}
           <HubCard 
-            title="Votes & Match Status" 
+            title="Votes & Status" 
             icon={<Star className="w-5 h-5" />}
             status={fixture.status === 'finished' ? 'complete' : 'pending'}
             isActive={activeSection === 'votes'}
@@ -896,27 +896,27 @@ const AdminMatchControl: React.FC = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 space-y-1">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Match Status</p>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Spielstatus</p>
                   <select 
                     value={fixture.status}
                     onChange={(e) => handleUpdateFixture({ status: e.target.value as any })}
                     className="w-full bg-transparent font-black italic uppercase tracking-tighter text-lg outline-none"
                   >
-                    <option value="upcoming">Upcoming</option>
+                    <option value="upcoming">Anstehend</option>
                     <option value="live">Live</option>
-                    <option value="finished">Finished</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option value="finished">Beendet</option>
+                    <option value="cancelled">Abgebrochen</option>
                   </select>
                 </div>
                 <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 space-y-1">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Voting Window</p>
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Abstimmungsfenster</p>
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-white">
-                      {fixture.voting_open_at ? new Date(fixture.voting_open_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Not set'}
+                      {fixture.voting_open_at ? new Date(fixture.voting_open_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Nicht gesetzt'}
                     </span>
-                    <span className="text-[10px] text-zinc-600">to</span>
+                    <span className="text-[10px] text-zinc-600">bis</span>
                     <span className="text-xs font-bold text-white">
-                      {fixture.voting_close_at ? new Date(fixture.voting_close_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Not set'}
+                      {fixture.voting_close_at ? new Date(fixture.voting_close_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Nicht gesetzt'}
                     </span>
                   </div>
                 </div>
@@ -924,7 +924,7 @@ const AdminMatchControl: React.FC = () => {
               
               <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-xs font-black uppercase tracking-widest text-emerald-500">Voting Activity</h4>
+                  <h4 className="text-xs font-black uppercase tracking-widest text-emerald-500">Voting Aktivität</h4>
                   <span className="px-2 py-0.5 bg-emerald-500 text-black text-[10px] font-black rounded-full">LIVE</span>
                 </div>
                 <div className="flex items-center justify-around text-center">
@@ -935,7 +935,7 @@ const AdminMatchControl: React.FC = () => {
                   <div className="w-px h-8 bg-zinc-800" />
                   <div>
                     <p className="text-2xl font-black italic tracking-tighter">{stats.votes}</p>
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Total Votes</p>
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Stimmen gesamt</p>
                   </div>
                 </div>
               </div>
@@ -944,7 +944,7 @@ const AdminMatchControl: React.FC = () => {
 
           {/* 4. Processing & Results Hub */}
           <HubCard 
-            title="Processing & Results" 
+            title="Verarbeitung & Ergebnisse" 
             icon={<Settings className="w-5 h-5" />}
             status={isProcessed ? 'complete' : 'pending'}
             isActive={activeSection === 'processing'}
@@ -952,13 +952,13 @@ const AdminMatchControl: React.FC = () => {
           >
             <div className="space-y-6">
               <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500">Pre-Processing Checklist</h4>
+                <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500">Pre-Processing Checkliste</h4>
                 <div className="space-y-3">
-                  <ChecklistItem label="Score is set" checked={hasScore} />
-                  <ChecklistItem label="Home Lineup (min. 11)" checked={hasHomeLineup} />
-                  <ChecklistItem label="Away Lineup (min. 11)" checked={hasAwayLineup} />
-                  <ChecklistItem label="Match Events recorded" checked={hasEvents} />
-                  <ChecklistItem label="Match not yet processed" checked={!isProcessed} />
+                  <ChecklistItem label="Ergebnis eingetragen" checked={hasScore} />
+                  <ChecklistItem label="Aufstellung Heim (min. 11)" checked={hasHomeLineup} />
+                  <ChecklistItem label="Aufstellung Auswärts (min. 11)" checked={hasAwayLineup} />
+                  <ChecklistItem label="Spielereignisse erfasst" checked={hasEvents} />
+                  <ChecklistItem label="Spielergebnisse noch nicht verarbeitet" checked={!isProcessed} />
                 </div>
               </div>
 
@@ -967,7 +967,7 @@ const AdminMatchControl: React.FC = () => {
                   <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center gap-3">
                     <CheckCircle2 className="w-6 h-6 text-emerald-500" />
                     <div>
-                      <p className="text-sm font-bold text-white">Results Processed</p>
+                      <p className="text-sm font-bold text-white">Ergebnisse verarbeitet</p>
                       <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
                         {new Date(fixture.results_processed_at).toLocaleString()}
                       </p>
@@ -978,14 +978,14 @@ const AdminMatchControl: React.FC = () => {
                       onClick={() => navigate(`/matches/${id}/result`)}
                       className="bg-zinc-800 text-white font-bold py-4 rounded-2xl text-xs uppercase tracking-widest"
                     >
-                      VIEW RESULTS
+                      ERGEBNISSE ANSEHEN
                     </button>
                     <button 
                       onClick={handleProcessResults}
                       disabled={saving}
                       className="bg-red-500/10 text-red-500 font-bold py-4 rounded-2xl text-xs uppercase tracking-widest border border-red-500/20"
                     >
-                      REPROCESS
+                      NEU VERARBEITEN
                     </button>
                   </div>
                 </div>
@@ -1000,13 +1000,13 @@ const AdminMatchControl: React.FC = () => {
                   }`}
                 >
                   {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : <Trophy className="w-6 h-6" />}
-                  <span className="uppercase tracking-tighter italic text-lg">PROCESS RESULTS NOW</span>
+                  <span className="uppercase tracking-tighter italic text-lg">JETZT BERECHNEN</span>
                 </button>
               )}
               
               {!canProcess && !isProcessed && (
                 <p className="text-center text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
-                  Complete all checklist items to enable processing
+                  Fülle alle Punkte der Checkliste aus, um die Verarbeitung zu aktivieren
                 </p>
               )}
             </div>
@@ -1157,7 +1157,7 @@ const AdminMatchControl: React.FC = () => {
                 onClick={() => setStatusModal({ ...statusModal, isOpen: false })}
                 className="w-full bg-white text-black font-black py-4 rounded-2xl uppercase tracking-widest text-xs"
               >
-                CONTINUE
+                WEITER
               </button>
             </motion.div>
           </div>
@@ -1191,7 +1191,7 @@ const AdminMatchControl: React.FC = () => {
 
                 <div className="space-y-2">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase text-white">
-                    Process Results?
+                    Ergebnisse Berechnen?
                   </h2>
                   <p className="text-zinc-400 font-medium leading-relaxed">
                     Bist du sicher, dass du die Resultate für dieses Spiel jetzt berechnen möchtest? Dies aktualisiert die Spieler-Ratings und kann nicht rückgängig gemacht werden.
@@ -1290,7 +1290,7 @@ const TeamLineupSelector: React.FC<{
       <div className="flex flex-col">
         <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">{teamName}</span>
         <span className={`text-xs font-black uppercase italic ${colorClass}`}>
-          {selectedLineup.filter(l => l.lineup_role === 'starter').length}/11 Starters
+          {selectedLineup.filter(l => l.lineup_role === 'starter').length}/11 Startelf
         </span>
       </div>
       
@@ -1340,7 +1340,7 @@ const TeamLineupSelector: React.FC<{
                       }`}
                     >
                       <option value="starter">STR</option>
-                      <option value="sub">SUB</option>
+                      <option value="sub">BANK</option>
                     </select>
                   </div>
                 )}
@@ -1484,14 +1484,14 @@ const OpponentGoalSection: React.FC<{
   return (
     <div className="pt-2 border-t border-white/5 space-y-3">
       <div className="flex items-center justify-between px-1">
-        <h5 className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Opponent Goals</h5>
+        <h5 className="text-[8px] font-bold text-zinc-600 uppercase tracking-[0.2em]">Tore Gegner</h5>
         {!isAdding && (
           <button 
             onClick={onStartAdd}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
           >
             <Plus className="w-3 h-3 text-emerald-500" />
-            Add Goal
+            Tor hinzufügen
           </button>
         )}
       </div>
@@ -1504,7 +1504,7 @@ const OpponentGoalSection: React.FC<{
         >
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Jersey #</label>
+              <label className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Rückennummer</label>
               <input 
                 type="text" 
                 placeholder="9"
@@ -1529,14 +1529,14 @@ const OpponentGoalSection: React.FC<{
               onClick={onCancel}
               className="flex-1 py-2 bg-zinc-800 text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-zinc-700"
             >
-              Cancel
+              Abbrechen
             </button>
             <button 
               onClick={onAdd}
               disabled={!minute}
               className="flex-1 py-2 bg-emerald-500 text-black text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 disabled:opacity-50"
             >
-              Confirm
+              Bestätigen
             </button>
           </div>
         </motion.div>

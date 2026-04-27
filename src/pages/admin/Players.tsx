@@ -529,8 +529,8 @@ const AdminPlayers: React.FC = () => {
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter uppercase">PLAYERS</h1>
-              <p className="text-zinc-500 font-medium text-sm">Manage athletes</p>
+              <h1 className="text-3xl font-black italic tracking-tighter uppercase">SPIELER</h1>
+              <p className="text-zinc-500 font-medium text-sm">Athleten verwalten</p>
             </div>
           </div>
           <motion.button
@@ -540,7 +540,7 @@ const AdminPlayers: React.FC = () => {
             className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-5 h-5" />
-            NEW PLAYER
+            NEUER SPIELER
           </motion.button>
         </div>
 
@@ -549,7 +549,7 @@ const AdminPlayers: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text"
-            placeholder="Search players..."
+            placeholder="Spieler suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
@@ -577,7 +577,7 @@ const AdminPlayers: React.FC = () => {
                   <div className="flex items-center gap-2">
                     {player.claimed_by_user_id && (
                       <span className="px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-                        Claimed
+                        Beansprucht
                       </span>
                     )}
                     <button 
@@ -598,7 +598,7 @@ const AdminPlayers: React.FC = () => {
                   <h3 className="text-xl font-bold text-white">{player.full_name}</h3>
                   <p className="text-zinc-500 text-sm flex items-center gap-2">
                     <LayoutGrid className="w-3 h-3" />
-                    {player.teams?.name || 'No team'}
+                    {player.teams?.name || 'Kein Team'}
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
@@ -607,7 +607,7 @@ const AdminPlayers: React.FC = () => {
                       {getPositionShort(player.position)}
                     </span>
                     <span className="px-2 py-1 rounded-md bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase tracking-wider">
-                      {player.is_active ? 'Active' : 'Inactive'}
+                      {player.is_active ? 'Aktiv' : 'Inaktiv'}
                     </span>
                     {player.jersey_number && (
                       <span className="px-2 py-1 rounded-md bg-orange-500/10 text-orange-500 text-[10px] font-bold uppercase tracking-wider">
@@ -634,7 +634,7 @@ const AdminPlayers: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingPlayer ? 'EDIT PLAYER' : 'NEW PLAYER'}
+                    {editingPlayer ? 'SPIELER BEARBEITEN' : 'NEUER SPIELER'}
                   </h2>
                   <div className="flex items-center gap-4">
                     <div className="flex bg-zinc-800 p-1 rounded-xl">
@@ -665,20 +665,20 @@ const AdminPlayers: React.FC = () => {
                   <div className={activeTab === 'info' ? 'block' : 'hidden lg:block'}>
                     <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} className="space-y-6">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Full Name</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Vollständiger Name</label>
                         <input 
                           required
                           type="text"
                           value={formData.full_name}
                           onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                           className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
-                          placeholder="e.g. Cristiano Ronaldo"
+                          placeholder="z.B. Cristiano Ronaldo"
                         />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Club</label>
+                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Verein</label>
                           <select
                             required
                             value={formData.club_id}
@@ -693,7 +693,7 @@ const AdminPlayers: React.FC = () => {
                             }}
                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
                           >
-                            <option value="">Select a club</option>
+                            <option value="">Verein auswählen</option>
                             {clubs.map(c => (
                               <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
@@ -707,7 +707,7 @@ const AdminPlayers: React.FC = () => {
                             onChange={(e) => setFormData({ ...formData, team_id: e.target.value })}
                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
                           >
-                            <option value="">Select a team</option>
+                            <option value="">Team auswählen</option>
                             {teams
                               .filter(t => !formData.club_id || t.club_id === formData.club_id)
                               .map(t => (
@@ -719,7 +719,7 @@ const AdminPlayers: React.FC = () => {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Nationality</label>
+                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Nationalität</label>
                           <select
                             value={formData.nationality}
                             onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
@@ -745,7 +745,7 @@ const AdminPlayers: React.FC = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Photo</label>
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Foto</label>
                         <div className="flex gap-4 items-center">
                           {formData.photo_url || previewUrl ? (
                             <div className="w-16 h-16 rounded-xl overflow-hidden bg-zinc-800 border border-zinc-700 flex-shrink-0">
@@ -773,14 +773,14 @@ const AdminPlayers: React.FC = () => {
                               className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
                             >
                               {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                              {formData.photo_url ? 'CHANGE PHOTO' : 'UPLOAD PHOTO'}
+                              {formData.photo_url ? 'FOTO ÄNDERN' : 'FOTO HOCHLADEN'}
                             </label>
                             <input 
                               type="url"
                               value={formData.photo_url}
                               onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
                               className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-orange-500/50 transition-colors"
-                              placeholder="Or enter URL directly..."
+                              placeholder="Oder URL direkt eingeben..."
                             />
                           </div>
                         </div>
@@ -788,7 +788,7 @@ const AdminPlayers: React.FC = () => {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Jersey Number</label>
+                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Trikotnummer</label>
                           <input 
                             type="number"
                             value={formData.jersey_number}
@@ -798,7 +798,7 @@ const AdminPlayers: React.FC = () => {
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Birth Year</label>
+                          <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Geburtsjahr</label>
                           <input 
                             type="number"
                             value={formData.birth_year}
@@ -811,7 +811,7 @@ const AdminPlayers: React.FC = () => {
 
                       <div className="bg-zinc-800/50 p-6 rounded-2xl space-y-4 border border-zinc-800">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Stats & Rating</label>
+                          <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Werte & Bewertung</label>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-orange-500">OVR</span>
                             <input 
@@ -848,8 +848,8 @@ const AdminPlayers: React.FC = () => {
                             onChange={(e) => setFormData({ ...formData, is_active: e.target.value === 'active' })}
                             className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-orange-500/50 transition-colors"
                           >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                            <option value="active">Aktiv</option>
+                            <option value="inactive">Inaktiv</option>
                           </select>
                         </div>
                       </div>
@@ -860,7 +860,7 @@ const AdminPlayers: React.FC = () => {
                         className="w-full bg-orange-500 text-white font-black py-4 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                        {editingPlayer ? 'UPDATE PLAYER' : 'CREATE PLAYER'}
+                        {editingPlayer ? 'SPIELER AKTUALISIEREN' : 'SPIELER ERSTELLEN'}
                       </button>
                     </form>
                   </div>
@@ -869,7 +869,7 @@ const AdminPlayers: React.FC = () => {
                   <div className={`space-y-8 ${activeTab === 'layout' ? 'block' : 'hidden lg:block'}`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Live Preview</h3>
+                        <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">Live-Vorschau</h3>
                         <div className="flex bg-zinc-800 p-1 rounded-xl">
                           {(['bronze', 'silver', 'gold'] as const).map((tier) => (
                             <button
@@ -895,7 +895,7 @@ const AdminPlayers: React.FC = () => {
                             className="flex items-center gap-2 text-xs font-bold text-orange-500 hover:text-orange-400 transition-colors"
                           >
                             <Copy className="w-3 h-3" />
-                            COPY TO ALL TIERS
+                            AUF ALLE TIERS ÜBERTRAGEN
                           </button>
                           <button 
                             type="button"
@@ -903,7 +903,7 @@ const AdminPlayers: React.FC = () => {
                             className="flex items-center gap-2 text-xs font-bold text-zinc-500 hover:text-white transition-colors"
                           >
                             <RotateCcw className="w-3 h-3" />
-                            RESET LAYOUT
+                            LAYOUT ZURÜCKSETZEN
                           </button>
                         </div>
                       )}
@@ -1168,7 +1168,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <Maximize2 className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Card Container</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Karten-Container</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('card', DEFAULT_TIER_LAYOUT.card)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Card">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1195,7 +1195,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <LayoutGrid className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Card Frame</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Kartenrahmen</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('frame', DEFAULT_TIER_LAYOUT.frame)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Frame">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1222,7 +1222,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <Maximize2 className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Overall Rating</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Gesamtbewertung</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('overall', DEFAULT_TIER_LAYOUT.overall)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Overall">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1250,7 +1250,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <Move className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Position Text</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Positionstext</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('position', DEFAULT_TIER_LAYOUT.position)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Position">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1278,7 +1278,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <LayoutGrid className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">National Flag</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Nationalflagge</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('flag', DEFAULT_TIER_LAYOUT.flag)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Flag">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1309,7 +1309,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <Shield className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Club Logo</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Vereinslogo</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('club', DEFAULT_TIER_LAYOUT.club)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Club">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1340,7 +1340,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <Users className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Player Image</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Spielerbild</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('player', DEFAULT_TIER_LAYOUT.player)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Player">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1395,7 +1395,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <LayoutGrid className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Stats Left</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Werte Links</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('statsLeft', DEFAULT_TIER_LAYOUT.statsLeft)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Stats Left">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1423,7 +1423,7 @@ const AdminPlayers: React.FC = () => {
                               <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                                 <div className="flex items-center gap-3">
                                   <LayoutGrid className="w-5 h-5 text-orange-500" />
-                                  <label className="text-xs font-black text-white uppercase tracking-widest">Stats Right</label>
+                                  <label className="text-xs font-black text-white uppercase tracking-widest">Werte Rechts</label>
                                 </div>
                                 <button type="button" onClick={() => updateLayout('statsRight', DEFAULT_TIER_LAYOUT.statsRight)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Stats Right">
                                   <RotateCcw className="w-4 h-4 text-zinc-500" />
@@ -1463,7 +1463,7 @@ const AdminPlayers: React.FC = () => {
                               className="flex-[2] px-12 bg-orange-500 text-white font-black py-4 rounded-xl hover:bg-orange-600 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 text-sm tracking-widest disabled:opacity-50"
                             >
                               {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                              SAVE PLAYER CONFIGURATION
+                              SPIELER-KONFIGURATION SPEICHERN
                             </button>
                           </div>
                         </div>
@@ -1480,8 +1480,8 @@ const AdminPlayers: React.FC = () => {
           isOpen={deleteModal.isOpen}
           onClose={() => setDeleteModal({ isOpen: false, id: null })}
           onConfirm={handleConfirmDelete}
-          title="Delete Player?"
-          message="Are you sure you want to delete this player? This will also delete their stats and match history. This action cannot be undone."
+          title="Spieler löschen?"
+          message="Bist du sicher, dass du diesen Spieler löschen möchtest? Dies löscht auch seine Statistiken und Spielhistorie. Diese Aktion kann nicht rückgängig gemacht werden."
           loading={deleting}
         />
       </div>
@@ -1499,7 +1499,7 @@ const ColorControls: React.FC<{
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Palette className="w-3 h-3 text-zinc-500" />
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Color Mode</label>
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Farbmodus</label>
         </div>
         <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
           <button
@@ -1509,7 +1509,7 @@ const ColorControls: React.FC<{
               layout.mode === 'solid' ? 'bg-orange-500 text-white' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            Solid
+            Einfarbig
           </button>
           <button
             type="button"
@@ -1518,14 +1518,14 @@ const ColorControls: React.FC<{
               layout.mode === 'gradient' ? 'bg-orange-500 text-white' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            Gradient
+            Verlauf
           </button>
         </div>
       </div>
 
       {layout.mode === 'solid' ? (
         <div className="space-y-3">
-          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Text Color</label>
+          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Textfarbe</label>
           <div className="flex flex-col gap-3">
             <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl flex justify-center">
               <HexColorPicker 
@@ -1547,7 +1547,7 @@ const ColorControls: React.FC<{
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4">
             <div className="space-y-3">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Start Color</label>
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Startfarbe</label>
               <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl flex justify-center">
                 <HexColorPicker 
                   color={layout.gradientStart || '#ffffff'} 
@@ -1565,7 +1565,7 @@ const ColorControls: React.FC<{
             </div>
             
             <div className="space-y-3">
-              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">End Color</label>
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Endfarbe</label>
               <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl flex justify-center">
                 <HexColorPicker 
                   color={layout.gradientEnd || '#cccccc'} 
@@ -1584,13 +1584,13 @@ const ColorControls: React.FC<{
           </div>
           
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Direction</label>
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Richtung</label>
             <select
               value={layout.gradientDirection || 'vertical'}
               onChange={(e) => updateLayout(elementKey, { gradientDirection: e.target.value })}
               className="w-full h-10 bg-zinc-950 border border-zinc-800 rounded-xl px-3 text-xs text-white focus:border-orange-500 outline-none transition-all"
             >
-              <option value="vertical">Vertical</option>
+              <option value="vertical">Vertikal</option>
               <option value="horizontal">Horizontal</option>
               <option value="diagonal">Diagonal</option>
             </select>

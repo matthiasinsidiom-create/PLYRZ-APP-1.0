@@ -131,7 +131,7 @@ const AdminTeams: React.FC = () => {
             </button>
             <div>
               <h1 className="text-3xl font-black italic tracking-tighter uppercase">TEAMS</h1>
-              <p className="text-zinc-500 font-medium text-sm">Manage squads</p>
+              <p className="text-zinc-500 font-medium text-sm">Kader verwalten</p>
             </div>
           </div>
           <motion.button
@@ -141,7 +141,7 @@ const AdminTeams: React.FC = () => {
             className="flex items-center justify-center gap-2 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-5 h-5" />
-            NEW TEAM
+            NEUES TEAM
           </motion.button>
         </div>
 
@@ -150,7 +150,7 @@ const AdminTeams: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text"
-            placeholder="Search teams..."
+            placeholder="Teams suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-purple-500/50 transition-colors"
@@ -194,12 +194,12 @@ const AdminTeams: React.FC = () => {
                   <h3 className="text-xl font-bold text-white">{team.name}</h3>
                   <p className="text-zinc-500 text-sm flex items-center gap-2">
                     <Shield className="w-3 h-3" />
-                    {team.clubs?.name || 'No club'}
+                    {team.clubs?.name || 'Kein Verein'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-1 rounded-md bg-zinc-800 text-zinc-400 text-[10px] font-bold uppercase tracking-wider">
-                    {team.clubs?.name ? 'Active' : 'Draft'}
+                    {team.clubs?.name ? 'Aktiv' : 'Entwurf'}
                   </span>
                 </div>
               </motion.div>
@@ -219,7 +219,7 @@ const AdminTeams: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingTeam ? 'EDIT TEAM' : 'NEW TEAM'}
+                    {editingTeam ? 'TEAM BEARBEITEN' : 'NEUES TEAM'}
                   </h2>
                   <button 
                     onClick={() => setIsModalOpen(false)}
@@ -231,26 +231,26 @@ const AdminTeams: React.FC = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Team Name</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Teamname</label>
                     <input 
                       required
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-purple-500/50 transition-colors"
-                      placeholder="e.g. First Team"
+                      placeholder="z.B. Erste Mannschaft"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Club</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Verein</label>
                     <select
                       required
                       value={formData.club_id}
                       onChange={(e) => setFormData({ ...formData, club_id: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-purple-500/50 transition-colors"
                     >
-                      <option value="">Select a club</option>
+                      <option value="">Verein auswählen</option>
                       {clubs.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
@@ -263,7 +263,7 @@ const AdminTeams: React.FC = () => {
                     className="w-full bg-purple-500 text-white font-black py-4 rounded-xl hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                    {editingTeam ? 'UPDATE TEAM' : 'CREATE TEAM'}
+                    {editingTeam ? 'TEAM AKTUALISIEREN' : 'TEAM ERSTELLEN'}
                   </button>
                 </form>
               </motion.div>
@@ -275,8 +275,8 @@ const AdminTeams: React.FC = () => {
           isOpen={deleteModal.isOpen}
           onClose={() => setDeleteModal({ isOpen: false, id: null })}
           onConfirm={handleConfirmDelete}
-          title="Delete Team?"
-          message="Are you sure you want to delete this team? This will also delete all players associated with it. This action cannot be undone."
+          title="Team löschen?"
+          message="Bist du sicher, dass du dieses Team löschen möchtest? Dies löscht auch alle Spieler, die damit verbunden sind. Diese Aktion kann nicht rückgängig gemacht werden."
           loading={deleting}
         />
       </div>
