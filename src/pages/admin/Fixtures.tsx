@@ -258,12 +258,14 @@ const AdminFixtures: React.FC = () => {
         return;
       }
 
+      const isReserve = selectedHomeTeam?.name.toLowerCase().includes('reserve');
       const payload: any = {
         league_id: formData.league_id,
         home_team_id: formData.home_team_id,
         away_team_id: formData.away_team_id,
         kickoff_at: formData.kickoff_at ? new Date(formData.kickoff_at).toISOString() : null,
         status: formData.status,
+        match_type: isReserve ? 'reserve' : 'kampfmannschaft',
         round_number: formData.round_number ? parseInt(formData.round_number) : 1,
         venue_name: formData.venue_name || null,
         home_score: formData.home_score !== '' ? parseInt(formData.home_score) : null,

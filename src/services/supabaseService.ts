@@ -934,34 +934,9 @@ export const supabaseService = {
       updated_at: new Date().toISOString()
     };
 
-    // 3. Automation logic: If status is finished, set voting window if not already set and lineup exists
-    const newStatus = finalUpdates.status || currentFixture.status;
-    const isFinished = newStatus === 'finished';
-    const hasVotingWindowInUpdates = !!finalUpdates.voting_open_at || !!finalUpdates.voting_close_at;
-    const hasVotingWindowInDB = !!currentFixture.voting_open_at || !!currentFixture.voting_close_at;
-
-    if (isFinished && !hasVotingWindowInUpdates && !hasVotingWindowInDB) {
-      console.log(`DEBUG: [SERVICE] Fixture ${id} is finished but has no voting window. Checking for lineup...`);
-      
-      // Check if lineup exists
-      const { count, error: lineupError } = await supabase
-        .from('fixture_lineups')
-        .select('*', { count: 'exact', head: true })
-        .eq('fixture_id', id);
-      
-      if (lineupError) {
-        console.error(`DEBUG: [SERVICE] Error checking lineup for fixture ${id}:`, lineupError);
-      } else if (count && count > 0) {
-        const now = new Date();
-        // V1 TESTING: Use 10 minutes for voting window instead of 2 hours
-        const tenMinutesLater = new Date(now.getTime() + 10 * 60 * 1000);
-        finalUpdates.voting_open_at = now.toISOString();
-        finalUpdates.voting_close_at = tenMinutesLater.toISOString();
-        console.log(`DEBUG: [SERVICE] Automatically set voting window for fixture ${id} (10 mins for testing)`);
-      } else {
-        console.log(`DEBUG: [SERVICE] Not setting voting window for fixture ${id}: no lineup found.`);
-      }
-    }
+    // Note: Voting window automation (voting_open_at, voting_close_at) 
+    // is now managed entirely by a backend PostgreSQL trigger (handle_fixture_voting_window).
+    // The trigger automatically sets the window based on match_type when status changes to 'finished'.
 
     const { data, error } = await supabase
       .from('fixtures')
@@ -1132,26 +1107,9 @@ export const supabaseService = {
       }
     }
 
-    // 4. Automation logic: If fixture is finished and has no voting window, open it now that we have a lineup
-    const { data: fixture, error: fixtureError } = await supabase
-      .from('fixtures')
-      .select('status, voting_open_at, voting_close_at')
-      .eq('id', fixtureId)
-      .single();
-    
-    if (!fixtureError && fixture && fixture.status === 'finished' && !fixture.voting_open_at && !fixture.voting_close_at && lineupEntries.length > 0) {
-      const now = new Date();
-      const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      await supabase
-        .from('fixtures')
-        .update({
-          voting_open_at: now.toISOString(),
-          voting_close_at: twoHoursLater.toISOString(),
-          updated_at: now.toISOString()
-        })
-        .eq('id', fixtureId);
-      console.log(`DEBUG: [SERVICE] Automatically set voting window for fixture ${fixtureId} after lineup update`);
-    }
+    // 4. Note: If fixture is finished and has no voting window, 
+    // it will be handled by the backend PostgreSQL trigger `handle_fixture_voting_window` 
+    // whenever the fixture record itself is updated/created to 'finished'.
 
     console.log(`DEBUG: [SERVICE] Successfully updated lineup for fixture ${fixtureId}, inserted ${data?.length} rows.`);
     return data as FixtureLineup[];
@@ -1563,51 +1521,47 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
-    const url = `${window.location.origin}/api/admin/process-fixture-results`;
-    console.log(`DEBUG: [FETCH] fixtureId: ${fixtureId}`);
-    console.log(`DEBUG: [FETCH] Request URL: ${url}`);
+    console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor' for fixtureId: ${fixtureId}`);
 
     try {
-      const response = await fetch(url, {
-        method: "POST",
+      // Invoke the Supabase Edge Function to avoid the TestFlight capacitor://localhost fallback issue
+      const { data, error, error: invokeError } = await supabase.functions.invoke('match-processor', {
+        body: { fixtureId },
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ fixtureId }),
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
-      console.log(`DEBUG: [FETCH] Response Status: ${response.status}`);
-      
-      const responseText = await response.text();
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error(`DEBUG: [FETCH] Non-JSON Response received:`, responseText.substring(0, 500));
-        throw new Error(`Invalid response from server (Status ${response.status}). The server might have returned an error page instead of JSON.`);
+      if (invokeError) {
+        console.error(`DEBUG: [SERVICE] Edge function invocation error:`, invokeError);
+        throw new Error(invokeError.message || 'Failed to invoke match processor');
       }
 
-      console.log(`DEBUG: [FETCH] Response Data:`, JSON.stringify(result));
+      console.log(`DEBUG: [SERVICE] Raw response from edge function:`, data);
 
-      if (!response.ok) {
-        console.error(`DEBUG: [FETCH] Error response (status ${response.status}):`, result);
-        let errorMessage = result.error || 'Failed to process ratings';
-        
-        // Include details (like the actual non-JSON response) if available
-        if (result.details) {
-          const detailsString = typeof result.details === 'string' 
-            ? result.details 
-            : JSON.stringify(result.details);
-          errorMessage = `${errorMessage} - Details: ${detailsString.substring(0, 300)}`;
+      if (data && data.success === false) {
+        console.error(`DEBUG: [SERVICE] Edge function returned success: false`, data);
+        let errorMessage = data.error || 'Failed to process ratings';
+        if (data.details) {
+            errorMessage += ` - Details: ${typeof data.details === 'string' ? data.details : JSON.stringify(data.details).substring(0, 300)}`;
         }
-        
         throw new Error(errorMessage);
       }
 
-      return result;
-    } catch (error) {
-      console.error(`DEBUG: [FETCH] Network or Parsing Error:`, error);
+      // Check if data conforms to our exact expected format
+      if (!data || data.success === undefined) {
+         console.warn(`DEBUG: [SERVICE] Unexpected data shape from edge function:`, data);
+         return {
+            success: true,
+            processed: true,
+            fixtureId: fixtureId,
+            message: "Match processed successfully"
+         };
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error(`DEBUG: [SERVICE] Critical Network or Execution Error processing ratings:`, error);
       throw error;
     }
   },

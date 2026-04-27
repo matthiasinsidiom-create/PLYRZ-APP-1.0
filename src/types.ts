@@ -95,6 +95,7 @@ export interface Fixture {
   voting_open_at?: string;
   voting_close_at?: string;
   results_processed_at?: string;
+  match_type?: 'reserve' | 'kampfmannschaft';
   match_phase?: 'first_half' | 'halftime' | 'second_half' | 'full_time';
   first_half_started_at?: string;
   halftime_started_at?: string;
