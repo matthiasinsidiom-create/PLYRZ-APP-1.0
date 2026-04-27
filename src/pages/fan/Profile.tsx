@@ -37,6 +37,7 @@ export const Profile: React.FC = () => {
   };
 
   const menuItems = [
+    { id: 'logic', label: 'Rating-Logik', icon: Star, path: '/rating-logic' },
     { id: 'settings', label: 'Einstellungen', icon: Settings, path: '/settings' },
   ];
 
