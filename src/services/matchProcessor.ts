@@ -129,8 +129,8 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const rawPos = entry.players?.position;
     const posGroup = getPositionGroup(rawPos);
 
-    // Participation
-    const participationMultiplier = entry.lineup_role === 'starter' ? 1.0 : 0.75;
+    // Participation (Not explicitly stated in new rules, prompt says 'no multipliers', so let's set to 1.0)
+    const participationMultiplier = 1.0;
 
     // Votes
     const playerVotes = votesByPlayer[playerId] || [];
@@ -138,15 +138,13 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const downVotes = playerVotes.filter(v => (v.vote_type || v.vote) === 'down').length;
     const neutralVotes = playerVotes.filter(v => (v.vote_type || v.vote) === 'neutral').length;
     const voteScore = upVotes - downVotes;
-    const voteImpact = voteScore * 0.25;
+    const voteImpact = voteScore * 0.15;
 
     // Clean Sheet Impact
     let cleanSheetImpact = 0;
     if (isCleanSheet) {
       if (posGroup === 'Torwart') cleanSheetImpact = 1.0;
-      else if (posGroup === 'Abwehr') cleanSheetImpact = 0.5;
-      else if (posGroup === 'Mittelfeld') cleanSheetImpact = 0.15;
-      // Sturm stays at 0
+      else cleanSheetImpact = 0.3;
     }
 
     // Events Impact
@@ -156,21 +154,17 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const yellowCount = playerEvents.filter(e => e.event_type === 'yellow_card').length;
     const redCount = playerEvents.filter(e => e.event_type === 'red_card').length;
 
-    // RULE 3.0 Update: All outfield players get +1.0 per goal. 
-    // Goalkeeper gets +0.0 (or +1.0 if they actually score as an exception).
-    const goalImpactPerGoal = posGroup === 'Torwart' ? 1.0 : 1.0; 
-    const goalImpact = goalCount * goalImpactPerGoal;
+    // Goals & Assists
+    const goalImpact = goalCount * 1.0; 
+    const assistBonus = 0.5;
+
+    // Opponent Goal Penalty
+    const oppGoalPenalty = teamGoalsAgainst * -0.2;
     
-    // Assist bonus remains position-logic dependent
-    let assistBonus = 0.4;
-    if (posGroup === 'Torwart') assistBonus = 0.8;
-    else if (posGroup === 'Abwehr') assistBonus = 0.6;
-    else if (posGroup === 'Mittelfeld') assistBonus = 0.5;
+    // Cards penalty
+    const eventImpact = goalImpact + (assistCount * assistBonus) + (yellowCount * -0.2) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
 
-    const oppGoalPenalty = teamGoalsAgainst * (posGroup === 'Torwart' || posGroup === 'Abwehr' ? -0.2 : -0.05);
-    const eventImpact = goalImpact + (assistCount * assistBonus) + (yellowCount * -0.25) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
-
-    // Result Impact logic: Fixed values per user request
+    // Result Impact logic: Fixed values
     let resultImpact = 0;
     if (actualScore === 1) resultImpact = 0.2;       // Win
     else if (actualScore === 0) resultImpact = -0.2;  // Loss
@@ -179,14 +173,16 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const expectedScore = 1 / (1 + Math.pow(10, (oppAvg - teamAvg) / 12));
 
     // Raw Delta
-    const rawDelta = (voteImpact + resultImpact + eventImpact) * participationMultiplier;
+    const rawDelta = voteImpact + resultImpact + eventImpact;
     const finalDeltaBase = Math.max(-2, Math.min(2, rawDelta));
 
-    // MVP Score (Break ties for MVP)
-    const mvpScore = (voteScore * 10) + (upVotes * 2) + (rawDelta * 5);
+    // MVP Score (used for ties)
+    const voteRatio = (upVotes + downVotes) > 0 ? (upVotes / (upVotes + downVotes)) : 0;
+    const mvpScore = voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta;
+
     playerCalcs.push({
       playerId, oldOverall, posGroup, rawPos, isHome, participationMultiplier,
-      upVotes, downVotes, neutralVotes, voteScore, voteImpact, 
+      upVotes, downVotes, neutralVotes, voteScore, voteImpact, voteRatio,
       goalCount, goalImpact, assistCount, yellowCount, redCount, isCleanSheet, teamGoalsAgainst,
       eventImpact, resultImpact, expectedScore, actual_score: actualScore,
       rawDelta, finalDeltaBase, mvpScore, players: entry.players,
@@ -196,12 +192,15 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
 
   // 7. MVP Selection
   let mvpId: string | null = null;
-  const potentialMVPs = playerCalcs.filter(p => p.voteScore > 0 && p.upVotes > p.downVotes && (p.finalDeltaBase >= 1.5 || p.rawDelta >= 1.8));
+  // MVP must have positive votes > negative votes (voteScore > 0)
+  const potentialMVPs = playerCalcs.filter(p => p.voteScore > 0);
   
   if (potentialMVPs.length > 0) {
     potentialMVPs.sort((a, b) => {
+      if (b.finalDeltaBase !== a.finalDeltaBase) return b.finalDeltaBase - a.finalDeltaBase;
       if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore;
       if (b.upVotes !== a.upVotes) return b.upVotes - a.upVotes;
+      if (b.voteRatio !== a.voteRatio) return b.voteRatio - a.voteRatio;
       if (b.rawDelta !== a.rawDelta) return b.rawDelta - a.rawDelta;
       if (b.isStarter !== a.isStarter) return b.isStarter ? 1 : -1;
       return b.oldOverall - a.oldOverall;
@@ -224,22 +223,27 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const newStats = { ...oldStats };
 
     if (Math.abs(finalDelta) >= 0.2) {
-      const change = finalDelta > 0 ? (finalDelta >= 2.0 ? 2 : 1) : (finalDelta <= -1.0 ? -2 : -1);
+      const change = finalDelta > 0 ? 1 : -1;
       
       const weights: Record<string, (keyof PlayerStats)[]> = {
-        'Torwart': p.isCleanSheet ? ['def', 'phy', 'pas'] : (p.teamGoalsAgainst > 0 ? ['phy', 'def', 'pas'] : ['phy', 'def']),
-        'Abwehr': p.isCleanSheet ? ['def', 'phy', 'tem'] : ['def', 'phy', 'pas'],
-        'Mittelfeld': p.goalCount > 0 ? ['sch', 'pas', 'dri', 'phy'] : ['pas', 'dri', 'phy', 'tem'],
-        'Sturm': p.goalCount > 0 ? ['sch', 'dri', 'tem'] : ['dri', 'tem', 'sch', 'pas']
+        'Torwart': ['def', 'phy', 'pas', 'dri'],
+        'Abwehr': ['def', 'phy', 'tem', 'pas'],
+        'Mittelfeld': ['pas', 'dri', 'tem', 'phy'],
+        'Sturm': ['sch', 'tem', 'dri', 'pas']
       };
 
       const attrs = weights[p.posGroup] || weights['Mittelfeld'];
-      const numToChange = isMvp ? 4 : (Math.abs(finalDelta) >= 1.5 ? 3 : 1);
+      
+      const absDelta = Math.abs(finalDelta);
+      let numToChange = 1;
+      if (isMvp) numToChange = 4;
+      else if (absDelta >= 2.0) numToChange = 3;
+      else if (absDelta >= 1.0) numToChange = 2;
+      else numToChange = 1;
 
       for (let i = 0; i < Math.min(numToChange, attrs.length); i++) {
         const key = attrs[i];
-        (newStats as any)[key] = Math.max(30, Math.min(95, ((newStats as any)[key] || 50) + (change > 0 ? 1 : -1)));
-        // MVP gets extra boost? Actually, we'll just handle it by numToChange
+        (newStats as any)[key] = Math.max(30, Math.min(95, ((newStats as any)[key] || 50) + change));
       }
     }
 
@@ -254,7 +258,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       id: '', // Will be assigned by DB
       fixture_id: fixtureId, player_id: p.playerId,
       old_overall: Math.round(p.oldOverall), new_overall: newOverall, delta_overall: finalDelta,
-      votes_up: p.upVotes, votes_down: p.downVotes,
+      votes_up: p.upVotes, votes_down: p.downVotes, neutral_votes: p.neutralVotes,
       positive_votes: p.upVotes, negative_votes: p.downVotes,
       vote_score: p.voteScore, vote_impact: p.voteImpact,
       result_impact: p.resultImpact, event_impact: p.eventImpact,
@@ -263,7 +267,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       expected_score: p.expectedScore, actual_score: p.actual_score,
       raw_delta: p.rawDelta, final_delta: finalDelta,
       is_mvp: isMvp, mvp_score: p.mvpScore, mvp_bonus: mvpBonus,
-      rating_version: '3.0-positional', processed_at: now, created_at: now
+      rating_version: '3.0', processed_at: now, created_at: now
     });
 
     // Detailed Debug Log

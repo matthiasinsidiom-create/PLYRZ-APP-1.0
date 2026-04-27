@@ -258,6 +258,7 @@ const AdminFixtures: React.FC = () => {
         return;
       }
 
+      const selectedHomeTeam = teams.find(t => t.id === formData.home_team_id);
       const isReserve = selectedHomeTeam?.name.toLowerCase().includes('reserve');
       const payload: any = {
         league_id: formData.league_id,
