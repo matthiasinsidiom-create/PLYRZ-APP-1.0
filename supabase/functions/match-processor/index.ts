@@ -84,17 +84,16 @@ serve(async (req) => {
           throw new Error("Empty response body");
         }
       } catch (e) {
-        console.error("[match-processor] Backend returned non-JSON response. Status:", backendResponse.status);
+        console.error("[match-processor] JSON Parse Error. Backend returned non-JSON response. Status:", backendResponse.status);
         console.error("[match-processor] Response Body (first 500 chars):", responseText.substring(0, 500));
         
-        // Return a clear error to the app
-        return new Response(JSON.stringify({ 
+        const errorJson = { 
           success: false, 
-          error: "Backend returned invalid response (Not JSON)",
-          status: backendResponse.status,
-          endpoint: endpoint,
-          details: (responseText || "Empty Response").substring(0, 500)
-        }), {
+          error: "Invalid response server. The server might have returned an error page instead of json."
+        };
+        console.log(`[match-processor] Returning JSON: ${JSON.stringify(errorJson)}`);
+        // Return a clear error to the app
+        return new Response(JSON.stringify(errorJson), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 500,
         });
@@ -115,18 +114,27 @@ serve(async (req) => {
           // We still return success since the processing itself succeeded
         }
 
-        return new Response(JSON.stringify({ success: true, data: backendResult }), {
+        const successJson = {
+          success: true,
+          processed: backendResult.processedCount > 0,
+          fixtureId: fixtureId,
+          message: backendResult.processedCount > 0 ? "Match processed successfully" : "No fixtures needed processing"
+        };
+        console.log(`[match-processor] Returning JSON: ${JSON.stringify(successJson)}`);
+
+        return new Response(JSON.stringify(successJson), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200,
         });
       } else {
         console.error("[match-processor] Backend reported FAILURE:", backendResult);
-        return new Response(JSON.stringify({ 
+        const failureJson = { 
           success: false, 
-          error: backendResult?.error || "Backend processing failed",
-          status: backendResponse.status,
-          data: backendResult 
-        }), {
+          error: backendResult?.error || "Backend processing failed"
+        };
+        console.log(`[match-processor] Returning JSON: ${JSON.stringify(failureJson)}`);
+
+        return new Response(JSON.stringify(failureJson), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: backendResponse.status === 200 ? 400 : backendResponse.status,
         });
@@ -146,8 +154,40 @@ serve(async (req) => {
         }
       });
 
-      const autoResult = await automationResponse.text();
-      return new Response(JSON.stringify({ success: true, mode: "automation", result: autoResult }), {
+      const autoResultText = await automationResponse.text();
+      let autoResult;
+      try {
+         autoResult = JSON.parse(autoResultText);
+      } catch(e) {
+         console.error("[match-processor] Automation returned invalid response: ", autoResultText);
+         const automationFailureJson = { success: false, error: "Invalid response from automation endpoint" };
+         console.log(`[match-processor] Returning JSON: ${JSON.stringify(automationFailureJson)}`);
+         return new Response(JSON.stringify(automationFailureJson), {
+           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+           status: 500,
+         });
+      }
+
+      if (autoResult && (autoResult.message === "No pending fixtures to process" || autoResult.message.includes("disabled"))) {
+         const successJson = {
+            success: true,
+            processed: false,
+            message: "No fixtures needed processing"
+         };
+         console.log(`[match-processor] Returning JSON: ${JSON.stringify(successJson)}`);
+         return new Response(JSON.stringify(successJson), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+         });
+      }
+
+      const successJson = {
+          success: true,
+          processed: true,
+          message: "Match processed successfully"
+      };
+      console.log(`[match-processor] Returning JSON: ${JSON.stringify(successJson)}`);
+      return new Response(JSON.stringify(successJson), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       });
@@ -155,9 +195,11 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[match-processor] Critical Error:', error.message);
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+    const criticalErrorJson = { success: false, error: error.message || "A critical error occurred" };
+    console.log(`[match-processor] Returning JSON: ${JSON.stringify(criticalErrorJson)}`);
+    return new Response(JSON.stringify(criticalErrorJson), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
+      status: 500,
     });
   }
 })
