@@ -5,8 +5,8 @@ import { Player } from '../types';
 
 interface PlayerVoteCardProps {
   player: Player;
-  vote: 'up' | 'down' | null;
-  onVote: (vote: 'up' | 'down') => void;
+  vote: 'up' | 'down' | 'neutral' | null;
+  onVote: (vote: 'up' | 'down' | 'neutral') => void;
   loading: boolean;
   disabled: boolean;
   jerseyNumber?: number | null;
@@ -119,35 +119,48 @@ export const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({
         </div>
       )}
 
-      <div className="flex items-center gap-4 z-20">
+      <div className="flex items-center gap-3 z-20">
         <button
           onClick={() => onVote('up')}
           disabled={disabled || loading}
-          className={`p-4 rounded-2xl border transition-all ${
+          className={`p-3 rounded-xl border transition-all ${
             vote === 'up'
-              ? 'bg-emerald-500 border-emerald-400 text-black scale-110 shadow-lg shadow-emerald-500/40'
+              ? 'bg-emerald-500 border-emerald-400 text-black scale-105 shadow-lg shadow-emerald-500/20'
               : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-emerald-500/50'
           } disabled:opacity-50 active:scale-95`}
         >
           {loading ? (
-            <Loader2 className="w-6 h-6 animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
-            <ThumbsUp className="w-6 h-6" />
+            <ThumbsUp className="w-5 h-5" />
           )}
         </button>
+
+        <button
+          onClick={() => onVote('neutral')}
+          disabled={disabled || loading}
+          className={`px-4 py-2.5 rounded-xl border transition-all font-black italic uppercase text-[10px] tracking-widest ${
+            vote === 'neutral'
+              ? 'bg-zinc-100 border-zinc-200 text-black scale-105 shadow-lg shadow-white/10'
+              : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-500/50'
+          } disabled:opacity-50 active:scale-95`}
+        >
+          Neutral
+        </button>
+
         <button
           onClick={() => onVote('down')}
           disabled={disabled || loading}
-          className={`p-4 rounded-2xl border transition-all ${
+          className={`p-3 rounded-xl border transition-all ${
             vote === 'down'
-              ? 'bg-red-500 border-red-400 text-black scale-110 shadow-lg shadow-red-500/40'
+              ? 'bg-red-500 border-red-400 text-black scale-105 shadow-lg shadow-red-500/20'
               : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-red-500/50'
           } disabled:opacity-50 active:scale-95`}
         >
           {loading ? (
-            <Loader2 className="w-6 h-6 animate-spin" />
+            <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
-            <ThumbsDown className="w-6 h-6" />
+            <ThumbsDown className="w-5 h-5" />
           )}
         </button>
       </div>

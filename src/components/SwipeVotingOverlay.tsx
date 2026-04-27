@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { 
@@ -22,12 +22,18 @@ interface SwipeVotingOverlayProps {
   fixtureId: string;
   userId: string;
   lineup: any[];
-  userVotes: Record<string, 'up' | 'down'>;
-  onVote: (playerId: string, vote: 'up' | 'down') => Promise<void>;
+  userVotes: Record<string, 'up' | 'down' | 'neutral'>;
+  onVote: (playerId: string, vote: 'up' | 'down' | 'neutral') => Promise<void>;
   onClose: () => void;
   onViewResults: () => void;
   votingCloseAt?: string | null;
   resultsProcessedAt?: string | null;
+}
+
+interface VoteQueueItem {
+  playerId: string;
+  vote: 'up' | 'down' | 'neutral';
+  retries: number;
 }
 
 export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
@@ -43,33 +49,27 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
 }) => {
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(() => {
-    // Find the first player that hasn't been voted on yet
     const firstUnvoted = lineup.findIndex(entry => !userVotes[entry.player_id]);
-    // If all are voted, we'll start at 0 but the completed state will catch it
     return firstUnvoted === -1 ? 0 : firstUnvoted;
   });
+  
   const [exitDirection, setExitDirection] = useState<number>(0);
   const [isVoting, setIsVoting] = useState(false);
   const [completed, setCompleted] = useState(() => {
-    // A user should only be marked as completed if they have players to vote for AND have voted for all of them
     const hasPlayers = lineup.length > 0;
     const allVoted = hasPlayers && lineup.every(entry => !!userVotes[entry.player_id]);
-    
-    console.log(`DEBUG: [VOTE_COMPLETION] Initializing state:`, { 
-      userId, 
-      fixtureId, 
-      lineupLength: lineup.length, 
-      userVotesCount: Object.keys(userVotes).length,
-      hasPlayers,
-      allVoted
-    });
-    
     return allVoted;
   });
+  
   const [isCheckingCompletion, setIsCheckingCompletion] = useState(true);
   const [hasCompletedBefore, setHasCompletedBefore] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [successFlash, setSuccessFlash] = useState<'up' | 'down' | 'skip' | null>(null);
+  const [successFlash, setSuccessFlash] = useState<'up' | 'down' | 'neutral' | null>(null);
+
+  // Queue System
+  const queueRef = useRef<VoteQueueItem[]>([]);
+  const isProcessingQueue = useRef(false);
+  const [queueVisible, setQueueVisible] = useState(0); // Just to trigger re-renders for debug if needed
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-25, 25]);
@@ -83,9 +83,92 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   const upvoteRotate = useTransform(x, [20, 120], [-10, 0]);
   const downvoteRotate = useTransform(x, [-120, -20], [0, 10]);
 
-  const currentPlayerEntry = lineup[currentIndex];
-  const currentPlayer = currentPlayerEntry?.players;
+  const currentPlayerEntry = useMemo(() => lineup[currentIndex], [lineup, currentIndex]);
+  const nextPlayerEntry = useMemo(() => lineup[currentIndex + 1], [lineup, currentIndex]);
   const totalPlayers = lineup.length;
+
+  // Preloading Assets
+  useEffect(() => {
+    const preloadImages = () => {
+      console.log('DEBUG: [PERF] Starting asset preloading');
+      lineup.forEach(entry => {
+        const player = entry.players;
+        if (player) {
+          // Preload player photo
+          if (player.photo_url) {
+            const img = new Image();
+            img.src = player.photo_url;
+          }
+          // Preload club logo
+          const clubLogo = player.teams?.clubs?.logo_url;
+          if (clubLogo) {
+            const img = new Image();
+            img.src = clubLogo;
+          }
+          // Preload flag
+          const flagCode = (player.nationality || 'de').toLowerCase();
+          const flagImg = new Image();
+          flagImg.src = `https://flagcdn.com/w80/${flagCode}.png`;
+        }
+      });
+      console.log('DEBUG: [PERF] Asset preloading scheduled');
+    };
+
+    preloadImages();
+  }, [lineup]);
+
+  // Queue background processor
+  const processQueue = useCallback(async () => {
+    if (isProcessingQueue.current || queueRef.current.length === 0) return;
+    
+    isProcessingQueue.current = true;
+    
+    while (queueRef.current.length > 0) {
+      const item = queueRef.current[0];
+      const startCall = performance.now();
+      console.log(`DEBUG: [QUEUE] Processing vote for ${item.playerId}: ${item.vote}. Queue length: ${queueRef.current.length}`);
+      
+      try {
+        await onVote(item.playerId, item.vote);
+        console.log(`DEBUG: [QUEUE] Success for ${item.playerId}. Latency: ${(performance.now() - startCall).toFixed(2)}ms`);
+        queueRef.current.shift(); // Remove handled item
+        setQueueVisible(prev => prev + 1);
+      } catch (err: any) {
+        console.error(`DEBUG: [QUEUE] Error for ${item.playerId}:`, err);
+        
+        if (err.message?.includes('already completed')) {
+          queueRef.current.shift();
+          continue;
+        }
+
+        item.retries++;
+        if (item.retries >= 3) {
+          console.error(`DEBUG: [QUEUE] Max retries reached for ${item.playerId}. Dropping.`);
+          queueRef.current.shift();
+        } else {
+          // Wait a bit before retry
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    }
+    
+    isProcessingQueue.current = false;
+    
+    // Check if we should mark completion now that queue is empty
+    const allExpectedVoted = lineup.every((entry, idx) => {
+      if (idx < currentIndex) return true; // Already swiped
+      return !!userVotes[entry.player_id];
+    });
+
+    if (queueRef.current.length === 0 && currentIndex >= totalPlayers) {
+      console.log('DEBUG: [QUEUE] Queue finished and last card swiped. Marking completion.');
+      markAsCompleted();
+    }
+  }, [onVote, lineup, currentIndex, totalPlayers, userVotes]);
+
+  useEffect(() => {
+    processQueue();
+  }, [processQueue, queueVisible]);
 
   useEffect(() => {
     const checkCompletion = async () => {
@@ -110,40 +193,97 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     checkCompletion();
   }, [userId, fixtureId]);
 
-  useEffect(() => {
-    // ONLY mark as completed if:
-    // 1. The state says completed (all players voted)
-    // 2. There are actually players in the lineup (don't mark empty lineups as completed)
-    // 3. We haven't confirmed a DB record exists yet
-    // 4. We are done checking the initial DB status
-    if (completed && lineup.length > 0 && !hasCompletedBefore && !isCheckingCompletion && userId && fixtureId) {
-      console.log(`DEBUG: [VOTE_COMPLETION] All ${lineup.length} players voted. Syncing completion to DB for user ${userId} and fixture ${fixtureId}`);
-      markAsCompleted();
+  const markAsCompleted = useCallback(async () => {
+    if (!userId || !fixtureId) return;
+    
+    // Wait for queue to be truly empty before writing completion
+    if (queueRef.current.length > 0) {
+      console.log('DEBUG: [COMPLETION] Delayed: Queue not empty yet');
+      return;
     }
-  }, [completed, hasCompletedBefore, isCheckingCompletion, userId, fixtureId, lineup.length]);
 
-  const markAsCompleted = async () => {
-    if (!userId || !fixtureId) {
-      console.warn('DEBUG: [VOTE_COMPLETION] Missing userId or fixtureId', { userId, fixtureId });
+    try {
+      await supabaseService.markVoteAsCompleted(fixtureId, userId);
+      console.log(`DEBUG: [COMPLETION] Sync success for ${fixtureId}`);
+    } catch (err) {
+      console.error(`DEBUG: [COMPLETION] Sync error:`, err);
+    }
+  }, [fixtureId, userId]);
+
+  const handleVoteAction = useCallback((playerId: string, vote: 'up' | 'down' | 'neutral') => {
+    const start = performance.now();
+    console.log(`DEBUG: [PERF] swipe_start_timestamp: ${start.toFixed(2)}ms`);
+
+    // 1. Add to queue (optimistic)
+    queueRef.current.push({ playerId, vote, retries: 0 });
+    setQueueVisible(prev => prev + 1);
+
+    // 2. UI Update immediately
+    const nextIndex = currentIndex + 1;
+    
+    // Snappy transition: Clear card immediately
+    if (nextIndex < totalPlayers) {
+      setCurrentIndex(nextIndex);
+      setExitDirection(0);
+      x.set(0);
+      setIsVoting(false);
+      setSuccessFlash(null);
+    } else {
+      console.log(`DEBUG: [VOTE_COMPLETION] Last player reached.`);
+      setIsVoting(false);
+      setCompleted(true);
+      // markAsCompleted() called by processQueue effect when queue empty
+    }
+
+    console.log(`DEBUG: [PERF] next_card_visible_timestamp: ${(performance.now() - start).toFixed(2)}ms`);
+  }, [currentIndex, totalPlayers, x]);
+
+  const handleSwipe = useCallback((direction: 'left' | 'right') => {
+    if (isVoting || completed || !currentPlayerEntry?.players) return;
+
+    if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
+      setCompleted(true);
       return;
     }
     
-    console.log(`DEBUG: [VOTE_COMPLETION] About to insert completion for fixture ${fixtureId} and user ${userId}`);
+    const vote = direction === 'right' ? 'up' : 'down';
+    if (showHint) setShowHint(false);
     
-    try {
-      const result = await supabaseService.markVoteAsCompleted(fixtureId, userId);
-      console.log(`DEBUG: [VOTE_COMPLETION] Completion insert success for fixture ${fixtureId}`, result);
-    } catch (err) {
-      console.error(`DEBUG: [VOTE_COMPLETION] Completion insert error for fixture ${fixtureId}:`, err);
-    }
-  };
+    setExitDirection(direction === 'right' ? 800 : -800);
+    setIsVoting(true);
+    setSuccessFlash(vote);
 
-  useEffect(() => {
-    console.log(`DEBUG: [SWIPE] Current Fixture: ${fixtureId}`);
-    if (currentPlayer) {
-      console.log(`DEBUG: [SWIPE] Current Player: ${currentPlayer.full_name} (${currentIndex + 1}/${totalPlayers})`);
+    // Give a tiny bit of time for the swipe animation to start before swapping card data
+    setTimeout(() => {
+      handleVoteAction(currentPlayerEntry.player_id, vote);
+    }, 50); 
+  }, [isVoting, completed, currentPlayerEntry, votingCloseAt, showHint, handleVoteAction]);
+
+  const handleNeutralVote = useCallback(() => {
+    if (isVoting || completed || !currentPlayerEntry?.players) return;
+    
+    if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
+      setCompleted(true);
+      return;
     }
-  }, [currentIndex, currentPlayer, fixtureId, totalPlayers]);
+
+    setIsVoting(true);
+    setExitDirection(0);
+    setSuccessFlash('neutral');
+
+    setTimeout(() => {
+      handleVoteAction(currentPlayerEntry.player_id, 'neutral');
+    }, 50);
+  }, [isVoting, completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
+
+  const handleDragEnd = useCallback((_: any, info: any) => {
+    const threshold = 80; // Smaller threshold for faster reaction
+    if (info.offset.x > threshold) {
+      handleSwipe('right');
+    } else if (info.offset.x < -threshold) {
+      handleSwipe('left');
+    }
+  }, [handleSwipe]);
 
   if (totalPlayers === 0) {
     return (
@@ -163,105 +303,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
       </motion.div>
     );
   }
-
-  const handleViewResults = () => {
-    onViewResults();
-  };
-
-  const handleSwipe = async (direction: 'left' | 'right') => {
-    if (isVoting || completed || !currentPlayer) return;
-
-    // Check if voting window is still open
-    if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
-      console.log(`DEBUG: [SWIPE] Voting window closed. Blocking vote for ${currentPlayer?.full_name}`);
-      setIsVoting(false);
-      setCompleted(true);
-      return;
-    }
-    
-    const vote = direction === 'right' ? 'up' : 'down';
-    console.log(`DEBUG: [SWIPE] Swipe ${direction} detected for ${currentPlayer?.full_name}. Vote: ${vote}`);
-    
-    if (showHint) setShowHint(false);
-    
-    setExitDirection(direction === 'right' ? 800 : -800);
-    setIsVoting(true);
-    setSuccessFlash(vote);
-
-    // Optimistic UI: Move to next player immediately in the background
-    const nextIndex = currentIndex + 1;
-    
-    try {
-      // Await vote submission to ensure it's recorded before potentially marking everything as completed
-      await onVote(currentPlayer.id, vote);
-    } catch (err: any) {
-      console.error(`DEBUG: [SWIPE] Vote failed for ${currentPlayer?.id}:`, err);
-      // If the error is about already completed, we should force complete state
-      if (err.message?.includes('already completed')) {
-        setCompleted(true);
-        setHasCompletedBefore(true);
-      }
-    }
-
-    // Move to next player after a very short delay for animation
-    setTimeout(() => {
-      setSuccessFlash(null);
-      if (nextIndex < totalPlayers) {
-        setCurrentIndex(nextIndex);
-        setExitDirection(0);
-        x.set(0);
-        setIsVoting(false);
-      } else {
-        console.log(`DEBUG: [VOTE_COMPLETION] Last player handled via swipe. Triggering completion for fixture ${fixtureId}`);
-        setIsVoting(false);
-        setCompleted(true);
-        markAsCompleted();
-      }
-    }, 80); // Snappy transition
-  };
-
-  const handleSkip = () => {
-    if (isVoting || completed || !currentPlayer) return;
-    
-    // Check if voting window is still open
-    if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
-      console.log(`DEBUG: [SWIPE] Voting window closed. Blocking skip for ${currentPlayer?.full_name}`);
-      setIsVoting(false);
-      setCompleted(true);
-      return;
-    }
-
-    console.log(`DEBUG: [SWIPE] Skip detected for ${currentPlayer?.full_name}`);
-    setIsVoting(true);
-    setExitDirection(0);
-    setSuccessFlash('skip');
-
-    const nextIndex = currentIndex + 1;
-
-    setTimeout(() => {
-      setSuccessFlash(null);
-      if (nextIndex < totalPlayers) {
-        setCurrentIndex(nextIndex);
-        setExitDirection(0);
-        x.set(0);
-        setIsVoting(false);
-      } else {
-        console.log(`DEBUG: [VOTE_COMPLETION] Last player handled via skip. Triggering completion for fixture ${fixtureId}`);
-        setIsVoting(false);
-        setCompleted(true);
-        markAsCompleted();
-      }
-    }, 80); // Snappy transition
-  };
-
-  const handleDragEnd = (_: any, info: any) => {
-    const threshold = 120; // Clear threshold for intentional swipes
-    if (info.offset.x > threshold) {
-      handleSwipe('right');
-    } else if (info.offset.x < -threshold) {
-      handleSwipe('left');
-    }
-  };
 
   if (isCheckingCompletion) {
     return (
@@ -342,6 +383,8 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     );
   }
 
+  const currentPlayer = currentPlayerEntry?.players;
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -384,12 +427,18 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
           </div>
         </div>
 
-        <div className="w-12" /> {/* Spacer */}
+        <div className="flex items-center gap-2">
+            {isProcessingQueue.current && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-emerald-500/20 rounded-xl">
+                    <Loader2 className="w-3 h-3 text-emerald-500 animate-spin" />
+                    <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Syching...</span>
+                </div>
+            )}
+        </div>
       </div>
 
       {/* Main Swipe Area */}
       <div className="flex-1 relative flex flex-col items-center justify-center p-6">
-        {/* Swipe Hints */}
         <div className="absolute inset-x-6 top-0 flex justify-between pointer-events-none z-10">
           <div className="flex flex-col items-center gap-1 opacity-20">
             <ThumbsDown className="w-6 h-6 text-red-500" />
@@ -401,57 +450,75 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
           </div>
         </div>
 
-        <AnimatePresence mode="popLayout">
-          {currentPlayer && (
-            <div className="relative flex flex-col items-center">
-              <motion.div
-                key={currentPlayer.id}
-                style={{ x, rotate, opacity, scale: cardScale }}
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                onDragEnd={handleDragEnd}
-                initial={{ scale: 0.9, opacity: 0, x: 0 }}
-                animate={{ scale: 1, opacity: 1, x: 0 }}
-                exit={{ x: exitDirection, opacity: 0, scale: 0.5, rotate: exitDirection / 10 }}
-                transition={{ type: 'spring', damping: 30, stiffness: 500 }}
-                className="cursor-grab active:cursor-grabbing relative z-20"
-              >
-                <div 
-                  className={`relative rounded-[3rem] overflow-hidden shadow-2xl transition-all duration-150 ${
-                    successFlash === 'up' ? 'ring-8 ring-emerald-500/50 scale-95' : 
-                    successFlash === 'down' ? 'ring-8 ring-red-500/50 scale-95' : 
-                    successFlash === 'skip' ? 'ring-8 ring-zinc-500/50 scale-95' : ''
-                  }`}
-                >
-                  <PlayerCard 
-                    player={currentPlayer} 
-                    jerseyNumber={currentPlayerEntry?.jersey_number}
-                    lineupRole={currentPlayerEntry?.lineup_role}
-                  />
-                  
-                  {/* Swipe Overlays */}
-                  <motion.div 
-                    style={{ opacity: upvoteGlow, scale: upvoteScale, rotate: upvoteRotate }}
-                    className="absolute inset-0 bg-emerald-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
+        <div className="relative flex flex-col items-center w-full max-w-[350px]">
+            {/* NEXT CARD (Stacking) */}
+            <AnimatePresence>
+                {nextPlayerEntry && (
+                    <motion.div
+                        key={`next-${nextPlayerEntry.player_id}`}
+                        initial={{ scale: 0.9, opacity: 0.5, y: 10 }}
+                        animate={{ scale: 0.95, opacity: 0.8, y: 0 }}
+                        className="absolute inset-0 pointer-events-none z-0"
+                    >
+                        <PlayerCard 
+                            player={nextPlayerEntry.players} 
+                            jerseyNumber={nextPlayerEntry.jersey_number}
+                            lineupRole={nextPlayerEntry.lineup_role}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* CURRENT CARD */}
+            <AnimatePresence mode="popLayout">
+                {currentPlayer && (
+                  <motion.div
+                    key={currentPlayer.id}
+                    style={{ x, rotate, opacity, scale: cardScale }}
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    onDragEnd={handleDragEnd}
+                    initial={{ scale: 0.95, opacity: 1, x: 0 }}
+                    animate={{ scale: 1, opacity: 1, x: 0 }}
+                    exit={{ x: exitDirection, opacity: 0, scale: 0.5, rotate: exitDirection / 10 }}
+                    transition={{ type: 'spring', damping: 30, stiffness: 500 }}
+                    className="cursor-grab active:cursor-grabbing relative z-10"
                   >
-                    <div className="bg-emerald-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-emerald-400 shadow-2xl scale-110">
-                      👍 GUT
+                    <div 
+                      className={`relative rounded-[3rem] overflow-hidden shadow-2xl transition-all duration-150 ${
+                        successFlash === 'up' ? 'ring-8 ring-emerald-500/50 scale-95' : 
+                        successFlash === 'down' ? 'ring-8 ring-red-500/50 scale-95' : 
+                        successFlash === 'neutral' ? 'ring-8 ring-zinc-500/50 scale-95' : ''
+                      }`}
+                    >
+                      <PlayerCard 
+                        player={currentPlayer} 
+                        jerseyNumber={currentPlayerEntry?.jersey_number}
+                        lineupRole={currentPlayerEntry?.lineup_role}
+                      />
+                      
+                      <motion.div 
+                        style={{ opacity: upvoteGlow, scale: upvoteScale, rotate: upvoteRotate }}
+                        className="absolute inset-0 bg-emerald-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
+                      >
+                        <div className="bg-emerald-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-emerald-400 shadow-2xl scale-110">
+                          👍 GUT
+                        </div>
+                      </motion.div>
+                      
+                      <motion.div 
+                        style={{ opacity: downvoteGlow, scale: downvoteScale, rotate: downvoteRotate }}
+                        className="absolute inset-0 bg-red-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
+                      >
+                        <div className="bg-red-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-red-400 shadow-2xl scale-110">
+                          👎 SCHLECHT
+                        </div>
+                      </motion.div>
                     </div>
                   </motion.div>
-                  
-                  <motion.div 
-                    style={{ opacity: downvoteGlow, scale: downvoteScale, rotate: downvoteRotate }}
-                    className="absolute inset-0 bg-red-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
-                  >
-                    <div className="bg-red-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-red-400 shadow-2xl scale-110">
-                      👎 SCHLECHT
-                    </div>
-                  </motion.div>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+                )}
+            </AnimatePresence>
+        </div>
       </div>
 
       {/* Footer Controls */}
@@ -470,16 +537,15 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
             </p>
           </div>
 
-          {/* Skip Button */}
           <motion.button
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            onClick={handleSkip}
+            onClick={handleNeutralVote}
             disabled={isVoting}
             className="flex flex-col items-center gap-1.5 group transition-all active:scale-95 mx-auto"
           >
             <span className="text-zinc-400 group-hover:text-zinc-200 font-black italic uppercase tracking-[0.3em] text-[10px] py-2.5 px-10 bg-zinc-900/80 border border-white/20 rounded-full transition-colors">
-              Überspringen
+              Neutral
             </span>
             <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-widest opacity-60">
               (keine Bewertung)

@@ -48,51 +48,48 @@ export const supabaseService = {
   async checkAdmin() {
     // Try cached user first
     let user = cachedUser;
-    
     if (!user) {
-      console.log('DEBUG: [SERVICE] No cached user, trying getSession...');
-      const { data: { session } } = await supabase.auth.getSession();
-      user = session?.user ?? null;
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
     }
     
     if (!user) {
-      console.log('DEBUG: [SERVICE] No session found via getSession, trying getUser...');
-      // Try getUser as a last resort (network request)
-      try {
-        const { data: { user: verifiedUser } } = await supabase.auth.getUser();
-        user = verifiedUser;
-      } catch (err) {
-        console.error('DEBUG: [SERVICE] getUser failed:', err);
-      }
+      throw new Error("Nicht authentifiziert");
     }
 
-    if (!user) {
-      console.error('DEBUG: [SERVICE] Admin check failed: No user found in cache, session or via getUser');
-      throw new Error('Authentication required');
-    }
-    
-    // Update cache if we found a user
-    cachedUser = user;
-    
-    // Use maybeSingle to avoid error if profile doesn't exist yet
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
-      .select('*')
+      .select('role')
       .eq('id', user.id)
       .maybeSingle();
-      
-    if (profileError) console.error('DEBUG: [SERVICE] Profile fetch error:', profileError);
 
-    // Admin if profile says so OR if it's the default admin email
-    const isAdmin = (profile?.role === 'admin') || (user.email === "matthias.insidiom@gmail.com");
-    
-    console.log(`DEBUG: [SERVICE] Admin Check - User: ${user.email}, Profile Role: ${profile?.role}, Final isAdmin: ${isAdmin}`);
+    const isAdmin = profile?.role === 'admin' || user.email === "matthias.insidiom@gmail.com";
     
     if (!isAdmin) {
-      throw new Error(`Unauthorized: Admin access required. User: ${user.email}, Profile Role: ${profile?.role ?? 'None'}`);
+      throw new Error("Nicht autorisiert");
     }
     
+    cachedUser = user;
     return { user, profile };
+  },
+
+  async isUserAdmin() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+      
+      if (session.user.email === "matthias.insidiom@gmail.com") return true;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+        
+      return profile?.role === 'admin';
+    } catch (e) {
+      return false;
+    }
   },
 
   // Leagues
@@ -1254,7 +1251,7 @@ export const supabaseService = {
     return data;
   },
 
-  async submitPlayerVote(fixtureId: string, playerId: string, vote: 'up' | 'down') {
+  async submitPlayerVote(fixtureId: string, playerId: string, vote: 'up' | 'down' | 'neutral') {
     console.log(`DEBUG: [VOTE] Submitting vote for fixture ${fixtureId}, player ${playerId}, vote: ${vote}`);
     
     // 1. Check for completion first (Frontend safety)
@@ -1408,13 +1405,13 @@ export const supabaseService = {
     if (lineupData && lineupData.length > 0) {
       console.log(`DEBUG: [SERVICE] Loaded ${lineupData.length} raw lineup entries`);
       
-      // STRICT FILTERING: active only AND exclude Gerersdorf
+      // STRICT FILTERING: active only
+      const isAdmin = await this.isUserAdmin();
       const filteredLineupData = (lineupData || []).filter(entry => {
         const p = entry.players;
         if (!p) return false;
-        const isActive = p.is_active === true;
-        const isGerersdorf = p.teams?.clubs?.name?.includes('Gerersdorf');
-        return isActive && !isGerersdorf;
+        if (isAdmin) return true;
+        return p.is_active === true;
       });
 
       console.log(`DEBUG: [FILTER] getFixtureLineupWithPlayers: Raw: ${lineupData.length}, Filtered: ${filteredLineupData.length}`);
@@ -1566,11 +1563,9 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
-    const url = `${appConfig.supabaseUrl}/functions/v1/match-processor`;
+    const url = `${window.location.origin}/api/admin/process-fixture-results`;
     console.log(`DEBUG: [FETCH] fixtureId: ${fixtureId}`);
     console.log(`DEBUG: [FETCH] Request URL: ${url}`);
-    console.log(`DEBUG: [FETCH] Method: POST`);
-    console.log(`DEBUG: [FETCH] Request Body:`, JSON.stringify({ fixtureId }));
 
     try {
       const response = await fetch(url, {
@@ -1578,17 +1573,36 @@ export const supabaseService = {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
-          apikey: appConfig.supabaseAnonKey,
         },
         body: JSON.stringify({ fixtureId }),
       });
 
       console.log(`DEBUG: [FETCH] Response Status: ${response.status}`);
-      const result = await response.json();
+      
+      const responseText = await response.text();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error(`DEBUG: [FETCH] Non-JSON Response received:`, responseText.substring(0, 500));
+        throw new Error(`Invalid response from server (Status ${response.status}). The server might have returned an error page instead of JSON.`);
+      }
+
       console.log(`DEBUG: [FETCH] Response Data:`, JSON.stringify(result));
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to process ratings');
+        console.error(`DEBUG: [FETCH] Error response (status ${response.status}):`, result);
+        let errorMessage = result.error || 'Failed to process ratings';
+        
+        // Include details (like the actual non-JSON response) if available
+        if (result.details) {
+          const detailsString = typeof result.details === 'string' 
+            ? result.details 
+            : JSON.stringify(result.details);
+          errorMessage = `${errorMessage} - Details: ${detailsString.substring(0, 300)}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       return result;
@@ -1676,14 +1690,13 @@ export const supabaseService = {
     const { data, error } = await query;
     if (error) throw error;
     
-    // STRICT FILTERING: Exclude Gerersdorf for normal users
-    // We fetch current session to check admin status
-    const { data: { session } } = await supabase.auth.getSession();
-    const isAdmin = session?.user?.email === "matthias.insidiom@gmail.com"; // Fallback check or use profile
+    // STRICT FILTERING:
+    const isAdmin = await this.isUserAdmin();
 
     const filteredData = (data || []).filter(c => {
-      if (isAdmin) return true;
-      return !c.name.includes('Gerersdorf');
+      // If we had an is_active flag on clubs, we would use it here.
+      // For now, we allow all clubs that were loaded.
+      return true;
     });
 
     console.log(`DEBUG: [FILTER] getClubs: Total raw: ${data?.length || 0}, Filtered: ${filteredData.length}`);
@@ -1711,8 +1724,7 @@ export const supabaseService = {
     if (teamId) playersQuery = playersQuery.eq('team_id', teamId);
     
     // Fetch session for filtering
-    const { data: { session } } = await supabase.auth.getSession();
-    const isAdmin = session?.user?.email === "matthias.insidiom@gmail.com";
+    const isAdmin = await this.isUserAdmin();
 
     const { data: rawPlayersData, error: playersError } = await playersQuery;
     
@@ -1851,13 +1863,11 @@ export const supabaseService = {
 
       const mapped = mapPlayerWithStats(playerWithStats);
       
-      // STRICT FILTERING: Check if active and not Gerersdorf (unless admin)
-      const { data: { session } } = await supabase.auth.getSession();
-      const isAdmin = session?.user?.email === "matthias.insidiom@gmail.com";
+      // STRICT FILTERING: Check if active (unless admin)
+      const isAdmin = await this.isUserAdmin();
 
-      const isGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
-      if (!isAdmin && (!mapped.is_active || isGerersdorf)) {
-        console.log(`DEBUG: [FILTER] getPlayerById: Player ${mapped.full_name} is INACTIVE or GERERSDORF. Excluding.`);
+      if (!isAdmin && !mapped.is_active) {
+        console.log(`DEBUG: [FILTER] getPlayerById: Player ${mapped.full_name} is INACTIVE. Excluding.`);
         return null;
       }
 
@@ -1870,8 +1880,7 @@ export const supabaseService = {
 
   async getFixtures() {
     // Fetch session for filtering
-    const { data: { session } } = await supabase.auth.getSession();
-    const isAdmin = session?.user?.email === "matthias.insidiom@gmail.com";
+    const isAdmin = await this.isUserAdmin();
 
     const { data, error } = await supabase
       .from('fixtures')
@@ -1918,13 +1927,18 @@ export const supabaseService = {
       throw fixturesError;
     }
 
-    // Filter out Gerersdorf for normal users
+    // No restrictive filtering for finished fixtures
+    const filteredFixtures = (fixtures || []);
+/*
+    const isAdmin = await this.isUserAdmin();
     const filteredFixtures = (fixtures || []).filter(f => {
+      if (isAdmin) return true;
       const homeClub = f.home_team?.clubs?.name;
       const awayClub = f.away_team?.clubs?.name;
       const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
       return !involvesGerersdorf;
     });
+*/
 
     console.log(`DEBUG: [FILTER] getOpenVotingFixtures: Total candidate raw: ${fixtures?.length || 0}, Filtered: ${filteredFixtures.length}`);
     if (filteredFixtures.length === 0) return [];
@@ -1993,18 +2007,7 @@ export const supabaseService = {
     }
     
     if (data) {
-      // Fetch session for filtering
-      const { data: { session } } = await supabase.auth.getSession();
-      const isAdmin = session?.user?.email === "matthias.insidiom@gmail.com";
-
-      const homeClub = data.home_team?.clubs?.name;
-      const awayClub = data.away_team?.clubs?.name;
-      const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
-      
-      if (!isAdmin && involvesGerersdorf) {
-        console.log(`DEBUG: [FILTER] getFixtureById: Fixture ${id} involves GERERSDORF. Excluding.`);
-        return null;
-      }
+      return data;
     }
 
     console.log('supabaseService: getFixtureById success:', data?.id);

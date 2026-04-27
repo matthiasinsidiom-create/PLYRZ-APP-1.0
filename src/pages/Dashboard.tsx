@@ -20,9 +20,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabaseService } from '../services/supabaseService';
-import { Player, Fixture, Club, Team, PlayerStats } from '../types';
+import { Player, Fixture, Club, Team, PlayerStats, MatchEvent } from '../types';
 import { PlayerCard } from '../components/PlayerCard';
 import { MatchCard } from '../components/MatchCard';
+import { calculateMatchScore } from '../lib/score';
 
 // --- MAIN DASHBOARD ---
 
@@ -36,6 +37,11 @@ export const Dashboard: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [topPlayers, setTopPlayers] = useState<Player[]>([]);
   const [loadingTopPlayers, setLoadingTopPlayers] = useState(true);
+  const [mvpKM, setMvpKM] = useState<Player | null>(null);
+  const [mvpReserve, setMvpReserve] = useState<Player | null>(null);
+  const [fixtureKM, setFixtureKM] = useState<Fixture | null>(null);
+  const [fixtureReserve, setFixtureReserve] = useState<Fixture | null>(null);
+  const [currentRound, setCurrentRound] = useState<number | null>(null);
   const [checkins, setCheckins] = useState<string[]>(() => {
     try {
       if (profile) {
@@ -74,7 +80,6 @@ export const Dashboard: React.FC = () => {
 
   const [heroFixture, setHeroFixture] = useState<Fixture | null>(null);
   const [heroStatus, setHeroStatus] = useState<'live' | 'voting' | 'result' | 'none'>('none');
-  const [mvpPlayer, setMvpPlayer] = useState<Player | null>(null);
 
   const loadDashboardData = async () => {
     if (!profile) return;
@@ -92,70 +97,160 @@ export const Dashboard: React.FC = () => {
       setPlayers(p);
 
       const now = new Date();
-      let selectedHero: Fixture | null = null;
-      let status: 'live' | 'voting' | 'result' | 'none' = 'none';
-      let mvp: Player | null = null;
-
-      // STRICT PRIORITY CHECK
       
-      // 1. RECENT RESULT (Highest priority as it's the "News")
-      const processedMatch = [...f]
-        .filter(fixture => fixture.results_processed_at)
+      // Calculate Current Round
+      // 1. Find next upcoming match
+      const upcoming = [...f]
+        .filter(fixture => fixture.status === 'upcoming')
+        .sort((a, b) => new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime())[0];
+      
+      let round = upcoming?.round_number || null;
+      
+      // 2. Fallback: Last played match round
+      if (!round) {
+        const lastPlayed = [...f]
+          .filter(fixture => fixture.status === 'finished')
+          .sort((a, b) => new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime())[0];
+        round = lastPlayed?.round_number || null;
+      }
+      
+      setCurrentRound(round);
+      console.log(`DEBUG: aktuelle Runde berechnet: ${round}`);
+
+      let status: 'live' | 'voting' | 'result' | 'none' = 'none';
+
+      // Load MVPs
+      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      const processedMatches = f.filter(fixture => 
+        fixture.results_processed_at && new Date(fixture.results_processed_at) >= last24h
+      );
+
+      // Try to identify "OUR" club to be more precise
+      const ourClubId = profile.favorite_club_id;
+      
+      const latestKM = processedMatches
+        .filter(fixture => {
+          const homeName = fixture.home_team?.name || '';
+          const awayName = fixture.away_team?.name || '';
+          const homeIsKM = homeName.includes('Kampfmannschaft') || homeName.includes('KM');
+          const awayIsKM = awayName.includes('Kampfmannschaft') || awayName.includes('KM');
+          
+          if (ourClubId) {
+            return (homeIsKM && (fixture.home_team as any)?.club_id === ourClubId) || 
+                   (awayIsKM && (fixture.away_team as any)?.club_id === ourClubId);
+          }
+          return homeIsKM || awayIsKM;
+        })
         .sort((a, b) => new Date(b.results_processed_at!).getTime() - new Date(a.results_processed_at!).getTime())[0];
       
-      if (processedMatch) {
-        selectedHero = processedMatch;
-        status = 'result';
+      const latestReserve = processedMatches
+        .filter(fixture => {
+          const homeName = fixture.home_team?.name || '';
+          const awayName = fixture.away_team?.name || '';
+          const homeIsRes = homeName.includes('Reserve') || homeName.includes('RES');
+          const awayIsRes = awayName.includes('Reserve') || awayName.includes('RES');
+          
+          if (ourClubId) {
+            return (homeIsRes && (fixture.home_team as any)?.club_id === ourClubId) || 
+                   (awayIsRes && (fixture.away_team as any)?.club_id === ourClubId);
+          }
+          return homeIsRes || awayIsRes;
+        })
+        .sort((a, b) => new Date(b.results_processed_at!).getTime() - new Date(a.results_processed_at!).getTime())[0];
+
+      const fetchMVP = async (fixture: Fixture | undefined, targetType: 'KM' | 'RES') => {
+        if (!fixture) return null;
         
-        // Fetch MVP
-        const history = await supabaseService.getFixtureRatingHistory(processedMatch.id);
+        const isKM = targetType === 'KM';
+        const isHomeMatch = (fixture.home_team as any)?.club_id === ourClubId;
+        const isAwayMatch = (fixture.away_team as any)?.club_id === ourClubId;
+        
+        console.log(`DEBUG: [MVP] Suche ${targetType} MVP für Fixture ${fixture.id}`);
+        const history = await supabaseService.getFixtureRatingHistory(fixture.id);
+        
         if (history.length > 0) {
-          const mvpEntry = history.reduce((prev, current) => 
+          const teamPlayers = history.filter(h => {
+             const pTeam = h.players?.teams;
+             const pTeamName = pTeam?.name || '';
+             const nameMatch = isKM 
+               ? (pTeamName.includes('Kampfmannschaft') || pTeamName.includes('KM'))
+               : (pTeamName.includes('Reserve') || pTeamName.includes('RES'));
+               
+             if (ourClubId && pTeam?.club_id) {
+               return nameMatch && pTeam.club_id === ourClubId;
+             }
+             return nameMatch;
+          });
+          
+          const source = teamPlayers.length > 0 ? teamPlayers : history;
+
+          // is_mvp = true oder höchster delta_overall
+          const mvpEntry = source.find(h => (h as any).is_mvp) || source.reduce((prev, current) => 
             (prev.delta_overall > current.delta_overall) ? prev : current
           );
-          mvp = p.find(player => player.id === mvpEntry.player_id) || null;
+          
+          const found = p.find(player => player.id === mvpEntry.player_id) || null;
+          console.log(`DEBUG: [MVP] ${targetType} MVP gefunden: ${found?.full_name || 'none'} (${found?.id})`);
+          return found;
         }
+        
+        console.log(`DEBUG: [MVP] Keine Rating History für Fixture ${fixture.id} gefunden.`);
+        return null;
+      };
+
+      const [kmMVP, resMVP] = await Promise.all([
+        fetchMVP(latestKM, 'KM'),
+        fetchMVP(latestReserve, 'RES')
+      ]);
+
+      setMvpKM(kmMVP);
+      setMvpReserve(resMVP);
+      setFixtureKM(latestKM || null);
+      setFixtureReserve(latestReserve || null);
+
+      // Debug logs
+      console.log(`DEBUG: [DASHBOARD] KM Fixture: ${latestKM?.id || 'none'}, MVP: ${kmMVP?.full_name || 'none'}`);
+      console.log(`DEBUG: [DASHBOARD] Reserve Fixture: ${latestReserve?.id || 'none'}, MVP: ${resMVP?.full_name || 'none'}`);
+      console.log(`DEBUG: [DASHBOARD] heroStatus evaluation (kmMVP: ${!!kmMVP}, resMVP: ${!!resMVP})`);
+
+      // Hero Status logic (re-evaluated)
+      
+      // 1. OPEN VOTING
+      const votingMatch = f.find(fixture => {
+        if (!fixture.voting_open_at || !fixture.voting_close_at) return false;
+        const openAt = new Date(fixture.voting_open_at);
+        const closeAt = new Date(fixture.voting_close_at);
+        return now >= openAt && now <= closeAt && !fixture.results_processed_at;
+      });
+
+      if (votingMatch) {
+        setHeroFixture(votingMatch);
+        status = 'voting';
       } 
-      // 2. OPEN VOTING
+      // 2. LIVE MATCH
       else {
-        const votingMatch = f.find(fixture => {
-          if (!fixture.voting_open_at || !fixture.voting_close_at) return false;
-          const openAt = new Date(fixture.voting_open_at);
-          const closeAt = new Date(fixture.voting_close_at);
-          return now >= openAt && now <= closeAt && !fixture.results_processed_at;
+        const liveMatch = f.find(fixture => {
+          const isLive = fixture.status === 'live';
+          const kickoff = new Date(fixture.kickoff_at);
+          const isStarted = now >= kickoff;
+          return (isLive || (fixture.status === 'upcoming' && isStarted)) && !fixture.results_processed_at;
         });
 
-        if (votingMatch) {
-          selectedHero = votingMatch;
-          status = 'voting';
-        } 
-        // 3. LIVE MATCH
-        else {
-          const liveMatch = f.find(fixture => {
-            const isLive = fixture.status === 'live';
-            const kickoff = new Date(fixture.kickoff_at);
-            const isStarted = now >= kickoff;
-            return (isLive || (fixture.status === 'upcoming' && isStarted)) && !fixture.results_processed_at;
-          });
-
-          if (liveMatch) {
-            selectedHero = liveMatch;
-            status = 'live';
-          }
+        if (liveMatch) {
+          // Fetch events for live score accuracy if it's our hero
+          const heroEvents = await supabaseService.getMatchEvents(liveMatch.id);
+          (liveMatch as any).match_events = heroEvents;
+          setHeroFixture(liveMatch);
+          status = 'live';
+        } else if (kmMVP || resMVP) {
+          status = 'result';
         }
       }
 
-      setHeroFixture(selectedHero);
       setHeroStatus(status);
-      setMvpPlayer(mvp);
       
-      // Debug log
-      console.log('--- DASHBOARD HERO STATE ---');
-      console.log('Status:', status);
-      console.log('Fixture ID:', selectedHero?.id || 'none');
-      console.log('---------------------------');
-
-      // Load user check-ins
+      // ... checkins logic continues below ...
       const { data: userCheckins } = await supabaseService.getUserCheckins(profile.id);
       const checkinIds = userCheckins?.map(c => c.fixture_id) || [];
       setCheckins(checkinIds);
@@ -172,13 +267,13 @@ export const Dashboard: React.FC = () => {
   };
 
   const renderHeroBlock = () => {
-    // 1. Result Hero
-    if (heroStatus === 'result' && heroFixture) {
-      return (
+    // 1. Result Hero (KM + Reserve)
+    if (heroStatus === 'result' && (mvpKM || mvpReserve)) {
+      const renderMVPHero = (mvp: Player, fixture: Fixture, teamTitle: string) => (
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-emerald-500/5 backdrop-blur-3xl border border-emerald-500/20 rounded-[2.5rem] p-8 space-y-8 relative overflow-hidden"
+          className="bg-emerald-500/5 backdrop-blur-3xl border border-emerald-500/20 rounded-[2.5rem] p-8 space-y-8 relative overflow-hidden w-full"
         >
           <div className="absolute top-0 right-0 p-4">
             <div className="bg-emerald-500 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
@@ -188,43 +283,44 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div className="flex flex-col items-center justify-center w-full gap-6">
-            {mvpPlayer && (
-              <div className="w-full flex flex-1 justify-center items-center py-6">
-                <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
-                  <div className="pointer-events-none">
-                    <PlayerCard player={mvpPlayer} />
-                  </div>
+            <div className="w-full flex justify-center items-center py-6">
+              <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
+                <div className="pointer-events-none">
+                  <PlayerCard 
+                    player={mvp} 
+                    clubLogo={teams.find(t => t.id === mvp.team_id)?.clubs?.logo_url}
+                  />
                 </div>
               </div>
-            )}
+            </div>
             
             <div className="w-full space-y-6 text-center">
               <div className="space-y-1">
-                <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">Top Spieler</h2>
+                <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">TOP SPIELER</h2>
                 <div className="flex flex-col items-center gap-1">
-                  <div className="text-sm font-black italic uppercase tracking-tight text-white">
-                    {heroFixture.home_team?.clubs?.name} vs {heroFixture.away_team?.clubs?.name}
+                  <div className="text-sm font-black italic uppercase tracking-tight text-white line-clamp-2">
+                    {fixture.home_team?.clubs?.name} vs {fixture.away_team?.clubs?.name}
                   </div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">
-                    {heroFixture.home_team?.name}
+                  <div className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-500">
+                    {teamTitle}
                   </div>
                   <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-                    Runde {heroFixture.round_number || 1} • {new Date(heroFixture.kickoff_at).toLocaleDateString([], { day: '2-digit', month: 'long', year: 'numeric' })}
+                    Runde {fixture.round_number || 1} • {new Date(fixture.kickoff_at).toLocaleDateString(['de-DE'], { day: '2-digit', month: 'long', year: 'numeric' })}
                   </div>
                 </div>
-                <p className="text-zinc-400 font-medium text-sm pt-2">{mvpPlayer?.full_name || 'Letztes Spiel'} hat am meisten überzeugt.</p>
+                <p className="text-zinc-400 font-medium text-sm pt-2">{mvp.full_name} hat am meisten überzeugt.</p>
               </div>
 
               <div className="flex items-center justify-center gap-3 py-3 bg-white/5 rounded-2xl border border-white/5 mx-auto max-w-[160px]">
                  <div className="flex items-center gap-3 whitespace-nowrap text-2xl font-black italic text-white tracking-tighter">
-                   <span>{heroFixture.home_score}</span>
+                   <span>{fixture.home_score}</span>
                    <span className="text-zinc-700">:</span>
-                   <span>{heroFixture.away_score}</span>
+                   <span>{fixture.away_score}</span>
                  </div>
               </div>
 
               <button 
-                onClick={() => navigate(`/matches/${heroFixture.id}/result`)}
+                onClick={() => navigate(`/matches/${fixture.id}/result`)}
                 className="w-full max-w-[320px] mx-auto bg-emerald-500 text-black font-black italic uppercase tracking-widest py-5 rounded-[1.5rem] transition-all flex items-center justify-center gap-2 shadow-xl hover:scale-[1.02] active:scale-95"
               >
                 ERGEBNIS ANSEHEN
@@ -232,6 +328,32 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </motion.div>
+      );
+
+      return (
+        <div className="space-y-16">
+          {mvpKM && fixtureKM && (
+            <div className="space-y-10">
+              <div className="flex items-center gap-3 px-1">
+                <div className="h-px flex-1 bg-white/5" />
+                <h2 className="text-[10px] font-black italic uppercase tracking-[0.2em] text-zinc-500 text-center">TOP SPIELER – KAMPFMANNSCHAFT</h2>
+                <div className="h-px flex-1 bg-white/5" />
+              </div>
+              {renderMVPHero(mvpKM, fixtureKM, "Kampfmannschaft")}
+            </div>
+          )}
+          
+          {mvpReserve && fixtureReserve && (
+            <div className="space-y-10">
+              <div className="flex items-center gap-3 px-1">
+                <div className="h-px flex-1 bg-white/5" />
+                <h2 className="text-[10px] font-black italic uppercase tracking-[0.2em] text-zinc-500 text-center">TOP SPIELER – RESERVE</h2>
+                <div className="h-px flex-1 bg-white/5" />
+              </div>
+              {renderMVPHero(mvpReserve, fixtureReserve, "Reserve")}
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -310,9 +432,16 @@ export const Dashboard: React.FC = () => {
               
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-center gap-3 whitespace-nowrap text-4xl sm:text-5xl font-black italic tracking-tighter text-white">
-                  <span>{heroFixture.home_score}</span>
-                  <span className="text-zinc-700">-</span>
-                  <span>{heroFixture.away_score}</span>
+                  {(() => {
+                    const { homeScore, awayScore } = calculateMatchScore(heroFixture, (heroFixture as any).match_events || []);
+                    return (
+                      <>
+                        <span>{homeScore}</span>
+                        <span className="text-zinc-700">-</span>
+                        <span>{awayScore}</span>
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{heroFixture.match_phase === 'halftime' ? 'HZ' : heroFixture.match_phase === 'first_half' ? '1. HZ' : '2. HZ'}</div>
               </div>
@@ -389,7 +518,7 @@ export const Dashboard: React.FC = () => {
       {/* Remove previous redundant dark overlay to restore App.tsx background */}
 
       {/* Header - Fixed Top Anchor */}
-      <div className="fixed top-0 left-0 right-0 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
+      <div className="fixed top-0 left-0 right-0 pt-[calc(env(safe-area-inset-top)+10px)] pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
         <div className="flex items-center">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
@@ -430,7 +559,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Main Content Area - Top Aligned */}
-      <div className="relative z-10 w-full pt-[calc(8rem+env(safe-area-inset-top))] pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 w-full pt-[calc(env(safe-area-inset-top)+100px)] pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <div className="max-w-xl mx-auto px-5 space-y-12">
           
           {/* A. HERO SECTION (ONLY ONE) */}
@@ -453,23 +582,34 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid gap-4">
-              {fixtures
-                .filter(f => f.id !== heroFixture?.id)
-                .slice(0, 4)
-                .map(f => (
-                  <MatchCard 
-                    key={f.id} 
-                    fixture={f} 
-                    onClick={() => navigate(`/matches/${f.id}`)}
-                  />
-                ))
-              }
+            <div className="space-y-8">
+              {currentRound && (
+                <div className="text-center space-y-4">
+                  <div className="inline-flex flex-col items-center">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/50 mb-1">Aktuell</span>
+                    <h3 className="text-3xl font-black italic uppercase tracking-tighter text-white">Runde {currentRound}</h3>
+                    <div className="h-1 w-full bg-emerald-500 rounded-full mt-2" />
+                  </div>
+                  
+                  <div className="grid gap-4 pt-2">
+                    {fixtures
+                      .filter(f => f.round_number === currentRound)
+                      .map(f => (
+                        <MatchCard 
+                          key={f.id} 
+                          fixture={f} 
+                          onClick={() => navigate(`/matches/${f.id}`)}
+                        />
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
               
-              {fixtures.filter(f => f.id !== heroFixture?.id).length === 0 && (
+              {(!currentRound || fixtures.filter(f => f.round_number === currentRound).length === 0) && (
                 <div className="py-12 text-center space-y-3 bg-zinc-900/10 rounded-[2rem] border border-dashed border-white/5">
                   <Calendar className="w-8 h-8 text-zinc-800 mx-auto" strokeWidth={1} />
-                  <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Keine weiteren Termine</p>
+                  <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Keine aktuellen Termine</p>
                 </div>
               )}
             </div>

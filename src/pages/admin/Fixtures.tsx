@@ -920,9 +920,11 @@ const AdminFixtures: React.FC = () => {
                     <h2 className="text-2xl font-black italic tracking-tighter uppercase text-white">
                       {statusModal.title}
                     </h2>
-                    <p className="text-zinc-400 font-medium leading-relaxed">
-                      {statusModal.message}
-                    </p>
+                    <div className="max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                      <p className="text-zinc-400 font-medium leading-relaxed break-words whitespace-pre-wrap text-sm">
+                        {statusModal.message}
+                      </p>
+                    </div>
                   </div>
 
                   <button

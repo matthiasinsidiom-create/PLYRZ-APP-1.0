@@ -26,11 +26,12 @@ import { supabaseService } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
 import { appConfig } from '../../lib/config';
 import { useAuth } from '../../context/AuthContext';
-import { Fixture, Player, PlayerStats, Team } from '../../types';
+import { Fixture, Player, PlayerStats, Team, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
 import { PlayerVoteCard } from '../../components/PlayerVoteCard';
 import { SwipeVotingOverlay } from '../../components/SwipeVotingOverlay';
 import { VotingCountdown } from '../../components/VotingCountdown';
+import { calculateMatchScore } from '../../lib/score';
 
 interface LineupEntry {
   id: string;
@@ -60,7 +61,7 @@ export const MatchDetail: React.FC = () => {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkinLoading, setCheckinLoading] = useState(false);
   const [checkinError, setCheckinError] = useState('');
-  const [userVotes, setUserVotes] = useState<Record<string, 'up' | 'down'>>({});
+  const [userVotes, setUserVotes] = useState<Record<string, 'up' | 'down' | 'neutral'>>({});
   const [votingMode, setVotingMode] = useState(false);
   const [votingLoading, setVotingLoading] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -107,6 +108,23 @@ export const MatchDetail: React.FC = () => {
   }, [isVotingOpen, fixture?.voting_close_at]);
   const [matchMinute, setMatchMinute] = useState<string>('');
   const [subbingOutPlayerId, setSubbingOutPlayerId] = useState<string | null>(null);
+
+  const isPlayerOnPitch = (playerId: string) => {
+    const entry = lineup.find(l => l.player_id === playerId);
+    if (!entry) return false;
+    
+    let onPitch = entry.lineup_role === 'starter';
+    const subs = matchEvents.filter(e => e.event_type === 'sub_out' && e.related_player_id);
+    
+    // Sort subs by time if possible, but match_events might not have reliable time order other than minute
+    // We'll just process them in order of creation
+    subs.forEach(sub => {
+      if (sub.player_id === playerId) onPitch = false;
+      if (sub.related_player_id === playerId) onPitch = true;
+    });
+    
+    return onPitch;
+  };
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -322,9 +340,19 @@ export const MatchDetail: React.FC = () => {
     
     // Handle Substitution Flow
     if (type === 'sub_out' && !relatedPlayerId) {
+      console.log(`DEBUG: Substitution gestartet (player_out_id: ${playerId})`);
       setSubbingOutPlayerId(playerId);
       return;
     }
+
+    let eventType: any = type;
+    if (type === 'sub_out' && relatedPlayerId) {
+      console.log(`DEBUG: Auswahl player_in_id: ${relatedPlayerId}`);
+    }
+
+    // Get team ID for the player
+    const entry = lineup.find(l => l.player_id === playerId);
+    const teamId = entry?.team_id;
 
     // Optimistic update
     const tempId = Math.random().toString();
@@ -332,23 +360,32 @@ export const MatchDetail: React.FC = () => {
       id: tempId, 
       fixture_id: id, 
       player_id: playerId, 
-      event_type: type,
+      team_id: teamId,
+      event_type: eventType,
       related_player_id: relatedPlayerId,
       minute: parseInt(matchMinute) || null
     };
-    setMatchEvents(prev => [...prev, newEvent]);
+    
+    // Use updated events list to avoid stale state in score calculation
+    const updatedEvents = [...matchEvents, newEvent];
+    setMatchEvents(updatedEvents);
 
     // Update score if goal
-    if (type === 'goal') {
-      const isHome = getPlayerTeam(playerId) === 'home';
-      const scoreField = isHome ? 'home_score' : 'away_score';
-      const currentScore = fixture[scoreField] || 0;
-      
-      // Local update
-      setFixture(prev => prev ? { ...prev, [scoreField]: currentScore + 1 } : null);
-      
-      // DB update
-      await supabase.from('fixtures').update({ [scoreField]: currentScore + 1 }).eq('id', id);
+    if (eventType === 'goal') {
+      setFixture(prev => {
+        if (!prev) return prev;
+        const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+        
+        // DB update
+        supabase.from('fixtures').update({ 
+          home_score: homeScore, 
+          away_score: awayScore 
+        }).eq('id', id).then(({ error }) => {
+          if (error) console.error(`Error updating score in DB:`, error);
+        });
+        
+        return { ...prev, home_score: homeScore, away_score: awayScore };
+      });
     }
 
     const { error } = await supabase
@@ -356,7 +393,8 @@ export const MatchDetail: React.FC = () => {
       .insert({ 
         fixture_id: id, 
         player_id: playerId, 
-        event_type: type,
+        team_id: teamId,
+        event_type: eventType,
         related_player_id: relatedPlayerId,
         minute: parseInt(matchMinute) || null
       });
@@ -364,6 +402,20 @@ export const MatchDetail: React.FC = () => {
     if (error) {
       console.error('Error adding event:', error);
       loadMatchEvents(); // Rollback
+    } else if (eventType === 'sub_out' && relatedPlayerId) {
+      console.log(`DEBUG: Substitution gespeichert (out: ${playerId}, in: ${relatedPlayerId})`);
+      // We need to wait a bit or use the local data for the next log
+      const updatedOnPitch = lineup.filter(l => {
+        let onPitch = l.lineup_role === 'starter';
+        const allEvents = [...matchEvents, newEvent];
+        const playerSubs = allEvents.filter(e => e.event_type === 'sub_out' && e.related_player_id);
+        playerSubs.forEach(sub => {
+          if (sub.player_id === l.player_id) onPitch = false;
+          if (sub.related_player_id === l.player_id) onPitch = true;
+        });
+        return onPitch;
+      }).map(l => l.players.full_name);
+      console.log(`DEBUG: Aktive Spieler nach Update: ${updatedOnPitch.join(', ')}`);
     }
 
     if (type === 'sub_out') {
@@ -392,11 +444,23 @@ export const MatchDetail: React.FC = () => {
       minute: minute
     };
     
-    setMatchEvents(prev => [...prev, newEvent]);
+    const updatedEvents = [...matchEvents, newEvent];
+    setMatchEvents(updatedEvents);
     
-    const scoreField = teamType === 'home' ? 'home_score' : 'away_score';
-    const currentScore = fixture[scoreField] || 0;
-    setFixture(prev => prev ? { ...prev, [scoreField]: currentScore + 1 } : null);
+    setFixture(prev => {
+      if (!prev) return prev;
+      const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+      
+      // DB update
+      supabase.from('fixtures').update({ 
+        home_score: homeScore, 
+        away_score: awayScore 
+      }).eq('id', id).then(({ error }) => {
+        if (error) console.error(`Error updating opponent score in DB:`, error);
+      });
+      
+      return { ...prev, home_score: homeScore, away_score: awayScore };
+    });
 
     try {
       const { error } = await supabase
@@ -412,59 +476,82 @@ export const MatchDetail: React.FC = () => {
         
       if (error) throw error;
       
-      await supabase.from('fixtures').update({ [scoreField]: currentScore + 1 }).eq('id', id);
-      
       setIsAddingOpponentGoal(null);
       setOpponentJerseyNumber('');
       setOpponentMinute('');
       console.log('DEBUG: [UI] Opponent goal saved successfully');
     } catch (err) {
       console.error('Error adding opponent goal:', err);
-      loadMatchEvents(); // Rollback
+      // No need to rollback matchEvents manually here as it is optimistic and will be overridden by next load
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRemoveOpponentGoal = async (teamType: 'home' | 'away', eventId: string) => {
+  const handleDeleteEvent = async (eventId: string) => {
     if (!id || !isAdmin || !fixture) return;
     
-    setMatchEvents(prev => prev.filter(e => e.id !== eventId));
-    
-    const scoreField = teamType === 'home' ? 'home_score' : 'away_score';
-    const currentScore = fixture[scoreField] || 0;
-    const newScore = Math.max(0, currentScore - 1);
-    setFixture(prev => prev ? { ...prev, [scoreField]: newScore } : null);
+    const event = matchEvents.find(e => e.id === eventId);
+    if (!event) return;
 
-    try {
-      await supabase.from('match_events').delete().eq('id', eventId);
-      await supabase.from('fixtures').update({ [scoreField]: newScore }).eq('id', id);
-    } catch (err) {
-      console.error('Error removing opponent goal:', err);
-      loadMatchEvents(); // Rollback
+    console.log(`DEBUG: Event gelöscht (ID: ${eventId}, Type: ${event.event_type})`);
+    console.log(`DEBUG: Recalculation gestartet`);
+
+    const updatedEvents = matchEvents.filter(e => e.id !== eventId);
+    setMatchEvents(updatedEvents);
+
+    if (event.event_type === 'goal' || event.event_type === 'opponent_goal') {
+      setFixture(prev => {
+        if (!prev) return prev;
+        const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+        
+        supabase.from('fixtures').update({ 
+          home_score: homeScore, 
+          away_score: awayScore 
+        }).eq('id', id).then(({ error }) => {
+          if (error) console.error(`Error reverting score in DB:`, error);
+        });
+        
+        return { ...prev, home_score: homeScore, away_score: awayScore };
+      });
+    }
+
+    const { error } = await supabase
+      .from('match_events')
+      .delete()
+      .eq('id', eventId);
+
+    if (error) {
+      console.error('Error deleting event:', error);
+      loadMatchEvents();
     }
   };
-
+  
   const handleRemoveEvent = async (playerId: string, type: string) => {
     if (!id || !isAdmin || !fixture) return;
     
     const eventToRemove = [...matchEvents].reverse().find(e => e.player_id === playerId && e.event_type === type);
     if (!eventToRemove) return;
 
-    setMatchEvents(prev => prev.filter(e => e.id !== eventToRemove.id));
+    const updatedEvents = matchEvents.filter(e => e.id !== eventToRemove.id);
+    setMatchEvents(updatedEvents);
 
     // Update score if goal
     if (type === 'goal') {
-      const isHome = getPlayerTeam(playerId) === 'home';
-      const scoreField = isHome ? 'home_score' : 'away_score';
-      const currentScore = fixture[scoreField] || 0;
-      const newScore = Math.max(0, currentScore - 1);
-      
-      // Local update
-      setFixture(prev => prev ? { ...prev, [scoreField]: newScore } : null);
-      
-      // DB update
-      await supabase.from('fixtures').update({ [scoreField]: newScore }).eq('id', id);
+      setFixture(prev => {
+        if (!prev) return prev;
+        const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+        
+        // DB update
+        supabase.from('fixtures').update({ 
+          home_score: homeScore, 
+          away_score: awayScore 
+        }).eq('id', id).then(({ error }) => {
+          if (error) console.error(`Error reverting score in DB:`, error);
+        });
+        
+        return { ...prev, home_score: homeScore, away_score: awayScore };
+      });
     }
 
     const { error } = await supabase
@@ -690,32 +777,23 @@ export const MatchDetail: React.FC = () => {
         setShowSwipeOverlay(true);
       }
 
-      // Auto-Live Status Update & Score Initialization
-      if (f && !f.results_processed_at) {
-        const kickoff = new Date(f.kickoff_at);
-        const isLiveTime = kickoff <= new Date();
-        
-        if (f.status === 'upcoming' && isLiveTime) {
-          f.status = 'live';
-          f.match_phase = 'first_half';
-          f.first_half_started_at = f.kickoff_at;
-          await supabase.from('fixtures').update({ 
-            status: 'live',
-            match_phase: 'first_half',
-            first_half_started_at: f.kickoff_at
-          }).eq('id', id);
-        }
-
-        // Score Initialization: If live and no goal events, force 0:0
-        const goalEvents = matchEventsData.filter(e => e.event_type === 'goal');
-        if (isLiveTime && goalEvents.length === 0) {
-          if (f.home_score !== 0 || f.away_score !== 0) {
-            f.home_score = 0;
-            f.away_score = 0;
-            await supabase.from('fixtures').update({ home_score: 0, away_score: 0 }).eq('id', id);
-          }
-        }
+    // Auto-Live Status Update
+    if (f && !f.results_processed_at) {
+      const kickoff = new Date(f.kickoff_at);
+      const isLiveTime = kickoff <= new Date();
+      
+      if (f.status === 'upcoming' && isLiveTime) {
+        // We only update the local object for UI consistency
+        f.status = 'live';
+        f.match_phase = 'first_half';
+        f.first_half_started_at = f.kickoff_at;
       }
+
+      // Robust score calculation
+      const { homeScore, awayScore } = calculateMatchScore(f, matchEventsData);
+      f.home_score = homeScore;
+      f.away_score = awayScore;
+    }
 
       setFixture(f);
       setLineup(l);
@@ -740,7 +818,7 @@ export const MatchDetail: React.FC = () => {
     }
   };
 
-  const handleVote = async (playerId: string, vote: 'up' | 'down') => {
+  const handleVote = async (playerId: string, vote: 'up' | 'down' | 'neutral') => {
     if (!id || !profile || !fixture) return;
     
     // If already voted this way, do nothing
@@ -892,7 +970,7 @@ export const MatchDetail: React.FC = () => {
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans pb-32">
       {/* Header */}
-      <div className="p-3 pt-[calc(0.75rem+env(safe-area-inset-top))] flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
+      <div className="p-3 pt-[calc(env(safe-area-inset-top)+10px)] flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate('/matches')} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
@@ -1076,7 +1154,7 @@ export const MatchDetail: React.FC = () => {
                     <div className="text-[10px] font-black italic uppercase tracking-tight truncate">
                       {event.event_type === 'opponent_goal' ? (
                         <span>Tor Gegner #{event.opponent_jersey_number || '?'}</span>
-                      ) : event.event_type === 'sub_out' ? (
+                      ) : (event.event_type === 'sub_out' && event.related_player_id) ? (
                         <span className="flex items-center gap-1">
                           <span className="text-red-500">Aus:</span> {getPlayerName(event.player_id)}
                           <span className="text-zinc-600 mx-1">/</span>
@@ -1087,6 +1165,14 @@ export const MatchDetail: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => handleDeleteEvent(event.id)}
+                      className="p-1 hover:bg-red-500/10 rounded group transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-zinc-700 group-hover:text-red-500" />
+                    </button>
+                  )}
                 </motion.div>
               );
             })}
@@ -1184,20 +1270,27 @@ export const MatchDetail: React.FC = () => {
             
             <div className="p-1 max-h-[320px] overflow-y-auto custom-scrollbar">
               {(activeAdminTab === 'home' ? homePlayers : awayPlayers).map((entry) => {
-                const playerEvents = matchEvents.filter(e => e.player_id === entry.player_id);
-                const goals = playerEvents.filter(e => e.event_type === 'goal').length;
+                const playerEvents = matchEvents.filter(e => e.player_id === entry.player_id || e.related_player_id === entry.player_id);
+                const goals = playerEvents.filter(e => e.event_type === 'goal' && e.player_id === entry.player_id).length;
                 const yellow = playerEvents.some(e => e.event_type === 'yellow_card');
                 const red = playerEvents.some(e => e.event_type === 'red_card');
-                const sub = playerEvents.some(e => e.event_type === 'sub_in' || e.event_type === 'sub_out');
+                const sub = playerEvents.some(e => e.event_type === 'sub_out' && (e.player_id === entry.player_id || e.related_player_id === entry.player_id));
+                const currentlyOnPitch = isPlayerOnPitch(entry.player_id);
+
+                // If subbing out, only show players who are NOT on pitch as candidates to sub in
+                if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== entry.player_id) return null;
 
                 return (
                   <div key={entry.player_id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl transition-colors border-b border-white/5 last:border-0">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-[9px] font-black italic border border-white/5 text-zinc-400">
+                      <div className={`w-7 h-7 rounded-lg ${currentlyOnPitch ? 'bg-zinc-800' : 'bg-zinc-900 opacity-40'} flex items-center justify-center text-[9px] font-black italic border border-white/5 text-zinc-400`}>
                         {entry.jersey_number}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[10px] font-black italic uppercase tracking-tight truncate text-zinc-200">{entry.players.full_name}</div>
+                        <div className={`text-[10px] font-black italic uppercase tracking-tight truncate ${currentlyOnPitch ? 'text-zinc-200' : 'text-zinc-600'}`}>
+                          {entry.players.full_name}
+                          {!currentlyOnPitch && <span className="ml-2 text-[8px] opacity-60">(Bank)</span>}
+                        </div>
                         <div className="flex gap-1 mt-0.5">
                           {goals > 0 && <span className="text-[7px]">⚽{goals}</span>}
                           {yellow && <span className="text-[7px]">🟨</span>}
@@ -1208,16 +1301,18 @@ export const MatchDetail: React.FC = () => {
                     </div>
                     
                     <div className="flex items-center gap-1">
-                    <div className="flex flex-col gap-3 pt-2">
-                        <button 
-                          onClick={() => handleAddEvent(subbingOutPlayerId, 'sub_out', entry.player_id)}
-                          className="px-2 h-7 rounded-lg bg-emerald-500 text-black text-[8px] font-black uppercase tracking-tighter animate-pulse"
-                        >
-                          Einwechseln
-                        </button>
-                      </div>
+                      {subbingOutPlayerId && !currentlyOnPitch && (
+                        <div className="flex flex-col gap-3 pt-2">
+                          <button 
+                            onClick={() => handleAddEvent(subbingOutPlayerId, 'sub_out', entry.player_id)}
+                            className="px-2 h-7 rounded-lg bg-emerald-500 text-black text-[8px] font-black uppercase tracking-tighter animate-pulse"
+                          >
+                            Einwechseln
+                          </button>
+                        </div>
+                      )}
                       
-                      {!subbingOutPlayerId && (
+                      {!subbingOutPlayerId && currentlyOnPitch && (
                         <>
                           <button 
                             onClick={() => handleAddEvent(entry.player_id, 'goal')}
@@ -1226,13 +1321,13 @@ export const MatchDetail: React.FC = () => {
                             ⚽
                           </button>
                           <button 
-                            onClick={() => yellow ? handleRemoveEvent(entry.player_id, 'yellow_card') : handleAddEvent(entry.player_id, 'yellow_card')}
+                            onClick={() => yellow ? handleDeleteEvent(playerEvents.find(e => e.event_type === 'yellow_card').id) : handleAddEvent(entry.player_id, 'yellow_card')}
                             className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] transition-colors ${yellow ? 'bg-yellow-500 text-black' : 'bg-zinc-800 hover:bg-yellow-500/20'}`}
                           >
                             🟨
                           </button>
                           <button 
-                            onClick={() => red ? handleRemoveEvent(entry.player_id, 'red_card') : handleAddEvent(entry.player_id, 'red_card')}
+                            onClick={() => red ? handleDeleteEvent(playerEvents.find(e => e.event_type === 'red_card').id) : handleAddEvent(entry.player_id, 'red_card')}
                             className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] transition-colors ${red ? 'bg-red-500 text-white' : 'bg-zinc-800 hover:bg-red-500/20'}`}
                           >
                             🟥

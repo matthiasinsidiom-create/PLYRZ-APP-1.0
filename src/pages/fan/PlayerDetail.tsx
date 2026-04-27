@@ -142,7 +142,7 @@ export const PlayerDetail: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans pb-24 overflow-x-hidden w-full max-w-full">
       {/* Header */}
-      <div className="p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
+      <div className="p-6 pt-[calc(env(safe-area-inset-top)+10px)] sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate(-1)}

@@ -26,8 +26,10 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
+import { supabase } from '../../lib/supabase';
 import { getPositionShort } from '../../lib/positions';
 import { Fixture, FixtureLineup, MatchEvent } from '../../types';
+import { calculateMatchScore } from '../../lib/score';
 
 interface LineupEntryState {
   player_id: string;
@@ -51,7 +53,22 @@ const AdminMatchControl: React.FC = () => {
   
   // Events State
   const [events, setEvents] = useState<any[]>([]);
-  const [showConfirmProcess, setShowConfirmProcess] = useState(false);
+  const [subbingOutPlayerId, setSubbingOutPlayerId] = useState<string | null>(null);
+
+  const isPlayerOnPitch = useCallback((playerId: string) => {
+    const entry = [...lineup.home, ...lineup.away].find(l => l.player_id === playerId);
+    if (!entry) return false;
+    
+    let onPitch = entry.lineup_role === 'starter';
+    const subs = events.filter(e => e.event_type === 'sub_out' && e.related_player_id);
+    
+    subs.forEach(sub => {
+      if (sub.player_id === playerId) onPitch = false;
+      if (sub.related_player_id === playerId) onPitch = true;
+    });
+    
+    return onPitch;
+  }, [lineup, events]);
   const [isAddingOpponentGoal, setIsAddingOpponentGoal] = useState<'home' | 'away' | null>(null);
   const [opponentJerseyNumber, setOpponentJerseyNumber] = useState('');
   const [opponentMinute, setOpponentMinute] = useState('');
@@ -65,6 +82,7 @@ const AdminMatchControl: React.FC = () => {
   const [liveGoalTeam, setLiveGoalTeam] = useState<'home' | 'away' | null>(null);
   const [liveGoalFormType, setLiveGoalFormType] = useState<'player' | 'opponent' | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+  const [showConfirmProcess, setShowConfirmProcess] = useState(false);
   const [statusModal, setStatusModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' }>({
     isOpen: false,
     title: '',
@@ -75,6 +93,36 @@ const AdminMatchControl: React.FC = () => {
   useEffect(() => {
     if (id) {
       loadMatchData();
+
+      // Realtime subscription for fixture changes
+      const fixtureChannel = supabase
+        .channel(`fixture_admin:${id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'fixtures', filter: `id=eq.${id}` },
+          (payload) => {
+            setFixture((prev: any) => ({ ...prev, ...payload.new }));
+          }
+        )
+        .subscribe();
+
+      // Realtime subscription for event changes
+      const eventsChannel = supabase
+        .channel(`events_admin:${id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'match_events', filter: `fixture_id=eq.${id}` },
+          () => {
+             // Reload events when they change
+             supabaseService.getMatchEvents(id).then(setEvents);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(fixtureChannel);
+        supabase.removeChannel(eventsChannel);
+      };
     }
   }, [id]);
 
@@ -139,6 +187,13 @@ const AdminMatchControl: React.FC = () => {
       // Load Stats
       const matchStats = await supabaseService.getFixtureStats(id);
       setStats(matchStats);
+
+      // Robust score calculation for initialization
+      const { homeScore, awayScore } = calculateMatchScore(currentFixture, matchEvents);
+      if (currentFixture) {
+        currentFixture.home_score = homeScore;
+        currentFixture.away_score = awayScore;
+      }
       
     } catch (err) {
       console.error('Error loading match data:', err);
@@ -147,11 +202,26 @@ const AdminMatchControl: React.FC = () => {
     }
   };
 
+  const getPlayerName = (id: string | null) => {
+    if (!id) return '';
+    const p = [...homePlayers, ...awayPlayers].find(p => p.id === id);
+    return p ? p.full_name : 'Unknown';
+  };
+
   const handleUpdateFixture = async (updates: Partial<Fixture>) => {
     if (!id) return;
     setSaving(true);
+    
+    // Initialize scores to 0 if transitioning to live and currently null
+    const fixtureUpdates: any = { ...updates };
+    if (updates.status === 'live' && fixture) {
+      const { homeScore, awayScore } = calculateMatchScore(fixture, events);
+      fixtureUpdates.home_score = homeScore;
+      fixtureUpdates.away_score = awayScore;
+    }
+
     try {
-      const updated = await supabaseService.updateFixture(id, updates);
+      const updated = await supabaseService.updateFixture(id, fixtureUpdates);
       setFixture(updated);
       setStatusModal({
         isOpen: true,
@@ -212,9 +282,21 @@ const AdminMatchControl: React.FC = () => {
     }
   };
 
-  const handleAddEvent = async (playerId: string, eventType: any) => {
+  const handleAddEvent = async (playerId: string, type: string, relatedPlayerId?: string) => {
     if (!id || !fixture) return;
     
+    // Handle Substitution Flow
+    if (type === 'sub_out' && !relatedPlayerId) {
+      console.log(`DEBUG: Substitution gestartet (player_out_id: ${playerId})`);
+      setSubbingOutPlayerId(playerId);
+      return;
+    }
+
+    let eventType: any = type;
+    if (type === 'sub_out' && relatedPlayerId) {
+      console.log(`DEBUG: Auswahl player_in_id: ${relatedPlayerId}`);
+    }
+
     const isHome = lineup.home.some(l => l.player_id === playerId);
     const teamId = isHome ? fixture.home_team_id : fixture.away_team_id;
 
@@ -225,69 +307,109 @@ const AdminMatchControl: React.FC = () => {
       team_id: teamId,
       player_id: playerId,
       event_type: eventType,
+      related_player_id: relatedPlayerId,
       created_at: new Date().toISOString()
     };
     
-    setEvents(prev => [...prev, newEvent]);
+    // We calculate updatedEvents first to avoid stale state in score calculation
+    const updatedEvents = [...events, newEvent];
+    setEvents(updatedEvents);
     
     // Update score if goal
     if (eventType === 'goal') {
-      const scoreField = isHome ? 'home_score' : 'away_score';
-      const currentScore = fixture[scoreField] || 0;
-      const newScore = currentScore + 1;
-      
-      setFixture(prev => ({ ...prev, [scoreField]: newScore }));
-      try {
-        await supabaseService.updateFixture(id, { [scoreField]: newScore });
-      } catch (err) {
-        console.error('Error updating score:', err);
-      }
+      setFixture((prev: any) => {
+        if (!prev) return prev;
+        const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+        
+        supabaseService.updateFixture(id, { 
+          home_score: homeScore,
+          away_score: awayScore
+        }).catch(err => {
+          console.error(`Error updating score in DB:`, err);
+        });
+        
+        return { ...prev, home_score: homeScore, away_score: awayScore };
+      });
     }
-    
+
     try {
       const created = await supabaseService.createMatchEvent({
         fixture_id: id,
         team_id: teamId,
         player_id: playerId,
-        event_type: eventType
+        event_type: eventType,
+        related_player_id: relatedPlayerId
       });
       setEvents(prev => prev.map(e => e.id === tempId ? created : e));
+      
+      if (eventType === 'sub_out' && relatedPlayerId) {
+        console.log(`DEBUG: Substitution gespeichert (out: ${playerId}, in: ${relatedPlayerId})`);
+        // We'll trust the realtime update for the log of on-pitch players if needed, 
+        // but let's log current state for debug
+        const updatedOnPitch = [...lineup.home, ...lineup.away].filter(l => {
+           let onPitch = l.lineup_role === 'starter';
+           const allEvents = [...events, created];
+           const playerSubs = allEvents.filter(e => e.event_type === 'sub_out' && e.related_player_id);
+           playerSubs.forEach(sub => {
+             if (sub.player_id === l.player_id) onPitch = false;
+             if (sub.related_player_id === l.player_id) onPitch = true;
+           });
+           return onPitch;
+        }).length;
+        console.log(`DEBUG: Aktive Spieler nach Update: ${updatedOnPitch}`);
+      }
     } catch (err) {
       console.error('Error adding event:', err);
       setEvents(prev => prev.filter(e => e.id !== tempId));
     }
+
+    if (type === 'sub_out') {
+      setSubbingOutPlayerId(null);
+    }
   };
 
   const handleRemoveEvent = async (playerId: string, eventType: string) => {
-    if (!id) return;
-    
     const eventToRemove = [...events].reverse().find(e => e.player_id === playerId && e.event_type === eventType);
-    if (!eventToRemove) return;
+    if (eventToRemove) {
+      await handleDeleteEvent(eventToRemove.id);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!id || !fixture) return;
     
+    const event = events.find(e => e.id === eventId);
+    if (!event) return;
+
+    console.log(`DEBUG: Event gelöscht (ID: ${eventId}, Type: ${event.event_type})`);
+    console.log(`DEBUG: Recalculation gestartet`);
+
     const originalEvents = [...events];
-    setEvents(prev => prev.filter(e => e.id !== eventToRemove.id));
+    const updatedEvents = originalEvents.filter(e => e.id !== eventId);
+    setEvents(updatedEvents);
     
-    // Update score if goal or opponent_goal
-    if (eventType === 'goal' || eventType === 'opponent_goal') {
-      const isHome = eventToRemove.team_id === fixture.home_team_id;
-      const scoreField = isHome ? 'home_score' : 'away_score';
-      const currentScore = fixture[scoreField] || 0;
-      const newScore = Math.max(0, currentScore - 1);
-      
-      setFixture(prev => ({ ...prev, [scoreField]: newScore }));
-      try {
-        await supabaseService.updateFixture(id, { [scoreField]: newScore });
-      } catch (err) {
-        console.error('Error updating score:', err);
-      }
+    if (event.event_type === 'goal' || event.event_type === 'opponent_goal') {
+      setFixture((prev: any) => {
+        if (!prev) return prev;
+        const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+        
+        supabaseService.updateFixture(id, { 
+          home_score: homeScore,
+          away_score: awayScore
+        }).catch(err => {
+          console.error(`Error reverting score in DB:`, err);
+        });
+        
+        return { ...prev, home_score: homeScore, away_score: awayScore };
+      });
     }
     
     try {
-      if (!eventToRemove.id.startsWith('temp-')) {
-        await supabaseService.deleteMatchEvent(eventToRemove.id);
+      if (!eventId.toString().startsWith('temp-')) {
+        await supabaseService.deleteMatchEvent(eventId);
       }
     } catch (err) {
-      console.error('Error removing event:', err);
+      console.error('Error deleting event:', err);
       setEvents(originalEvents);
     }
   };
@@ -318,31 +440,7 @@ const AdminMatchControl: React.FC = () => {
   };
 
   const handleRemoveOpponentGoal = async (teamType: 'home' | 'away', eventId: string) => {
-    if (!id || !fixture) return;
-    
-    const eventToRemove = events.find(e => e.id === eventId);
-    if (!eventToRemove) return;
-
-    const originalEvents = [...events];
-    setEvents(prev => prev.filter(e => e.id !== eventId));
-
-    // Update score
-    const scoreField = teamType === 'home' ? 'home_score' : 'away_score';
-    const currentScore = fixture[scoreField] || 0;
-    const newScore = Math.max(0, currentScore - 1);
-    
-    setFixture(prev => ({ ...prev, [scoreField]: newScore }));
-    
-    try {
-      if (!eventId.startsWith('temp-')) {
-        await supabaseService.deleteMatchEvent(eventId);
-      }
-      await supabaseService.updateFixture(id, { [scoreField]: newScore });
-    } catch (err) {
-      console.error('Error removing opponent goal:', err);
-      setEvents(originalEvents);
-      setFixture(prev => ({ ...prev, [scoreField]: currentScore }));
-    }
+    await handleDeleteEvent(eventId);
   };
 
   const handleAddOpponentGoal = async (teamType: 'home' | 'away') => {
@@ -364,16 +462,26 @@ const AdminMatchControl: React.FC = () => {
       created_at: new Date().toISOString()
     };
     
-    setEvents(prev => [...prev, newEvent]);
+    const updatedEvents = [...events, newEvent];
+    setEvents(updatedEvents);
 
     // Update score
-    const scoreField = teamType === 'home' ? 'home_score' : 'away_score';
-    const currentScore = fixture[scoreField] || 0;
-    const newScore = currentScore + 1;
-    setFixture(prev => ({ ...prev, [scoreField]: newScore }));
+    setFixture((prev: any) => {
+      if (!prev) return prev;
+      const { homeScore, awayScore } = calculateMatchScore(prev, updatedEvents);
+
+      // DB update
+      supabaseService.updateFixture(id, { 
+        home_score: homeScore,
+        away_score: awayScore 
+      }).catch(err => {
+        console.error('Error updating opponent goal in DB:', err);
+      });
+
+      return { ...prev, home_score: homeScore, away_score: awayScore };
+    });
 
     try {
-      await supabaseService.updateFixture(id, { [scoreField]: newScore });
       const created = await supabaseService.createMatchEvent({
         fixture_id: id,
         team_id: teamId,
@@ -390,7 +498,7 @@ const AdminMatchControl: React.FC = () => {
     } catch (err) {
       console.error('Error adding opponent goal:', err);
       setEvents(prev => prev.filter(e => e.id !== tempId));
-      setFixture(prev => ({ ...prev, [scoreField]: currentScore }));
+      // Revert score locally if DB error (though the update is non-blocking above, we could sync here)
     }
   };
 
@@ -437,7 +545,9 @@ const AdminMatchControl: React.FC = () => {
   const hasAwayLineup = lineup.away.length >= 11;
   const hasScore = fixture.home_score !== null && fixture.away_score !== null;
   const hasEvents = events.length > 0;
-  const canProcess = hasHomeLineup && hasAwayLineup && hasScore && !isProcessed;
+  // Allow processing if lineups and score exist. 
+  // If already processed, the button will act as "Re-process".
+  const canProcess = hasHomeLineup && hasAwayLineup && hasScore;
 
   return (
     <div className="min-h-screen bg-transparent p-4 pb-24 text-white font-sans">
@@ -481,7 +591,7 @@ const AdminMatchControl: React.FC = () => {
                   type="number"
                   value={fixture.home_score ?? ''}
                   onChange={(e) => setFixture({ ...fixture, home_score: e.target.value === '' ? null : parseInt(e.target.value) })}
-                  onBlur={() => handleUpdateFixture({ home_score: fixture.home_score })}
+                  onBlur={(e) => handleUpdateFixture({ home_score: e.target.value === '' ? null : parseInt(e.target.value) })}
                   className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-xl font-black focus:border-emerald-500 outline-none"
                   placeholder="-"
                 />
@@ -490,7 +600,7 @@ const AdminMatchControl: React.FC = () => {
                   type="number"
                   value={fixture.away_score ?? ''}
                   onChange={(e) => setFixture({ ...fixture, away_score: e.target.value === '' ? null : parseInt(e.target.value) })}
-                  onBlur={() => handleUpdateFixture({ away_score: fixture.away_score })}
+                  onBlur={(e) => handleUpdateFixture({ away_score: e.target.value === '' ? null : parseInt(e.target.value) })}
                   className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-xl font-black focus:border-emerald-500 outline-none"
                   placeholder="-"
                 />
@@ -607,7 +717,17 @@ const AdminMatchControl: React.FC = () => {
                         <span className="text-[10px]">{event.event_type === 'goal' || event.event_type === 'opponent_goal' ? '⚽' : '🎫'}</span>
                         <span className="text-[9px] font-black italic text-zinc-500">{event.minute || '??'}'</span>
                         <span className="text-[10px] font-black italic uppercase text-zinc-300">
-                          {event.event_type === 'opponent_goal' ? `Tor Gegner #${event.opponent_jersey_number || '?'}` : (homePlayers.find(p => p.id === event.player_id)?.full_name || awayPlayers.find(p => p.id === event.player_id)?.full_name || 'Event')}
+                          {event.event_type === 'opponent_goal' ? (
+                            `Tor Gegner #${event.opponent_jersey_number || '?'}`
+                          ) : (event.event_type === 'sub_out' && event.related_player_id) ? (
+                            <span className="flex items-center gap-1">
+                              <span className="text-red-500">Aus:</span> {getPlayerName(event.player_id)}
+                              <span className="text-zinc-600 mx-1">/</span>
+                              <span className="text-emerald-500">Ein:</span> {getPlayerName(event.related_player_id)}
+                            </span>
+                          ) : (
+                            getPlayerName(event.player_id)
+                          )}
                         </span>
                       </div>
                       <button 
@@ -683,13 +803,20 @@ const AdminMatchControl: React.FC = () => {
                   {lineup.home.map(entry => {
                     const player = homePlayers.find(p => p.id === entry.player_id);
                     if (!player) return null;
+                    const currentlyOnPitch = isPlayerOnPitch(player.id);
+                    
+                    if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
+
                     return (
                       <PlayerEventRow 
                         key={player.id}
                         player={player}
-                        events={events.filter(e => e.player_id === player.id)}
+                        events={events.filter(e => e.player_id === player.id || e.related_player_id === player.id)}
                         onAdd={handleAddEvent}
                         onRemove={handleRemoveEvent}
+                        currentlyOnPitch={currentlyOnPitch}
+                        isSubbingMode={!!subbingOutPlayerId}
+                        subbingOutPlayerId={subbingOutPlayerId}
                       />
                     );
                   })}
@@ -721,13 +848,20 @@ const AdminMatchControl: React.FC = () => {
                   {lineup.away.map(entry => {
                     const player = awayPlayers.find(p => p.id === entry.player_id);
                     if (!player) return null;
+                    const currentlyOnPitch = isPlayerOnPitch(player.id);
+
+                    if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
+
                     return (
                       <PlayerEventRow 
                         key={player.id}
                         player={player}
-                        events={events.filter(e => e.player_id === player.id)}
+                        events={events.filter(e => e.player_id === player.id || e.related_player_id === player.id)}
                         onAdd={handleAddEvent}
                         onRemove={handleRemoveEvent}
+                        currentlyOnPitch={currentlyOnPitch}
+                        isSubbingMode={!!subbingOutPlayerId}
+                        subbingOutPlayerId={subbingOutPlayerId}
                       />
                     );
                   })}
@@ -1233,65 +1367,91 @@ const ChecklistItem: React.FC<{ label: string; checked: boolean }> = ({ label, c
 const PlayerEventRow: React.FC<{
   player: any;
   events: any[];
-  onAdd: (playerId: string, type: string) => void;
+  onAdd: (playerId: string, type: string, relatedId?: string) => void;
   onRemove: (playerId: string, type: string) => void;
-}> = ({ player, events, onAdd, onRemove }) => {
-  const goalCount = events.filter(e => e.event_type === 'goal').length;
+  currentlyOnPitch?: boolean;
+  isSubbingMode?: boolean;
+  subbingOutPlayerId?: string | null;
+}> = ({ player, events, onAdd, onRemove, currentlyOnPitch = true, isSubbingMode = false, subbingOutPlayerId }) => {
+  const goalCount = events.filter(e => e.event_type === 'goal' && e.player_id === player.id).length;
   const hasYellow = events.some(e => e.event_type === 'yellow_card');
   const hasRed = events.some(e => e.event_type === 'red_card');
 
+  if (isSubbingMode && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
+
   return (
-    <div className="flex items-center justify-between p-3 bg-zinc-900/40 border border-white/5 rounded-2xl group hover:bg-zinc-900/60 transition-all">
+    <div className={`flex items-center justify-between p-3 bg-zinc-900/40 border border-white/5 rounded-2xl group hover:bg-zinc-900/60 transition-all ${!currentlyOnPitch && !isSubbingMode ? 'opacity-40' : ''}`}>
       <div className="flex flex-col">
-        <span className="text-xs font-black italic uppercase tracking-tight text-white group-hover:text-emerald-400 transition-colors">{player.full_name}</span>
-        <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">{getPositionShort(player.position)}</span>
+        <span className={`text-xs font-black italic uppercase tracking-tight ${currentlyOnPitch ? 'text-white' : 'text-zinc-600'} group-hover:text-emerald-400 transition-colors`}>{player.full_name}</span>
+        <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">{getPositionShort(player.position)} {!currentlyOnPitch && '(Bank)'}</span>
       </div>
       
       <div className="flex items-center gap-3">
-        {/* Goal Controls */}
-        <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl border border-white/5">
-          <button 
-            onClick={() => onRemove(player.id, 'goal')}
-            disabled={goalCount === 0}
-            className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg disabled:opacity-20 active:scale-90 transition-transform"
-          >
-            <Minus className="w-3 h-3 text-zinc-400" />
-          </button>
-          <div className="flex items-center gap-1.5 px-2 min-w-[45px] justify-center">
-            <span className="text-xs">⚽</span>
-            <span className="text-xs font-black italic tabular-nums text-white">{goalCount}</span>
-          </div>
-          <button 
-            onClick={() => onAdd(player.id, 'goal')}
-            className="w-8 h-8 flex items-center justify-center bg-emerald-500 text-black rounded-lg active:scale-90 transition-transform shadow-lg shadow-emerald-500/20"
-          >
-            <Plus className="w-3 h-3" />
-          </button>
-        </div>
+        {isSubbingMode ? (
+          !currentlyOnPitch && (
+            <button 
+              onClick={() => onAdd(subbingOutPlayerId!, 'sub_out', player.id)}
+              className="px-4 h-9 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-tighter animate-pulse shadow-lg shadow-emerald-500/20"
+            >
+              Einwechseln
+            </button>
+          )
+        ) : currentlyOnPitch && (
+          <>
+            {/* Goal Controls */}
+            <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl border border-white/5">
+              <button 
+                onClick={() => onRemove(player.id, 'goal')}
+                disabled={goalCount === 0}
+                className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-lg disabled:opacity-20 active:scale-90 transition-transform"
+              >
+                <Minus className="w-3 h-3 text-zinc-400" />
+              </button>
+              <div className="flex items-center gap-1.5 px-2 min-w-[45px] justify-center">
+                <span className="text-xs">⚽</span>
+                <span className="text-xs font-black italic tabular-nums text-white">{goalCount}</span>
+              </div>
+              <button 
+                onClick={() => onAdd(player.id, 'goal')}
+                className="w-8 h-8 flex items-center justify-center bg-emerald-500 text-black rounded-lg active:scale-90 transition-transform shadow-lg shadow-emerald-500/20"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
 
-        {/* Yellow Card */}
-        <button 
-          onClick={() => hasYellow ? onRemove(player.id, 'yellow_card') : onAdd(player.id, 'yellow_card')}
-          className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-90 ${
-            hasYellow 
-              ? 'bg-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]' 
-              : 'bg-zinc-800 border-white/5'
-          }`}
-        >
-          <span className={`text-xs ${hasYellow ? 'text-black' : 'text-zinc-500 opacity-40'}`}>🟨</span>
-        </button>
+            {/* Yellow Card */}
+            <button 
+              onClick={() => hasYellow ? onRemove(player.id, 'yellow_card') : onAdd(player.id, 'yellow_card')}
+              className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-90 ${
+                hasYellow 
+                  ? 'bg-amber-500 border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]' 
+                  : 'bg-zinc-800 border-white/5'
+              }`}
+            >
+              <span className={`text-xs ${hasYellow ? 'text-black' : 'text-zinc-500 opacity-40'}`}>🟨</span>
+            </button>
 
-        {/* Red Card */}
-        <button 
-          onClick={() => hasRed ? onRemove(player.id, 'red_card') : onAdd(player.id, 'red_card')}
-          className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-90 ${
-            hasRed 
-              ? 'bg-red-500 border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
-              : 'bg-zinc-800 border-white/5'
-          }`}
-        >
-          <span className={`text-xs ${hasRed ? 'text-black' : 'text-zinc-500 opacity-40'}`}>🟥</span>
-        </button>
+            {/* Red Card */}
+            <button 
+              onClick={() => hasRed ? onRemove(player.id, 'red_card') : onAdd(player.id, 'red_card')}
+              className={`w-10 h-10 flex items-center justify-center rounded-xl border transition-all active:scale-90 ${
+                hasRed 
+                  ? 'bg-red-500 border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' 
+                  : 'bg-zinc-800 border-white/5'
+              }`}
+            >
+              <span className={`text-xs ${hasRed ? 'text-black' : 'text-zinc-500 opacity-40'}`}>🟥</span>
+            </button>
+
+            {/* Substitution Button */}
+            <button 
+              onClick={() => onAdd(player.id, 'sub_out')}
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-white/5 bg-zinc-800 hover:bg-emerald-500/20 active:scale-90 transition-all"
+            >
+              <span className="text-xs">🔄</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
