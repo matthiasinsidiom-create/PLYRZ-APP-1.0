@@ -802,9 +802,9 @@ export const MatchDetail: React.FC = () => {
       
       console.log(`DEBUG: [UI] MatchDetail loaded ${l.length} lineup entries. Processed: ${history.length > 0}`);
       
-      const voteMap: Record<string, 'up' | 'down'> = {};
+      const voteMap: Record<string, 'up' | 'down' | 'neutral'> = {};
       v.forEach((vote: any) => {
-        voteMap[vote.player_id] = vote.vote;
+        voteMap[vote.player_id] = vote.vote_type || vote.vote;
       });
       setUserVotes(voteMap);
 

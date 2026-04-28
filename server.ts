@@ -67,6 +67,7 @@ async function startServer() {
   app.post("/api/admin/process-fixture-results", async (req, res) => {
     const requestId = Math.random().toString(36).substring(7);
     console.log(`[ADMIN-ROUTE][${requestId}] Incoming request: ${req.method} ${req.url}`);
+    console.log(`[ADMIN-ROUTE][${requestId}] Headers: ${JSON.stringify(req.headers)}`);
     console.log(`[ADMIN-ROUTE][${requestId}] Body: ${JSON.stringify(req.body)}`);
     
     // Set response header to JSON immediately to be safe
@@ -263,14 +264,16 @@ async function startServer() {
             try {
               console.log(`DEBUG: [AUTO-PROCESSOR] Processing fixture ${fixture.id}...`);
               const results = await processFixtureRatings(supabaseAdmin, fixture.id);
-              console.log(`DEBUG: [AUTO-PROCESSOR] SUCCESS for fixture ${fixture.id}. ${results.length} players updated.`);
-            } catch (err) {
-              console.error(`DEBUG: [AUTO-PROCESSOR] FAILED for fixture ${fixture.id}:`, err);
+              console.log(`DEBUG: [AUTO-PROCESSOR] SUCCESS for fixture ${fixture.id}. ${results?.length || 0} players updated.`);
+            } catch (err: any) {
+              console.error(`DEBUG: [AUTO-PROCESSOR] FAILED for fixture ${fixture.id}:`, err?.message || err);
+              if (err?.stack) console.error(err.stack);
             }
           }
         }
-      } catch (err) {
-        console.error('DEBUG: [AUTO-PROCESSOR] Critical interval error:', err);
+      } catch (err: any) {
+        console.error('DEBUG: [AUTO-PROCESSOR] Critical interval error:', err?.message || err);
+        if (err?.stack) console.error(err.stack);
       }
     }, 60000); // 1 minute interval
 

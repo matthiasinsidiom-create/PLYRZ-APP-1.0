@@ -285,8 +285,8 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       id: '', // Will be removed
       fixture_id: fixtureId, player_id: p.playerId,
       old_overall: Math.round(p.oldOverall), new_overall: newOverall, delta_overall: finalDelta,
-      votes_up: p.upVotes, votes_down: p.downVotes,
-      positive_votes: p.upVotes, negative_votes: p.downVotes,
+      votes_up: p.upVotes, votes_down: p.downVotes, votes_neutral: p.neutralVotes,
+      positive_votes: p.upVotes, negative_votes: p.downVotes, neutral_votes: p.neutralVotes,
       vote_score: p.voteScore, vote_impact: p.voteImpact,
       result_impact: p.resultImpact, event_impact: p.eventImpact,
       goal_count: p.goalCount, yellow_count: p.yellowCount, red_count: p.redCount,
