@@ -334,7 +334,25 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     }));
     
     console.log(`DEBUG: [PROCESSOR] Inserting ${historyToInsert.length} history records`);
-    const { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
+    let { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
+    
+    // Fallback if the user hasn't synced the new columns in their Supabase Postgres database
+    if (insError && insError.message && (insError.message.includes('schema cache') || insError.message.includes('neutral_votes'))) {
+      console.warn(`DEBUG: [PROCESSOR] Schema cache error detected for new columns. Retrying without neutral_votes columns... You may need to run "NOTIFY pgrst, 'reload schema';" in Supabase SQL editor.`);
+      const historyWithoutExtraColumns = historyToInsert.map(entry => {
+        const { 
+          positive_votes, 
+          negative_votes, 
+          neutral_votes,
+          votes_neutral,
+          ...rest 
+        } = entry as any;
+        return rest;
+      });
+      const { error: fallbackError } = await supabase.from('player_rating_history').insert(historyWithoutExtraColumns);
+      insError = fallbackError;
+    }
+
     if (insError) {
       console.error(`DEBUG: [PROCESSOR] Rating history insert FAILED:`, insError);
       throw insError;
