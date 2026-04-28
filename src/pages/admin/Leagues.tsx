@@ -130,8 +130,8 @@ const AdminLeagues: React.FC = () => {
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter uppercase">LEAGUES</h1>
-              <p className="text-zinc-500 font-medium text-sm">Manage competitive tiers</p>
+              <h1 className="text-3xl font-black italic tracking-tighter uppercase">LIGEN</h1>
+              <p className="text-zinc-500 font-medium text-sm">Wettbewerbsebenen verwalten</p>
             </div>
           </div>
           <motion.button
@@ -141,7 +141,7 @@ const AdminLeagues: React.FC = () => {
             className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-black font-bold py-3 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-5 h-5" />
-            NEW LEAGUE
+            NEUE LIGA
           </motion.button>
         </div>
 
@@ -150,7 +150,7 @@ const AdminLeagues: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text"
-            placeholder="Search leagues..."
+            placeholder="Ligen suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
@@ -192,11 +192,11 @@ const AdminLeagues: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white">{league.name}</h3>
-                  <p className="text-zinc-500 text-sm">{league.region || 'No region'} • Level {league.level}</p>
+                  <p className="text-zinc-500 text-sm">{league.region || 'Keine Region'} • Level {league.level}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${league.is_active ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                    {league.is_active ? 'Active' : 'Inactive'}
+                    {league.is_active ? 'Aktiv' : 'Inaktiv'}
                   </span>
                 </div>
               </motion.div>
@@ -216,7 +216,7 @@ const AdminLeagues: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingLeague ? 'EDIT LEAGUE' : 'NEW LEAGUE'}
+                    {editingLeague ? 'LIGA BEARBEITEN' : 'NEUE LIGA'}
                   </h2>
                   <button 
                     onClick={() => setIsModalOpen(false)}
@@ -228,14 +228,14 @@ const AdminLeagues: React.FC = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">League Name</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga Name</label>
                     <input 
                       required
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
-                      placeholder="e.g. Premier League"
+                      placeholder="z.B. Kreisliga"
                     />
                   </div>
 
@@ -246,7 +246,7 @@ const AdminLeagues: React.FC = () => {
                       value={formData.region}
                       onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                       className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
-                      placeholder="e.g. London"
+                      placeholder="z.B. Berlin"
                     />
                   </div>
 
@@ -268,7 +268,7 @@ const AdminLeagues: React.FC = () => {
                         onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
                         className={`w-full py-3 px-4 rounded-xl font-bold text-sm transition-all ${formData.is_active ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}
                       >
-                        {formData.is_active ? 'ACTIVE' : 'INACTIVE'}
+                        {formData.is_active ? 'AKTIV' : 'INAKTIV'}
                       </button>
                     </div>
                   </div>
@@ -279,7 +279,7 @@ const AdminLeagues: React.FC = () => {
                     className="w-full bg-emerald-500 text-black font-black py-4 rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                    {editingLeague ? 'UPDATE LEAGUE' : 'CREATE LEAGUE'}
+                    {editingLeague ? 'LIGA AKTUALISIEREN' : 'LIGA ERSTELLEN'}
                   </button>
                 </form>
               </motion.div>
@@ -291,8 +291,8 @@ const AdminLeagues: React.FC = () => {
           isOpen={deleteModal.isOpen}
           onClose={() => setDeleteModal({ isOpen: false, id: null })}
           onConfirm={handleConfirmDelete}
-          title="Delete League?"
-          message="Are you sure you want to delete this league? This will also delete all clubs, teams, and players associated with it. This action cannot be undone."
+          title="Liga löschen?"
+          message="Bist du sicher, dass du diese Liga löschen möchtest? Dies löscht auch alle Vereine, Teams und Spieler, die damit verbunden sind. Diese Aktion kann nicht rückgängig gemacht werden."
           loading={deleting}
         />
       </div>

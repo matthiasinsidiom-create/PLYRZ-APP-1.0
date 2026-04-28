@@ -258,12 +258,15 @@ const AdminFixtures: React.FC = () => {
         return;
       }
 
+      const selectedHomeTeam = teams.find(t => t.id === formData.home_team_id);
+      const isReserve = selectedHomeTeam?.name.toLowerCase().includes('reserve');
       const payload: any = {
         league_id: formData.league_id,
         home_team_id: formData.home_team_id,
         away_team_id: formData.away_team_id,
         kickoff_at: formData.kickoff_at ? new Date(formData.kickoff_at).toISOString() : null,
         status: formData.status,
+        match_type: isReserve ? 'reserve' : 'kampfmannschaft',
         round_number: formData.round_number ? parseInt(formData.round_number) : 1,
         venue_name: formData.venue_name || null,
         home_score: formData.home_score !== '' ? parseInt(formData.home_score) : null,
@@ -388,8 +391,8 @@ const AdminFixtures: React.FC = () => {
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter uppercase">FIXTURES</h1>
-              <p className="text-zinc-500 font-medium text-sm">Schedule & results</p>
+              <h1 className="text-3xl font-black italic tracking-tighter uppercase">SPIELE</h1>
+              <p className="text-zinc-500 font-medium text-sm">Spielplan & Ergebnisse</p>
             </div>
           </div>
           <motion.button
@@ -399,7 +402,7 @@ const AdminFixtures: React.FC = () => {
             className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
           >
             <Plus className="w-5 h-5" />
-            NEW FIXTURE
+            NEUES SPIEL
           </motion.button>
         </div>
 
@@ -408,7 +411,7 @@ const AdminFixtures: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text"
-            placeholder="Search fixtures..."
+            placeholder="Spiele suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
@@ -504,17 +507,17 @@ const AdminFixtures: React.FC = () => {
 
                 <div className="pt-4 border-t border-zinc-800 flex flex-wrap gap-2">
                   <StatusBadge 
-                    label="Lineup" 
+                    label="Aufstellung" 
                     active={fixture.lineup_count > 0} 
                     color="emerald" 
                   />
                   <StatusBadge 
-                    label="Result" 
+                    label="Ergebnis" 
                     active={fixture.home_score !== null && fixture.away_score !== null} 
                     color="blue" 
                   />
                   <StatusBadge 
-                    label="Processed" 
+                    label="Verarbeitet" 
                     active={!!fixture.results_processed_at} 
                     color="purple" 
                   />
@@ -540,7 +543,7 @@ const AdminFixtures: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-8">
                   <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingFixture ? 'EDIT FIXTURE' : 'NEW FIXTURE'}
+                    {editingFixture ? 'SPIEL BEARBEITEN' : 'NEUES SPIEL'}
                   </h2>
                   <button 
                     onClick={() => setIsModalOpen(false)}
@@ -552,14 +555,14 @@ const AdminFixtures: React.FC = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">League</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga</label>
                     <select
                       required
                       value={formData.league_id}
                       onChange={(e) => setFormData({ ...formData, league_id: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
                     >
-                      <option value="">Select a league</option>
+                      <option value="">Liga auswählen</option>
                       {leagues.map(l => (
                         <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
@@ -568,14 +571,14 @@ const AdminFixtures: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Home Team</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Heimteam</label>
                       <select
                         required
                         value={formData.home_team_id}
                         onChange={(e) => setFormData({ ...formData, home_team_id: e.target.value })}
                         className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
                       >
-                        <option value="">Select home team</option>
+                        <option value="">Heimteam auswählen</option>
                         {teams.map(t => (
                           <option key={t.id} value={t.id}>
                             {t.clubs?.name} – {t.name}
@@ -584,14 +587,14 @@ const AdminFixtures: React.FC = () => {
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Away Team</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Auswärtsteam</label>
                       <select
                         required
                         value={formData.away_team_id}
                         onChange={(e) => setFormData({ ...formData, away_team_id: e.target.value })}
                         className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
                       >
-                        <option value="">Select away team</option>
+                        <option value="">Auswärtsteam auswählen</option>
                         {teams.map(t => (
                           <option key={t.id} value={t.id}>
                             {t.clubs?.name} – {t.name}
@@ -602,7 +605,7 @@ const AdminFixtures: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Round (Spieltag)</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Spieltag</label>
                     <input 
                       type="number"
                       min="1"
@@ -615,7 +618,7 @@ const AdminFixtures: React.FC = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Kickoff At</label>
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Anstoß</label>
                     <input 
                       required
                       type="datetime-local"
@@ -632,7 +635,7 @@ const AdminFixtures: React.FC = () => {
                       className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 uppercase tracking-widest"
                     >
                       {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                      {editingFixture ? 'UPDATE FIXTURE' : 'CREATE & MANAGE MATCH'}
+                      {editingFixture ? 'SPIEL AKTUALISIEREN' : 'SPIEL ERSTELLEN'}
                     </button>
                   </div>
                 </form>
@@ -664,9 +667,9 @@ const AdminFixtures: React.FC = () => {
                       </div>
                       <div>
                         <h2 className="text-2xl font-black italic tracking-tighter uppercase text-white">
-                          Match Events
+                          Spielereignisse
                         </h2>
-                        <p className="text-zinc-500 text-sm font-medium">Record goals and assists</p>
+                        <p className="text-zinc-500 text-sm font-medium">Tore und Vorlagen erfassen</p>
                       </div>
                     </div>
                     <button 
@@ -695,14 +698,14 @@ const AdminFixtures: React.FC = () => {
                         <AlertCircle className="w-12 h-12 text-zinc-600" />
                       </div>
                       <div className="max-w-xs">
-                        <p className="text-white font-bold text-lg">No Lineup Available</p>
-                        <p className="text-zinc-500 text-sm mt-1">You must manage match appearances (lineup) before recording goals and assists.</p>
+                        <p className="text-white font-bold text-lg">Keine Aufstellung verfügbar</p>
+                        <p className="text-zinc-500 text-sm mt-1">Du musst erst die Aufstellung verwalten, bevor du Tore und Vorlagen erfassen kannst.</p>
                       </div>
                       <button
                         onClick={() => navigate('/admin/lineups')}
                         className="px-8 py-3 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-zinc-200 transition-all italic"
                       >
-                        Go to Lineups
+                        Zu den Aufstellungen
                       </button>
                     </div>
                   ) : (
@@ -711,7 +714,7 @@ const AdminFixtures: React.FC = () => {
                         {fixtureEvents.map((event, index) => (
                           <div key={index} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 bg-zinc-800/50 rounded-2xl border border-white/5 relative group">
                             <div className="flex-1 w-full space-y-2">
-                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Select Player</label>
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Spieler auswählen</label>
                               
                               <div className="space-y-1 bg-zinc-900/50 p-2 rounded-xl border border-white/5 max-h-40 overflow-y-auto">
                                 {lineupForEvents.map((entry, idx) => {
@@ -743,19 +746,19 @@ const AdminFixtures: React.FC = () => {
                             </div>
 
                             <div className="w-full sm:w-40 space-y-2">
-                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Type</label>
+                              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">Ereignis</label>
                               <select
                                 value={event.event_type}
                                 onChange={(e) => handleUpdateEventRow(index, 'event_type', e.target.value)}
                                 className="w-full bg-zinc-900 border border-zinc-700 rounded-xl py-2.5 px-3 text-sm text-white focus:outline-none focus:border-amber-500/50 transition-colors"
                               >
-                                <option value="goal">Goal</option>
-                                <option value="assist">Assist</option>
-                                <option value="yellow_card">Yellow Card</option>
-                                <option value="red_card">Red Card</option>
-                                <option value="clean_sheet">Clean Sheet</option>
-                                <option value="penalty_saved">Penalty Saved</option>
-                                <option value="penalty_missed">Penalty Missed</option>
+                                <option value="goal">Tor</option>
+                                <option value="assist">Vorlage</option>
+                                <option value="yellow_card">Gelbe Karte</option>
+                                <option value="red_card">Rote Karte</option>
+                                <option value="clean_sheet">Ohne Gegentor</option>
+                                <option value="penalty_saved">Elfmeter gehalten</option>
+                                <option value="penalty_missed">Elfmeter verschossen</option>
                               </select>
                             </div>
 
@@ -796,7 +799,7 @@ const AdminFixtures: React.FC = () => {
                           className="w-full py-4 border-2 border-dashed border-zinc-800 rounded-2xl text-zinc-500 hover:text-amber-500 hover:border-amber-500/50 transition-all flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest"
                         >
                           <Plus className="w-4 h-4" />
-                          Add another event
+                          Weiteres Ereignis hinzufügen
                         </button>
                       </div>
                     </div>
@@ -807,7 +810,7 @@ const AdminFixtures: React.FC = () => {
                       onClick={() => setEventsModal({ isOpen: false, fixtureId: null })}
                       className="flex-1 bg-zinc-800 text-white font-bold py-4 rounded-2xl hover:bg-zinc-700 transition-all uppercase text-sm tracking-widest"
                     >
-                      Cancel
+                      Abbrechen
                     </button>
                     <button
                       disabled={savingEvents || loadingEvents}
@@ -815,7 +818,7 @@ const AdminFixtures: React.FC = () => {
                       className="flex-[2] bg-amber-500 text-black font-black py-4 rounded-2xl hover:bg-amber-600 transition-all uppercase italic tracking-tighter flex items-center justify-center gap-2"
                     >
                       {savingEvents ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                      SAVE EVENTS
+                      EREIGNISSE SPEICHERN
                     </button>
                   </div>
                 </div>
@@ -828,8 +831,8 @@ const AdminFixtures: React.FC = () => {
           isOpen={deleteModal.isOpen}
           onClose={() => setDeleteModal({ isOpen: false, id: null })}
           onConfirm={handleConfirmDelete}
-          title="Delete Fixture?"
-          message="Are you sure you want to delete this fixture? This will also delete any match appearances associated with it. This action cannot be undone."
+          title="Spiel löschen?"
+          message="Bist du sicher, dass du dieses Spiel löschen möchtest? Dies löscht auch alle damit verbundenen Aufstellungen. Diese Aktion kann nicht rückgängig gemacht werden."
           loading={deleting}
         />
 
@@ -860,10 +863,10 @@ const AdminFixtures: React.FC = () => {
 
                   <div className="space-y-2">
                     <h2 className="text-2xl font-black italic tracking-tighter uppercase text-white">
-                      Process Ratings?
+                      Bewertungen verarbeiten?
                     </h2>
                     <p className="text-zinc-400 font-medium leading-relaxed">
-                      Are you sure you want to process ratings for this match? This will update player stats based on community votes and cannot be undone.
+                      Bist du sicher, dass du die Bewertungen für dieses Spiel verarbeiten möchtest? Dies aktualisiert die Spielerwerte basierend auf den Community-Abstimmungen und kann nicht rückgängig gemacht werden.
                     </p>
                   </div>
 
@@ -872,13 +875,13 @@ const AdminFixtures: React.FC = () => {
                       onClick={confirmProcessRatings}
                       className="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2"
                     >
-                      CONFIRM PROCESSING
+                      VERARBEITUNG BESTÄTIGEN
                     </button>
                     <button
                       onClick={() => setRatingConfirmModal({ isOpen: false, fixtureId: null })}
                       className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-4 rounded-2xl transition-all"
                     >
-                      CANCEL
+                      ABBRECHEN
                     </button>
                   </div>
                 </div>
@@ -931,7 +934,7 @@ const AdminFixtures: React.FC = () => {
                     onClick={() => setStatusModal({ ...statusModal, isOpen: false })}
                     className={`w-full ${statusModal.type === 'success' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-red-500 hover:bg-red-600'} text-white font-black py-4 rounded-2xl transition-all`}
                   >
-                    CLOSE
+                    SCHLIESSEN
                   </button>
                 </div>
               </motion.div>

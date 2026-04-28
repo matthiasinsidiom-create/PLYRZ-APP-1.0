@@ -58,7 +58,7 @@ const PlayerRow = React.memo(({
         <div className="flex-1">
           <p className="font-bold text-white">{player.full_name}</p>
           <p className="text-[10px] uppercase tracking-wider text-zinc-500">
-            {getPositionShort(player.position)} • {player.teams?.name || 'No Team'}
+            {getPositionShort(player.position)} • {player.teams?.name || 'Kein Team'}
           </p>
         </div>
         <div className="w-6 h-6 rounded-full border border-zinc-800 flex items-center justify-center">
@@ -124,8 +124,8 @@ const PlayerRow = React.memo(({
             entry.lineup_role === 'starter' ? 'border-emerald-500/50 text-emerald-500' : 'border-zinc-700 text-zinc-500'
           }`}
         >
-          <option value="starter">STARTER</option>
-          <option value="sub">SUB</option>
+          <option value="starter">STARTELF</option>
+          <option value="sub">BANK</option>
         </select>
       </div>
     </div>
@@ -409,7 +409,7 @@ const AdminLineups: React.FC = () => {
                     <ArrowLeft className="w-5 h-5 text-zinc-400" />
                   </button>
               <div>
-                <h1 className="text-2xl font-black italic tracking-tighter uppercase">MATCH APPEARANCES</h1>
+                <h1 className="text-2xl font-black italic tracking-tighter uppercase">AUFSTELLUNGEN</h1>
                 <div className="flex items-center gap-2 text-zinc-500 font-medium text-sm">
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">{selectedFixture.home_team?.clubs?.name}</span>
@@ -429,7 +429,7 @@ const AdminLineups: React.FC = () => {
                 className="bg-emerald-500 hover:bg-emerald-600 text-black font-black py-3 px-8 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
               >
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-                SAVE APPEARANCES
+                AUFSTELLUNG SPEICHERN
               </button>
           </div>
 
@@ -439,10 +439,10 @@ const AdminLineups: React.FC = () => {
                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Users className="w-8 h-8 text-zinc-600" />
                 </div>
-                <h3 className="text-xl font-black italic uppercase tracking-tight text-white mb-2">No Players Found</h3>
+                <h3 className="text-xl font-black italic uppercase tracking-tight text-white mb-2">Keine Spieler gefunden</h3>
                 <p className="text-zinc-500 max-w-md mx-auto text-sm">
-                  We couldn't find any players registered for the clubs involved in this match. 
-                  Please ensure players are added to the clubs in the Player Manager.
+                  Wir konnten keine Spieler für die beteiligten Vereine finden. 
+                  Bitte stelle sicher, dass Spieler im Spieler-Manager hinzugefügt wurden.
                 </p>
               </div>
             ) : (
@@ -457,19 +457,19 @@ const AdminLineups: React.FC = () => {
                     <h3 className="text-lg font-black uppercase italic tracking-tight leading-none text-white">{selectedFixture.home_team?.name}</h3>
                   </div>
                   <div className="ml-auto flex flex-col items-end">
-                    <span className="text-xs font-bold text-zinc-500">{lineup.home.length} Total</span>
-                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">{lineup.home.filter(e => e.lineup_role === 'starter').length} Starters</span>
+                    <span className="text-xs font-bold text-zinc-500">{lineup.home.length} Gesamt</span>
+                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">{lineup.home.filter(e => e.lineup_role === 'starter').length} Startelf</span>
                   </div>
                 </div>
                 <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mt-2 border-t border-zinc-800 pt-2">
-                  Select players, assign jersey numbers and roles
+                  Spieler auswählen, Rückennummern und Rollen zuweisen
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-1">
                 {/* Starters */}
                 {lineup.home.filter(e => e.lineup_role === 'starter').length > 0 && (
                   <div className="space-y-1 mb-4">
-                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest px-2 mb-2">Starting XI</p>
+                    <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest px-2 mb-2">Startelf</p>
                     {lineup.home.filter(e => e.lineup_role === 'starter').map(entry => {
                       const player = homePlayers.find(p => p.id === entry.player_id);
                       if (!player) return null;
@@ -490,7 +490,7 @@ const AdminLineups: React.FC = () => {
                 {/* Substitutes */}
                 {lineup.home.filter(e => e.lineup_role === 'sub').length > 0 && (
                   <div className="space-y-1 mb-4">
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Substitutes</p>
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Auswechselspieler</p>
                     {lineup.home.filter(e => e.lineup_role === 'sub').map(entry => {
                       const player = homePlayers.find(p => p.id === entry.player_id);
                       if (!player) return null;
@@ -510,7 +510,7 @@ const AdminLineups: React.FC = () => {
 
                 {/* Available Players */}
                 <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-2 mb-2">Available Pool</p>
+                  <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-2 mb-2">Verfügbare Spieler</p>
                   {homePlayers.filter(p => !lineup.home.some(e => e.player_id === p.id)).map(player => (
                     <PlayerRow 
                       key={player.id}
@@ -535,24 +535,24 @@ const AdminLineups: React.FC = () => {
                         <h3 className="text-lg font-black uppercase italic tracking-tight leading-none text-white">{selectedFixture.away_team?.name}</h3>
                       </div>
                       <div className="ml-auto flex flex-col items-end">
-                        <span className="text-xs font-bold text-zinc-500">{lineup.away.length} Total</span>
-                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{lineup.away.filter(e => e.lineup_role === 'starter').length} Starters</span>
+                        <span className="text-xs font-bold text-zinc-500">{lineup.away.length} Gesamt</span>
+                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{lineup.away.filter(e => e.lineup_role === 'starter').length} Startelf</span>
                       </div>
                     </div>
                     <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mt-2 border-t border-zinc-800 pt-2">
-                      Select players, assign jersey numbers and roles
+                      Spieler auswählen, Rückennummern und Rollen zuweisen
                     </p>
                   </div>
                   {awayPlayers.length === 0 ? (
                     <div className="p-8 bg-zinc-900/50 border border-zinc-800 border-dashed rounded-xl text-center">
-                      <p className="text-zinc-600 text-xs font-bold uppercase tracking-widest">No players found for this club</p>
+                      <p className="text-zinc-600 text-xs font-bold uppercase tracking-widest">Keine Spieler für diesen Verein gefunden</p>
                     </div>
                   ) : (
                   <div className="grid grid-cols-1 gap-1">
                     {/* Starters */}
                     {lineup.away.filter(e => e.lineup_role === 'starter').length > 0 && (
                       <div className="space-y-1 mb-4">
-                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest px-2 mb-2">Starting XI</p>
+                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest px-2 mb-2">Startelf</p>
                         {lineup.away.filter(e => e.lineup_role === 'starter').map(entry => {
                           const player = awayPlayers.find(p => p.id === entry.player_id);
                           if (!player) return null;
@@ -573,7 +573,7 @@ const AdminLineups: React.FC = () => {
                     {/* Substitutes */}
                     {lineup.away.filter(e => e.lineup_role === 'sub').length > 0 && (
                       <div className="space-y-1 mb-4">
-                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Substitutes</p>
+                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Auswechselspieler</p>
                         {lineup.away.filter(e => e.lineup_role === 'sub').map(entry => {
                           const player = awayPlayers.find(p => p.id === entry.player_id);
                           if (!player) return null;
@@ -593,7 +593,7 @@ const AdminLineups: React.FC = () => {
 
                     {/* Available Players */}
                     <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-2 mb-2">Available Pool</p>
+                      <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-2 mb-2">Verfügbare Spieler</p>
                       {awayPlayers.filter(p => !lineup.away.some(e => e.player_id === p.id)).map(player => (
                         <PlayerRow 
                           key={player.id}
@@ -627,11 +627,11 @@ const AdminLineups: React.FC = () => {
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
           </button>
           <div>
-            <h1 className="text-3xl font-black italic tracking-tighter uppercase">MATCH APPEARANCES</h1>
+            <h1 className="text-3xl font-black italic tracking-tighter uppercase">AUFSTELLUNGEN</h1>
             <div className="flex items-center gap-3 mt-1">
-              <p className="text-zinc-500 font-medium text-sm">Assign players who participated in matches</p>
+              <p className="text-zinc-500 font-medium text-sm">Spieler zuweisen, die an Spielen teilgenommen haben</p>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase tracking-widest border border-emerald-500/20">
-                Upcoming, Live & Finished
+                Anstehend, Live & Beendet
               </span>
             </div>
           </div>
@@ -641,7 +641,7 @@ const AdminLineups: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input 
             type="text"
-            placeholder="Search fixtures..."
+            placeholder="Spiele suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-yellow-500/50 transition-colors"
@@ -651,7 +651,7 @@ const AdminLineups: React.FC = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-            <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Loading matches...</p>
+            <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Spiele werden geladen...</p>
           </div>
         ) : (
           <div className="space-y-12">
@@ -659,12 +659,12 @@ const AdminLineups: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">UPCOMING MATCHES</h2>
+                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">ANSTEHENDE SPIELE</h2>
               </div>
               
               {upcomingFixtures.length === 0 ? (
                 <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-2xl p-8 text-center">
-                  <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">No upcoming fixtures found</p>
+                  <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">Keine anstehenden Spiele gefunden</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -709,12 +709,12 @@ const AdminLineups: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">LIVE MATCHES</h2>
+                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">LIVE-SPIELE</h2>
               </div>
               
               {liveFixtures.length === 0 ? (
                 <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-2xl p-8 text-center">
-                  <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">No live fixtures found</p>
+                  <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">Keine Live-Spiele gefunden</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -759,12 +759,12 @@ const AdminLineups: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-zinc-500 rounded-full" />
-                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">FINISHED MATCHES</h2>
+                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">BEENDETE SPIELE</h2>
               </div>
 
               {finishedFixtures.length === 0 ? (
                 <div className="bg-zinc-900/50 border border-zinc-800 border-dashed rounded-2xl p-8 text-center">
-                  <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">No finished fixtures found</p>
+                  <p className="text-zinc-600 font-bold uppercase tracking-widest text-[10px]">Keine beendeten Spiele gefunden</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

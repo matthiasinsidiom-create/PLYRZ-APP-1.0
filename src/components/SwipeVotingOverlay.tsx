@@ -7,15 +7,11 @@ import {
   X, 
   CheckCircle2, 
   Trophy,
-  ArrowRight,
   Loader2,
   AlertCircle,
   Clock
 } from 'lucide-react';
 import { PlayerCard } from './PlayerCard';
-import { Player } from '../types';
-import { getPositionShort } from '../lib/positions';
-
 import { supabaseService } from '../services/supabaseService';
 
 interface SwipeVotingOverlayProps {
@@ -30,11 +26,65 @@ interface SwipeVotingOverlayProps {
   resultsProcessedAt?: string | null;
 }
 
-interface VoteQueueItem {
-  playerId: string;
-  vote: 'up' | 'down' | 'neutral';
-  retries: number;
-}
+const variants = {
+  enter: { opacity: 0, x: 0, scale: 0.95, y: 0 },
+  center: { opacity: 1, x: 0, scale: 1, y: 0 },
+  exit: (direction: number) => ({
+    x: direction,
+    y: direction === 0 ? -50 : 0,
+    opacity: 0,
+    scale: 0.9,
+    rotate: direction / 10
+  })
+};
+
+const SwipeablePlayerCard = ({
+  player,
+  currentPlayerEntry,
+  exitDirection,
+  onSwipe
+}: {
+  player: any;
+  currentPlayerEntry: any;
+  exitDirection: number;
+  onSwipe: (dir: 'left'|'right') => void;
+}) => {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 200], [-25, 25]);
+
+  const handleDragEnd = useCallback((_: any, info: any) => {
+    const threshold = 80;
+    if (info.offset.x > threshold) {
+      onSwipe('right');
+    } else if (info.offset.x < -threshold) {
+      onSwipe('left');
+    }
+  }, [onSwipe]);
+
+  return (
+    <motion.div
+      custom={exitDirection}
+      variants={variants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      style={{ x, rotate }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      onDragEnd={handleDragEnd}
+      transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+      className="cursor-grab active:cursor-grabbing z-10 w-full col-start-1 row-start-1"
+    >
+      <div className="relative rounded-[3rem] overflow-hidden shadow-2xl">
+        <PlayerCard 
+          player={player} 
+          jerseyNumber={currentPlayerEntry?.jersey_number}
+          lineupRole={currentPlayerEntry?.lineup_role}
+        />
+      </div>
+    </motion.div>
+  );
+};
 
 export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   fixtureId,
@@ -54,7 +104,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   });
   
   const [exitDirection, setExitDirection] = useState<number>(0);
-  const [isVoting, setIsVoting] = useState(false);
   const [completed, setCompleted] = useState(() => {
     const hasPlayers = lineup.length > 0;
     const allVoted = hasPlayers && lineup.every(entry => !!userVotes[entry.player_id]);
@@ -64,111 +113,56 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   const [isCheckingCompletion, setIsCheckingCompletion] = useState(true);
   const [hasCompletedBefore, setHasCompletedBefore] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [successFlash, setSuccessFlash] = useState<'up' | 'down' | 'neutral' | null>(null);
 
-  // Queue System
-  const queueRef = useRef<VoteQueueItem[]>([]);
-  const isProcessingQueue = useRef(false);
-  const [queueVisible, setQueueVisible] = useState(0); // Just to trigger re-renders for debug if needed
-
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-25, 25]);
-  const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0, 1, 1, 1, 0]);
-  const cardScale = useTransform(x, [-150, 0, 150], [1.05, 1, 1.05]);
-  
-  const upvoteGlow = useTransform(x, [20, 120], [0, 1]);
-  const downvoteGlow = useTransform(x, [-120, -20], [1, 0]);
-  const upvoteScale = useTransform(x, [20, 120], [0.8, 1.1]);
-  const downvoteScale = useTransform(x, [-120, -20], [1.1, 0.8]);
-  const upvoteRotate = useTransform(x, [20, 120], [-10, 0]);
-  const downvoteRotate = useTransform(x, [-120, -20], [0, 10]);
+  // Anti-double-click protection
+  const isAnimatingRef = useRef(false);
 
   const currentPlayerEntry = useMemo(() => lineup[currentIndex], [lineup, currentIndex]);
-  const nextPlayerEntry = useMemo(() => lineup[currentIndex + 1], [lineup, currentIndex]);
   const totalPlayers = lineup.length;
 
   // Preloading Assets
   useEffect(() => {
     const preloadImages = () => {
-      console.log('DEBUG: [PERF] Starting asset preloading');
-      lineup.forEach(entry => {
-        const player = entry.players;
+      // PRELOAD FRAMES
+      ['bronze', 'silver', 'gold'].forEach(tier => {
+        const img = new Image();
+        img.src = `/assets/frames/card-frame-${tier}.png`;
+      });
+
+      // PRELOAD next few players
+      const maxPreload = Math.min(currentIndex + 4, lineup.length);
+      for (let i = currentIndex; i < maxPreload; i++) {
+        const player = lineup[i]?.players;
         if (player) {
-          // Preload player photo
           if (player.photo_url) {
             const img = new Image();
             img.src = player.photo_url;
           }
-          // Preload club logo
           const clubLogo = player.teams?.clubs?.logo_url;
           if (clubLogo) {
             const img = new Image();
             img.src = clubLogo;
           }
-          // Preload flag
           const flagCode = (player.nationality || 'de').toLowerCase();
           const flagImg = new Image();
           flagImg.src = `https://flagcdn.com/w80/${flagCode}.png`;
         }
-      });
-      console.log('DEBUG: [PERF] Asset preloading scheduled');
+      }
     };
 
     preloadImages();
-  }, [lineup]);
+  }, [lineup, currentIndex]);
 
-  // Queue background processor
-  const processQueue = useCallback(async () => {
-    if (isProcessingQueue.current || queueRef.current.length === 0) return;
-    
-    isProcessingQueue.current = true;
-    
-    while (queueRef.current.length > 0) {
-      const item = queueRef.current[0];
-      const startCall = performance.now();
-      console.log(`DEBUG: [QUEUE] Processing vote for ${item.playerId}: ${item.vote}. Queue length: ${queueRef.current.length}`);
-      
-      try {
-        await onVote(item.playerId, item.vote);
-        console.log(`DEBUG: [QUEUE] Success for ${item.playerId}. Latency: ${(performance.now() - startCall).toFixed(2)}ms`);
-        queueRef.current.shift(); // Remove handled item
-        setQueueVisible(prev => prev + 1);
-      } catch (err: any) {
-        console.error(`DEBUG: [QUEUE] Error for ${item.playerId}:`, err);
-        
-        if (err.message?.includes('already completed')) {
-          queueRef.current.shift();
-          continue;
-        }
+  const markAsCompleted = useCallback(async () => {
+    if (!userId || !fixtureId) return;
 
-        item.retries++;
-        if (item.retries >= 3) {
-          console.error(`DEBUG: [QUEUE] Max retries reached for ${item.playerId}. Dropping.`);
-          queueRef.current.shift();
-        } else {
-          // Wait a bit before retry
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
+    try {
+      await supabaseService.markVoteAsCompleted(fixtureId, userId);
+      console.log(`DEBUG: [COMPLETION] Sync success for ${fixtureId}`);
+    } catch (err) {
+      console.error(`DEBUG: [COMPLETION] Sync error:`, err);
     }
-    
-    isProcessingQueue.current = false;
-    
-    // Check if we should mark completion now that queue is empty
-    const allExpectedVoted = lineup.every((entry, idx) => {
-      if (idx < currentIndex) return true; // Already swiped
-      return !!userVotes[entry.player_id];
-    });
-
-    if (queueRef.current.length === 0 && currentIndex >= totalPlayers) {
-      console.log('DEBUG: [QUEUE] Queue finished and last card swiped. Marking completion.');
-      markAsCompleted();
-    }
-  }, [onVote, lineup, currentIndex, totalPlayers, userVotes]);
-
-  useEffect(() => {
-    processQueue();
-  }, [processQueue, queueVisible]);
+  }, [fixtureId, userId]);
 
   useEffect(() => {
     const checkCompletion = async () => {
@@ -193,53 +187,35 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     checkCompletion();
   }, [userId, fixtureId]);
 
-  const markAsCompleted = useCallback(async () => {
-    if (!userId || !fixtureId) return;
-    
-    // Wait for queue to be truly empty before writing completion
-    if (queueRef.current.length > 0) {
-      console.log('DEBUG: [COMPLETION] Delayed: Queue not empty yet');
-      return;
-    }
-
-    try {
-      await supabaseService.markVoteAsCompleted(fixtureId, userId);
-      console.log(`DEBUG: [COMPLETION] Sync success for ${fixtureId}`);
-    } catch (err) {
-      console.error(`DEBUG: [COMPLETION] Sync error:`, err);
-    }
-  }, [fixtureId, userId]);
-
   const handleVoteAction = useCallback((playerId: string, vote: 'up' | 'down' | 'neutral') => {
-    const start = performance.now();
-    console.log(`DEBUG: [PERF] swipe_start_timestamp: ${start.toFixed(2)}ms`);
+    if (isAnimatingRef.current) return;
+    isAnimatingRef.current = true;
 
-    // 1. Add to queue (optimistic)
-    queueRef.current.push({ playerId, vote, retries: 0 });
-    setQueueVisible(prev => prev + 1);
+    console.log(`DEBUG: [SWIPE] start ${playerId} -> ${vote}`);
+
+    // 1. Optimistic Background api call
+    onVote(playerId, vote).catch((err) => {
+      console.error(`DEBUG: [VOTE] Backend error for ${playerId}:`, err);
+    });
 
     // 2. UI Update immediately
     const nextIndex = currentIndex + 1;
     
-    // Snappy transition: Clear card immediately
     if (nextIndex < totalPlayers) {
       setCurrentIndex(nextIndex);
-      setExitDirection(0);
-      x.set(0);
-      setIsVoting(false);
-      setSuccessFlash(null);
     } else {
-      console.log(`DEBUG: [VOTE_COMPLETION] Last player reached.`);
-      setIsVoting(false);
       setCompleted(true);
-      // markAsCompleted() called by processQueue effect when queue empty
+      markAsCompleted();
     }
 
-    console.log(`DEBUG: [PERF] next_card_visible_timestamp: ${(performance.now() - start).toFixed(2)}ms`);
-  }, [currentIndex, totalPlayers, x]);
+    // Free lock quickly
+    setTimeout(() => {
+      isAnimatingRef.current = false;
+    }, 50);
+  }, [currentIndex, totalPlayers, onVote, markAsCompleted]);
 
   const handleSwipe = useCallback((direction: 'left' | 'right') => {
-    if (isVoting || completed || !currentPlayerEntry?.players) return;
+    if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
 
     if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
       setCompleted(true);
@@ -250,40 +226,22 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     if (showHint) setShowHint(false);
     
     setExitDirection(direction === 'right' ? 800 : -800);
-    setIsVoting(true);
-    setSuccessFlash(vote);
 
-    // Give a tiny bit of time for the swipe animation to start before swapping card data
-    setTimeout(() => {
-      handleVoteAction(currentPlayerEntry.player_id, vote);
-    }, 50); 
-  }, [isVoting, completed, currentPlayerEntry, votingCloseAt, showHint, handleVoteAction]);
+    handleVoteAction(currentPlayerEntry.player_id, vote);
+  }, [completed, currentPlayerEntry, votingCloseAt, showHint, handleVoteAction]);
 
   const handleNeutralVote = useCallback(() => {
-    if (isVoting || completed || !currentPlayerEntry?.players) return;
+    if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
     
     if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
       setCompleted(true);
       return;
     }
 
-    setIsVoting(true);
     setExitDirection(0);
-    setSuccessFlash('neutral');
 
-    setTimeout(() => {
-      handleVoteAction(currentPlayerEntry.player_id, 'neutral');
-    }, 50);
-  }, [isVoting, completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
-
-  const handleDragEnd = useCallback((_: any, info: any) => {
-    const threshold = 80; // Smaller threshold for faster reaction
-    if (info.offset.x > threshold) {
-      handleSwipe('right');
-    } else if (info.offset.x < -threshold) {
-      handleSwipe('left');
-    }
-  }, [handleSwipe]);
+    handleVoteAction(currentPlayerEntry.player_id, 'neutral');
+  }, [completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
 
   if (totalPlayers === 0) {
     return (
@@ -392,16 +350,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col overflow-hidden"
     >
-      {/* Glow Backgrounds */}
-      <motion.div 
-        style={{ opacity: upvoteGlow }}
-        className="absolute inset-y-0 right-0 w-1/2 bg-emerald-500/20 blur-[120px] pointer-events-none"
-      />
-      <motion.div 
-        style={{ opacity: downvoteGlow }}
-        className="absolute inset-y-0 left-0 w-1/2 bg-red-500/20 blur-[120px] pointer-events-none"
-      />
-
       {/* Header */}
       <div className="p-6 flex items-center justify-between relative z-10">
         <button 
@@ -428,12 +376,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-            {isProcessingQueue.current && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-emerald-500/20 rounded-xl">
-                    <Loader2 className="w-3 h-3 text-emerald-500 animate-spin" />
-                    <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Syching...</span>
-                </div>
-            )}
         </div>
       </div>
 
@@ -450,72 +392,17 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
           </div>
         </div>
 
-        <div className="relative flex flex-col items-center w-full max-w-[350px]">
-            {/* NEXT CARD (Stacking) */}
-            <AnimatePresence>
-                {nextPlayerEntry && (
-                    <motion.div
-                        key={`next-${nextPlayerEntry.player_id}`}
-                        initial={{ scale: 0.9, opacity: 0.5, y: 10 }}
-                        animate={{ scale: 0.95, opacity: 0.8, y: 0 }}
-                        className="absolute inset-0 pointer-events-none z-0"
-                    >
-                        <PlayerCard 
-                            player={nextPlayerEntry.players} 
-                            jerseyNumber={nextPlayerEntry.jersey_number}
-                            lineupRole={nextPlayerEntry.lineup_role}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* CURRENT CARD */}
-            <AnimatePresence mode="popLayout">
+        <div className="relative grid place-items-center w-[350px]">
+            {/* CURRENT CARD ONLY */}
+            <AnimatePresence custom={exitDirection}>
                 {currentPlayer && (
-                  <motion.div
+                  <SwipeablePlayerCard
                     key={currentPlayer.id}
-                    style={{ x, rotate, opacity, scale: cardScale }}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    onDragEnd={handleDragEnd}
-                    initial={{ scale: 0.95, opacity: 1, x: 0 }}
-                    animate={{ scale: 1, opacity: 1, x: 0 }}
-                    exit={{ x: exitDirection, opacity: 0, scale: 0.5, rotate: exitDirection / 10 }}
-                    transition={{ type: 'spring', damping: 30, stiffness: 500 }}
-                    className="cursor-grab active:cursor-grabbing relative z-10"
-                  >
-                    <div 
-                      className={`relative rounded-[3rem] overflow-hidden shadow-2xl transition-all duration-150 ${
-                        successFlash === 'up' ? 'ring-8 ring-emerald-500/50 scale-95' : 
-                        successFlash === 'down' ? 'ring-8 ring-red-500/50 scale-95' : 
-                        successFlash === 'neutral' ? 'ring-8 ring-zinc-500/50 scale-95' : ''
-                      }`}
-                    >
-                      <PlayerCard 
-                        player={currentPlayer} 
-                        jerseyNumber={currentPlayerEntry?.jersey_number}
-                        lineupRole={currentPlayerEntry?.lineup_role}
-                      />
-                      
-                      <motion.div 
-                        style={{ opacity: upvoteGlow, scale: upvoteScale, rotate: upvoteRotate }}
-                        className="absolute inset-0 bg-emerald-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
-                      >
-                        <div className="bg-emerald-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-emerald-400 shadow-2xl scale-110">
-                          👍 GUT
-                        </div>
-                      </motion.div>
-                      
-                      <motion.div 
-                        style={{ opacity: downvoteGlow, scale: downvoteScale, rotate: downvoteRotate }}
-                        className="absolute inset-0 bg-red-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
-                      >
-                        <div className="bg-red-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-red-400 shadow-2xl scale-110">
-                          👎 SCHLECHT
-                        </div>
-                      </motion.div>
-                    </div>
-                  </motion.div>
+                    player={currentPlayer}
+                    currentPlayerEntry={currentPlayerEntry}
+                    exitDirection={exitDirection}
+                    onSwipe={handleSwipe}
+                  />
                 )}
             </AnimatePresence>
         </div>
@@ -541,7 +428,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             onClick={handleNeutralVote}
-            disabled={isVoting}
             className="flex flex-col items-center gap-1.5 group transition-all active:scale-95 mx-auto"
           >
             <span className="text-zinc-400 group-hover:text-zinc-200 font-black italic uppercase tracking-[0.3em] text-[10px] py-2.5 px-10 bg-zinc-900/80 border border-white/20 rounded-full transition-colors">
@@ -556,7 +442,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
         <div className="flex items-center gap-8">
           <button
             onClick={() => handleSwipe('left')}
-            disabled={isVoting}
             className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-all active:scale-90 shadow-2xl"
           >
             <ThumbsDown className="w-8 h-8" />
@@ -564,7 +449,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
           
           <button
             onClick={() => handleSwipe('right')}
-            disabled={isVoting}
             className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all active:scale-90 shadow-2xl"
           >
             <ThumbsUp className="w-8 h-8" />

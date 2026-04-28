@@ -20,6 +20,7 @@ import PlayerList from './pages/fan/PlayerList';
 import PlayerDetail from './pages/fan/PlayerDetail';
 import { Leaderboard } from './pages/Leaderboard';
 import { Profile } from './pages/fan/Profile';
+import { RatingLogicScreen } from './pages/fan/RatingLogicScreen';
 import { VoteList } from './pages/fan/VoteList';
 import { BottomNav } from './components/BottomNav';
 import { motion } from 'framer-motion';
@@ -188,6 +189,7 @@ const AppContent: React.FC = () => {
           <Route path="/players/:id" element={<PlayerDetail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/rating-logic" element={<RatingLogicScreen />} />
           <Route path="/vote" element={<VoteList />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

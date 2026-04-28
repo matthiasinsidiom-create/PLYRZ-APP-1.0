@@ -802,9 +802,9 @@ export const MatchDetail: React.FC = () => {
       
       console.log(`DEBUG: [UI] MatchDetail loaded ${l.length} lineup entries. Processed: ${history.length > 0}`);
       
-      const voteMap: Record<string, 'up' | 'down'> = {};
+      const voteMap: Record<string, 'up' | 'down' | 'neutral'> = {};
       v.forEach((vote: any) => {
-        voteMap[vote.player_id] = vote.vote;
+        voteMap[vote.player_id] = vote.vote_type || vote.vote;
       });
       setUserVotes(voteMap);
 
@@ -870,9 +870,10 @@ export const MatchDetail: React.FC = () => {
     setIsProcessing(true);
     try {
       const results = await supabaseService.processFixtureRatings(id);
-      console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS. ${results.length} players updated.`);
+      const count = results.processedCount || (Array.isArray(results) ? results.length : 0);
+      console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS. ${count} players updated.`);
       setIsProcessed(true);
-      setProcessedCount(results.length);
+      setProcessedCount(count);
       
       // Auto-navigate to result screen after a short delay
       setTimeout(() => {

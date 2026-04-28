@@ -42,23 +42,36 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   }
 
   // 2. Load Lineup
+  console.log(`DEBUG: [PROCESSOR] Loading lineup for fixture ${fixtureId}`);
   const { data: lineupData, error: lineupError } = await supabase
     .from('fixture_lineups')
     .select('*, players(*)')
     .eq('fixture_id', fixtureId);
   
-  if (lineupError || !lineupData || lineupData.length === 0) {
+  if (lineupError) {
+    console.error(`DEBUG: [PROCESSOR] Lineup fetch failed:`, lineupError);
+    throw new Error(`Lineup fetch failed: ${lineupError.message}`);
+  }
+  
+  if (!lineupData || lineupData.length === 0) {
+    console.warn(`DEBUG: [PROCESSOR] No players found in lineup for fixture ${fixtureId}`);
     throw new Error('No players in lineup for this fixture.');
   }
+  console.log(`DEBUG: [PROCESSOR] Found ${lineupData.length} lineup entries`);
 
   // 3. Load Player Stats
   const playerIds = lineupData.map(e => e.player_id).filter(Boolean);
+  console.log(`DEBUG: [PROCESSOR] Fetching stats for ${playerIds.length} players`);
   const { data: statsData, error: statsError } = await supabase
     .from('player_stats')
     .select('*')
     .in('player_id', playerIds);
   
-  if (statsError) throw new Error(`Stats fetch failed: ${statsError.message}`);
+  if (statsError) {
+    console.error(`DEBUG: [PROCESSOR] Stats fetch failed:`, statsError);
+    throw new Error(`Stats fetch failed: ${statsError.message}`);
+  }
+  console.log(`DEBUG: [PROCESSOR] Found ${statsData?.length || 0} stats records`);
 
   const statsByPlayer: Record<string, PlayerStats[]> = {};
   statsData?.forEach(stat => {
@@ -67,12 +80,19 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   });
 
   // 4. Load Votes
+  console.log("STEP: votes loaded");
+  console.log(`DEBUG: [PROCESSOR] Fetching votes for fixture ${fixtureId}`);
   const { data: votes, error: votesError } = await supabase
     .from('player_votes')
     .select('*')
     .eq('fixture_id', fixtureId);
   
-  if (votesError) throw new Error(`Votes fetch failed: ${votesError.message}`);
+  if (votesError) {
+    console.error(`DEBUG: [PROCESSOR] Votes fetch failed:`, votesError);
+    throw new Error(`Votes fetch failed: ${votesError.message}`);
+  }
+  console.log(`DEBUG: [PROCESSOR] Found ${votes?.length || 0} votes`);
+
 
   const votesByPlayer: Record<string, any[]> = {};
   votes?.forEach(v => {
@@ -82,17 +102,25 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   });
 
   // 5. Load Match Events
-  const { data: matchEventsData } = await supabase
+  console.log(`DEBUG: [PROCESSOR] Fetching match events for fixture ${fixtureId}`);
+  const { data: matchEventsData, error: matchEventsError } = await supabase
     .from('match_events')
     .select('*')
     .eq('fixture_id', fixtureId);
+  
+  if (matchEventsError) {
+    console.error(`DEBUG: [PROCESSOR] Match events fetch failed:`, matchEventsError);
+    // Continue anyway as events are optional
+  }
   const matchEvents = matchEventsData || [];
+  console.log(`DEBUG: [PROCESSOR] Found ${matchEvents.length} match events`);
 
   // Team Details
   const homeTeamId = fixture.home_team_id;
   const awayTeamId = fixture.away_team_id;
   const homeScore = fixture.home_score || 0;
   const awayScore = fixture.away_score || 0;
+  console.log(`DEBUG: [PROCESSOR] Home ID: ${homeTeamId}, Away ID: ${awayTeamId}, Score: ${homeScore}-${awayScore}`);
 
   const getPlayerRating = (playerId: string) => {
     const playerStats = statsByPlayer[playerId] || [];
@@ -129,8 +157,8 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const rawPos = entry.players?.position;
     const posGroup = getPositionGroup(rawPos);
 
-    // Participation
-    const participationMultiplier = entry.lineup_role === 'starter' ? 1.0 : 0.75;
+    // Participation (Not explicitly stated in new rules, prompt says 'no multipliers', so let's set to 1.0)
+    const participationMultiplier = 1.0;
 
     // Votes
     const playerVotes = votesByPlayer[playerId] || [];
@@ -138,15 +166,13 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const downVotes = playerVotes.filter(v => (v.vote_type || v.vote) === 'down').length;
     const neutralVotes = playerVotes.filter(v => (v.vote_type || v.vote) === 'neutral').length;
     const voteScore = upVotes - downVotes;
-    const voteImpact = voteScore * 0.25;
+    const voteImpact = voteScore * 0.15;
 
     // Clean Sheet Impact
     let cleanSheetImpact = 0;
     if (isCleanSheet) {
       if (posGroup === 'Torwart') cleanSheetImpact = 1.0;
-      else if (posGroup === 'Abwehr') cleanSheetImpact = 0.5;
-      else if (posGroup === 'Mittelfeld') cleanSheetImpact = 0.15;
-      // Sturm stays at 0
+      else cleanSheetImpact = 0.3;
     }
 
     // Events Impact
@@ -156,21 +182,17 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const yellowCount = playerEvents.filter(e => e.event_type === 'yellow_card').length;
     const redCount = playerEvents.filter(e => e.event_type === 'red_card').length;
 
-    // RULE 3.0 Update: All outfield players get +1.0 per goal. 
-    // Goalkeeper gets +0.0 (or +1.0 if they actually score as an exception).
-    const goalImpactPerGoal = posGroup === 'Torwart' ? 1.0 : 1.0; 
-    const goalImpact = goalCount * goalImpactPerGoal;
+    // Goals & Assists
+    const goalImpact = goalCount * 1.0; 
+    const assistBonus = 0.5;
+
+    // Opponent Goal Penalty
+    const oppGoalPenalty = teamGoalsAgainst * -0.2;
     
-    // Assist bonus remains position-logic dependent
-    let assistBonus = 0.4;
-    if (posGroup === 'Torwart') assistBonus = 0.8;
-    else if (posGroup === 'Abwehr') assistBonus = 0.6;
-    else if (posGroup === 'Mittelfeld') assistBonus = 0.5;
+    // Cards penalty
+    const eventImpact = goalImpact + (assistCount * assistBonus) + (yellowCount * -0.2) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
 
-    const oppGoalPenalty = teamGoalsAgainst * (posGroup === 'Torwart' || posGroup === 'Abwehr' ? -0.2 : -0.05);
-    const eventImpact = goalImpact + (assistCount * assistBonus) + (yellowCount * -0.25) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
-
-    // Result Impact logic: Fixed values per user request
+    // Result Impact logic: Fixed values
     let resultImpact = 0;
     if (actualScore === 1) resultImpact = 0.2;       // Win
     else if (actualScore === 0) resultImpact = -0.2;  // Loss
@@ -179,14 +201,16 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const expectedScore = 1 / (1 + Math.pow(10, (oppAvg - teamAvg) / 12));
 
     // Raw Delta
-    const rawDelta = (voteImpact + resultImpact + eventImpact) * participationMultiplier;
+    const rawDelta = voteImpact + resultImpact + eventImpact;
     const finalDeltaBase = Math.max(-2, Math.min(2, rawDelta));
 
-    // MVP Score (Break ties for MVP)
-    const mvpScore = (voteScore * 10) + (upVotes * 2) + (rawDelta * 5);
+    // MVP Score (used for ties)
+    const voteRatio = (upVotes + downVotes) > 0 ? (upVotes / (upVotes + downVotes)) : 0;
+    const mvpScore = voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta;
+
     playerCalcs.push({
       playerId, oldOverall, posGroup, rawPos, isHome, participationMultiplier,
-      upVotes, downVotes, neutralVotes, voteScore, voteImpact, 
+      upVotes, downVotes, neutralVotes, voteScore, voteImpact, voteRatio,
       goalCount, goalImpact, assistCount, yellowCount, redCount, isCleanSheet, teamGoalsAgainst,
       eventImpact, resultImpact, expectedScore, actual_score: actualScore,
       rawDelta, finalDeltaBase, mvpScore, players: entry.players,
@@ -196,12 +220,15 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
 
   // 7. MVP Selection
   let mvpId: string | null = null;
-  const potentialMVPs = playerCalcs.filter(p => p.voteScore > 0 && p.upVotes > p.downVotes && (p.finalDeltaBase >= 1.5 || p.rawDelta >= 1.8));
+  // MVP must have positive votes > negative votes (voteScore > 0)
+  const potentialMVPs = playerCalcs.filter(p => p.voteScore > 0);
   
   if (potentialMVPs.length > 0) {
     potentialMVPs.sort((a, b) => {
+      if (b.finalDeltaBase !== a.finalDeltaBase) return b.finalDeltaBase - a.finalDeltaBase;
       if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore;
       if (b.upVotes !== a.upVotes) return b.upVotes - a.upVotes;
+      if (b.voteRatio !== a.voteRatio) return b.voteRatio - a.voteRatio;
       if (b.rawDelta !== a.rawDelta) return b.rawDelta - a.rawDelta;
       if (b.isStarter !== a.isStarter) return b.isStarter ? 1 : -1;
       return b.oldOverall - a.oldOverall;
@@ -224,22 +251,27 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     const newStats = { ...oldStats };
 
     if (Math.abs(finalDelta) >= 0.2) {
-      const change = finalDelta > 0 ? (finalDelta >= 2.0 ? 2 : 1) : (finalDelta <= -1.0 ? -2 : -1);
+      const change = finalDelta > 0 ? 1 : -1;
       
       const weights: Record<string, (keyof PlayerStats)[]> = {
-        'Torwart': p.isCleanSheet ? ['def', 'phy', 'pas'] : (p.teamGoalsAgainst > 0 ? ['phy', 'def', 'pas'] : ['phy', 'def']),
-        'Abwehr': p.isCleanSheet ? ['def', 'phy', 'tem'] : ['def', 'phy', 'pas'],
-        'Mittelfeld': p.goalCount > 0 ? ['sch', 'pas', 'dri', 'phy'] : ['pas', 'dri', 'phy', 'tem'],
-        'Sturm': p.goalCount > 0 ? ['sch', 'dri', 'tem'] : ['dri', 'tem', 'sch', 'pas']
+        'Torwart': ['def', 'phy', 'pas', 'dri'],
+        'Abwehr': ['def', 'phy', 'tem', 'pas'],
+        'Mittelfeld': ['pas', 'dri', 'tem', 'phy'],
+        'Sturm': ['sch', 'tem', 'dri', 'pas']
       };
 
       const attrs = weights[p.posGroup] || weights['Mittelfeld'];
-      const numToChange = isMvp ? 4 : (Math.abs(finalDelta) >= 1.5 ? 3 : 1);
+      
+      const absDelta = Math.abs(finalDelta);
+      let numToChange = 1;
+      if (isMvp) numToChange = 4;
+      else if (absDelta >= 2.0) numToChange = 3;
+      else if (absDelta >= 1.0) numToChange = 2;
+      else numToChange = 1;
 
       for (let i = 0; i < Math.min(numToChange, attrs.length); i++) {
         const key = attrs[i];
-        (newStats as any)[key] = Math.max(30, Math.min(95, ((newStats as any)[key] || 50) + (change > 0 ? 1 : -1)));
-        // MVP gets extra boost? Actually, we'll just handle it by numToChange
+        (newStats as any)[key] = Math.max(30, Math.min(95, ((newStats as any)[key] || 50) + change));
       }
     }
 
@@ -251,7 +283,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     });
 
     finalHistory.push({
-      id: '', // Will be assigned by DB
+      id: '', // Will be removed
       fixture_id: fixtureId, player_id: p.playerId,
       old_overall: Math.round(p.oldOverall), new_overall: newOverall, delta_overall: finalDelta,
       votes_up: p.upVotes, votes_down: p.downVotes, votes_neutral: p.neutralVotes,
@@ -263,7 +295,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       expected_score: p.expectedScore, actual_score: p.actual_score,
       raw_delta: p.rawDelta, final_delta: finalDelta,
       is_mvp: isMvp, mvp_score: p.mvpScore, mvp_bonus: mvpBonus,
-      rating_version: '3.0-positional', processed_at: now, created_at: now
+      rating_version: '3.0', processed_at: now, created_at: now
     });
 
     // Detailed Debug Log
@@ -277,12 +309,18 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       Overall: ${p.oldOverall} -> ${newOverall}
       Stats Change: TEM:${oldStats.tem}->${newStats.tem}, SCH:${oldStats.sch}->${newStats.sch}, PAS:${oldStats.pas}->${newStats.pas}, DRI:${oldStats.dri}->${newStats.dri}, DEF:${oldStats.def}->${newStats.def}, PHY:${oldStats.phy}->${newStats.phy}`);
   }
-
+  
+  console.log("STEP: rating calculated");
 
   // 9. Database Writes
+  console.log(`DEBUG: [PROCESSOR] Preparing database writes for ${fixtureId}`);
   try {
+    console.log(`DEBUG: [PROCESSOR] Deleting existing rating history for ${fixtureId}`);
     const { error: delError } = await supabase.from('player_rating_history').delete().eq('fixture_id', fixtureId);
-    if (delError) throw delError;
+    if (delError) {
+      console.error(`DEBUG: [PROCESSOR] Rating history delete FAILED:`, delError);
+      throw delError;
+    }
     
     // Remove 'id' from history objects to let DB auto-generate
     const historyToInsert = finalHistory.map(({ id, ...rest }) => ({
@@ -297,20 +335,40 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       mvp_bonus: Number(rest.mvp_bonus.toFixed(4))
     }));
     
-    const { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
-    if (insError) throw insError;
+    console.log(`DEBUG: [PROCESSOR] Inserting ${historyToInsert.length} history records`);
+    console.log("STEP: insert history start");
+    let { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
     
-    if (statsUpdates.length > 0) {
-      const { error: statsError } = await supabase.from('player_stats').upsert(statsUpdates, { onConflict: 'player_id' });
-      if (statsError) throw statsError;
+    if (insError && insError.message && (insError.message.includes('schema cache') || insError.message.includes('neutral_votes') || insError.message.includes('Could not find'))) {
+      throw new Error("Datenbank-Fehler: Die Spalte 'neutral_votes' fehlt in der Tabelle 'player_rating_history'. Bitte führe die SQL-Migration aus und lade den Schema Cache mit 'NOTIFY pgrst, \"reload schema\";' neu.");
     }
 
+    if (insError) {
+      console.error(`DEBUG: [PROCESSOR] Rating history insert FAILED:`, insError);
+      throw insError;
+    }
+    console.log("STEP: insert history success");
+    
+    if (statsUpdates.length > 0) {
+      console.log(`DEBUG: [PROCESSOR] Upserting ${statsUpdates.length} stats updates`);
+      const { error: statsError } = await supabase.from('player_stats').upsert(statsUpdates, { onConflict: 'player_id' });
+      if (statsError) {
+        console.error(`DEBUG: [PROCESSOR] Stats upsert FAILED:`, statsError);
+        throw statsError;
+      }
+    }
+
+    console.log(`DEBUG: [PROCESSOR] Updating fixture ${fixtureId} status to finished and processed`);
     const { error: fixError } = await supabase.from('fixtures').update({ 
       results_processed_at: now, status: 'finished', updated_at: now 
     }).eq('id', fixtureId);
-    if (fixError) throw fixError;
+    if (fixError) {
+      console.error(`DEBUG: [PROCESSOR] Fixture update FAILED:`, fixError);
+      throw fixError;
+    }
 
     console.log(`DEBUG: [PROCESSOR] Rating 3.0 processing COMPLETED for fixture: ${fixtureId}. MVP: ${mvpId}`);
+
     return finalHistory;
   } catch (err) {
     console.error(`DEBUG: [PROCESSOR] CRITICAL FAILURE in Rating 3.0:`, err);

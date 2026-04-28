@@ -13,6 +13,16 @@ async function startServer() {
   const app = express();
   app.use(cors());
   app.use(express.json());
+  
+  // Intercept JSON parsing errors to always return JSON
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      console.error("Express JSON parsing error:", err.message);
+      return res.status(400).json({ success: false, error: "Invalid JSON payload" });
+    }
+    next();
+  });
+  
   const PORT = 3000;
 
   // Health check
@@ -65,30 +75,38 @@ async function startServer() {
 
   // Secure Admin Endpoint for Manual Result Processing
   app.post("/api/admin/process-fixture-results", async (req, res) => {
-    console.log(`DEBUG: [SERVER] Route hit: POST /api/admin/process-fixture-results`);
-    console.log(`DEBUG: [SERVER] Headers:`, JSON.stringify(req.headers));
-    console.log(`DEBUG: [SERVER] Body:`, JSON.stringify(req.body));
-
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      const response = { success: false, error: "Authentication required" };
-      console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-      return res.status(401).json(response);
-    }
-
-    const token = authHeader.split(' ')[1];
-    const { fixtureId } = req.body;
-
-    if (!fixtureId) {
-      const response = { success: false, error: "fixtureId is required" };
-      console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-      return res.status(400).json(response);
-    }
+    const requestId = Math.random().toString(36).substring(7);
+    console.log(`[ADMIN-ROUTE][${requestId}] Incoming request: ${req.method} ${req.url}`);
+    console.log(`[ADMIN-ROUTE][${requestId}] Headers: ${JSON.stringify(req.headers)}`);
+    console.log(`[ADMIN-ROUTE][${requestId}] Body: ${JSON.stringify(req.body)}`);
+    
+    // Set response header to JSON immediately to be safe
+    res.setHeader('Content-Type', 'application/json');
 
     try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.warn(`[ADMIN-ROUTE][${requestId}] Missing or invalid Authorization header`);
+        return res.status(401).json({ success: false, error: "Authentication required" });
+      }
+
+      const token = authHeader.split(' ')[1];
+      const { fixtureId } = req.body;
+
+      if (!fixtureId) {
+        return res.status(400).json({ success: false, error: "fixtureId is required" });
+      }
+
       // 1. Verify user is admin
-      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !user) throw new Error("Invalid session");
+      let user;
+      try {
+        const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        if (authError || !authUser) throw new Error("Invalid session or expired token");
+        user = authUser;
+      } catch (authErr: any) {
+        console.warn(`[ADMIN-ROUTE][${requestId}] Auth verification failed:`, authErr.message);
+        return res.status(401).json({ success: false, error: `Authentication failed: ${authErr.message}` });
+      }
 
       const { data: profile, error: profileError } = await supabaseAdmin
         .from('profiles')
@@ -98,9 +116,8 @@ async function startServer() {
       
       const isAdmin = profile?.role === 'admin' || user.email === "matthias.insidiom@gmail.com";
       if (!isAdmin) {
-        const response = { success: false, error: "Admin access required" };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(403).json(response);
+        console.warn(`[ADMIN-ROUTE][${requestId}] User ${user.email} is not an admin`);
+        return res.status(403).json({ success: false, error: "Admin access required" });
       }
 
       // 2. Verify fixture state
@@ -111,86 +128,50 @@ async function startServer() {
         .single();
       
       if (fixtureError || !fixture) {
-        const response = { success: false, error: "Fixture not found" };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(404).json(response);
+        return res.status(404).json({ success: false, error: "Fixture not found" });
       }
 
       if (fixture.status !== 'finished') {
-        const response = { success: false, error: "Fixture must be finished to process results" };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(400).json(response);
-      }
-
-      if (!fixture.voting_close_at) {
-        const response = { success: false, error: "Voting window not set" };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(400).json(response);
-      }
-
-      const now = new Date();
-      const closeAt = new Date(fixture.voting_close_at);
-      if (now < closeAt) {
-        const response = { success: false, error: "Voting window is still open" };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(400).json(response);
-      }
-
-      if (fixture.results_processed_at) {
-        const response = { success: false, error: "Results already processed" };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(400).json(response);
+        return res.status(400).json({ success: false, error: "Fixture must be finished/closed to process results" });
       }
 
       // 3. Call processor
-      console.log(`DEBUG: ADMIN ROUTE HIT`);
-      console.log(`DEBUG: Using admin client for manual processing`);
-      
-      // Test query in server.ts
-      const { data: testLineup, error: testLineupError } = await supabaseAdmin.from('fixture_lineups').select('*').limit(1);
-      console.log(`DEBUG: [SERVER] Test query on fixture_lineups: ${testLineupError ? 'FAILED: ' + testLineupError.message : 'SUCCESS'}`);
-
-      console.log(`DEBUG: [ADMIN] Calling processFixtureRatings for fixture: ${fixtureId}`);
+      console.log(`[ADMIN-ROUTE][${requestId}] Calling processFixtureRatings for ${fixtureId}`);
       
       try {
         const results = await processFixtureRatings(supabaseAdmin, fixtureId);
-        console.log(`DEBUG: [ADMIN] processFixtureRatings SUCCESS. Returned ${results?.length || 0} results.`);
+        console.log(`[ADMIN-ROUTE][${requestId}] Successfully processed ${results?.length || 0} results`);
 
-        const response = { 
+        const processedCount = results?.length || 0;
+        const responseJson = { 
           success: true, 
-          message: `Successfully processed results for ${results?.length || 0} players`,
-          processedCount: results?.length || 0,
-          debug: "Full processing completed successfully"
+          processed: processedCount > 0,
+          fixtureId: fixtureId,
+          message: processedCount > 0 ? "Match processed successfully" : "No fixtures needed processing",
+          processedCount: processedCount
         };
-        console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-        return res.status(200).json(response);
+        console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON: ${JSON.stringify(responseJson)}`);
+
+        return res.status(200).json(responseJson);
       } catch (procErr: any) {
-        console.error(`DEBUG: [ADMIN] processFixtureRatings FAILED internally:`, procErr);
-        throw procErr; // Re-throw to be caught by the outer catch
+        console.error(`[ADMIN-ROUTE][${requestId}] Internal Processor Failure:`, procErr);
+        const errorJson = {
+          success: false, 
+          error: `Processor error: ${procErr.message || 'Unknown processing error'}`,
+          fixtureId
+        };
+        console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON Error: ${JSON.stringify(errorJson)}`);
+        return res.status(500).json(errorJson);
       }
 
     } catch (err: any) {
-      console.error('DEBUG: [ADMIN] Manual processing failed:', err);
-      
-      let errorMsg = 'Unknown error';
-      if (err instanceof Error) {
-        errorMsg = err.message;
-      } else if (typeof err === 'string') {
-        errorMsg = err;
-      } else {
-        try {
-          // Use Object.getOwnPropertyNames to capture non-enumerable properties like 'message' or 'stack'
-          errorMsg = JSON.stringify(err, Object.getOwnPropertyNames(err));
-          // If it's still just "{}", try String()
-          if (errorMsg === '{}') errorMsg = String(err);
-        } catch (e) {
-          errorMsg = String(err);
-        }
-      }
-      
-      const response = { success: false, error: errorMsg };
-      console.log(`DEBUG: [SERVER] Response:`, JSON.stringify(response));
-      return res.status(500).json(response);
+      console.error(`[ADMIN-ROUTE][${requestId}] Global Catch:`, err);
+      const errorJson = { 
+        success: false, 
+        error: `Server error: ${err.message || 'Unexpected failure'}` 
+      };
+      console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON Error: ${JSON.stringify(errorJson)}`);
+      return res.status(500).json(errorJson);
     }
   });
 
@@ -293,14 +274,16 @@ async function startServer() {
             try {
               console.log(`DEBUG: [AUTO-PROCESSOR] Processing fixture ${fixture.id}...`);
               const results = await processFixtureRatings(supabaseAdmin, fixture.id);
-              console.log(`DEBUG: [AUTO-PROCESSOR] SUCCESS for fixture ${fixture.id}. ${results.length} players updated.`);
-            } catch (err) {
-              console.error(`DEBUG: [AUTO-PROCESSOR] FAILED for fixture ${fixture.id}:`, err);
+              console.log(`DEBUG: [AUTO-PROCESSOR] SUCCESS for fixture ${fixture.id}. ${results?.length || 0} players updated.`);
+            } catch (err: any) {
+              console.error(`DEBUG: [AUTO-PROCESSOR] FAILED for fixture ${fixture.id}:`, err?.message || err);
+              if (err?.stack) console.error(err.stack);
             }
           }
         }
-      } catch (err) {
-        console.error('DEBUG: [AUTO-PROCESSOR] Critical interval error:', err);
+      } catch (err: any) {
+        console.error('DEBUG: [AUTO-PROCESSOR] Critical interval error:', err?.message || err);
+        if (err?.stack) console.error(err.stack);
       }
     }, 60000); // 1 minute interval
 

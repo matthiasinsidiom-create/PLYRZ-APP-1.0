@@ -28,7 +28,7 @@ export const BottomNav: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] px-6 pb-8 pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none">
+    <div className="fixed bottom-0 left-0 right-0 z-[100] px-6 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-4 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none">
       <div className="max-w-md mx-auto bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-2 flex items-center justify-between shadow-2xl pointer-events-auto">
         {tabs.map((tab) => {
           const Active = isActive(tab.path);

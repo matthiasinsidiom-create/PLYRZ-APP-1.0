@@ -28,7 +28,7 @@ const AdminCard = ({ title, icon: Icon, count, onClick, color }: any) => (
       <p className="text-2xl font-bold text-white mt-1">{count}</p>
     </div>
     <div className="mt-auto pt-4 flex items-center text-zinc-500 text-xs font-medium uppercase tracking-wider group-hover:text-emerald-500 transition-colors">
-      Manage <ChevronRight className="w-3 h-3 ml-1" />
+      Verwalten <ChevronRight className="w-3 h-3 ml-1" />
     </div>
   </motion.button>
 );
@@ -77,8 +77,8 @@ const AdminDashboard: React.FC = () => {
               <ArrowLeft className="w-5 h-5 text-zinc-400" />
             </button>
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter uppercase">ADMIN PANEL</h1>
-              <p className="text-zinc-500 font-medium text-sm">Manage the PLYRZ ecosystem</p>
+              <h1 className="text-3xl font-black italic tracking-tighter uppercase">ADMIN BEREICH</h1>
+              <p className="text-zinc-500 font-medium text-sm">Verwalte das PLYRZ Ökosystem</p>
             </div>
           </div>
         </div>
@@ -92,14 +92,14 @@ const AdminDashboard: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <AdminCard 
-              title="Leagues" 
+              title="Ligen" 
               icon={Trophy} 
               count={stats.leagues} 
               color="bg-emerald-500" 
               onClick={() => navigate('/admin/leagues')} 
             />
             <AdminCard 
-              title="Clubs" 
+              title="Vereine" 
               icon={Shield} 
               count={stats.clubs} 
               color="bg-blue-500" 
@@ -113,23 +113,23 @@ const AdminDashboard: React.FC = () => {
               onClick={() => navigate('/admin/teams')} 
             />
             <AdminCard 
-              title="Players" 
+              title="Spieler" 
               icon={Users} 
               count={stats.players} 
               color="bg-orange-500" 
               onClick={() => navigate('/admin/players')} 
             />
             <AdminCard 
-              title="Fixtures" 
+              title="Spiele" 
               icon={Calendar} 
               count={stats.fixtures} 
               color="bg-red-500" 
               onClick={() => navigate('/admin/fixtures')} 
             />
             <AdminCard 
-              title="Lineups" 
+              title="Aufstellungen" 
               icon={ListOrdered} 
-              count="Active" 
+              count="Aktiv" 
               color="bg-yellow-500" 
               onClick={() => navigate('/admin/lineups')} 
             />

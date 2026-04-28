@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trophy, 
@@ -42,6 +42,29 @@ export const Dashboard: React.FC = () => {
   const [fixtureKM, setFixtureKM] = useState<Fixture | null>(null);
   const [fixtureReserve, setFixtureReserve] = useState<Fixture | null>(null);
   const [currentRound, setCurrentRound] = useState<number | null>(null);
+  const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
+  
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const scrollCenter = container.scrollLeft + container.clientWidth / 2;
+    const children = Array.from(container.children) as HTMLElement[];
+    let closestIndex = 0;
+    let minDistance = Infinity;
+
+    children.forEach((child, index) => {
+      const childCenter = child.offsetLeft + child.offsetWidth / 2;
+      const distance = Math.abs(scrollCenter - childCenter);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+
+    if (closestIndex !== activeCardIndex) {
+      setActiveCardIndex(closestIndex);
+    }
+  };
   const [checkins, setCheckins] = useState<string[]>(() => {
     try {
       if (profile) {
@@ -630,18 +653,29 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
             
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-8 -mx-5 px-5">
-              {topPlayers.slice(0, 6).map(p => (
-                <div key={p.id} className="flex-shrink-0 w-[168px] h-[236px] relative">
-                   <div className="absolute top-0 left-0 scale-[0.48] origin-top-left">
-                    <PlayerCard 
-                      player={p}
-                      clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
-                      onClick={() => navigate(`/players/${p.id}`)}
-                    />
+            <div 
+              ref={carouselRef}
+              onScroll={handleScroll}
+              className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar pb-12 pt-8 -mx-5 px-5"
+            >
+              {topPlayers.slice(0, 6).map((p, index) => {
+                const isActive = index === activeCardIndex;
+                return (
+                  <div 
+                    key={p.id} 
+                    className={`flex-shrink-0 w-[227px] h-[318px] relative transition-all duration-300 snap-center ${index > 0 ? '-ml-24' : ''} ${isActive ? 'scale-110 z-50 -translate-y-4' : 'scale-90 opacity-60'} hover:z-50 hover:opacity-100`}
+                    style={{ zIndex: isActive ? 50 : 10 - index }}
+                  >
+                     <div className="absolute top-0 left-0 scale-[0.65] origin-top-left drop-shadow-2xl cursor-pointer">
+                      <PlayerCard 
+                        player={p}
+                        clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
+                        onClick={() => navigate(`/players/${p.id}`)}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
