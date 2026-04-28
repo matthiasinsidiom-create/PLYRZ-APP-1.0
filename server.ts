@@ -13,6 +13,16 @@ async function startServer() {
   const app = express();
   app.use(cors());
   app.use(express.json());
+  
+  // Intercept JSON parsing errors to always return JSON
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      console.error("Express JSON parsing error:", err.message);
+      return res.status(400).json({ success: false, error: "Invalid JSON payload" });
+    }
+    next();
+  });
+  
   const PORT = 3000;
 
   // Health check

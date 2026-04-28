@@ -80,6 +80,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   });
 
   // 4. Load Votes
+  console.log("STEP: votes loaded");
   console.log(`DEBUG: [PROCESSOR] Fetching votes for fixture ${fixtureId}`);
   const { data: votes, error: votesError } = await supabase
     .from('player_votes')
@@ -308,7 +309,8 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       Overall: ${p.oldOverall} -> ${newOverall}
       Stats Change: TEM:${oldStats.tem}->${newStats.tem}, SCH:${oldStats.sch}->${newStats.sch}, PAS:${oldStats.pas}->${newStats.pas}, DRI:${oldStats.dri}->${newStats.dri}, DEF:${oldStats.def}->${newStats.def}, PHY:${oldStats.phy}->${newStats.phy}`);
   }
-
+  
+  console.log("STEP: rating calculated");
 
   // 9. Database Writes
   console.log(`DEBUG: [PROCESSOR] Preparing database writes for ${fixtureId}`);
@@ -334,6 +336,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     }));
     
     console.log(`DEBUG: [PROCESSOR] Inserting ${historyToInsert.length} history records`);
+    console.log("STEP: insert history start");
     let { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
     
     if (insError && insError.message && (insError.message.includes('schema cache') || insError.message.includes('neutral_votes') || insError.message.includes('Could not find'))) {
@@ -344,6 +347,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       console.error(`DEBUG: [PROCESSOR] Rating history insert FAILED:`, insError);
       throw insError;
     }
+    console.log("STEP: insert history success");
     
     if (statsUpdates.length > 0) {
       console.log(`DEBUG: [PROCESSOR] Upserting ${statsUpdates.length} stats updates`);
