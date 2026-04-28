@@ -25,7 +25,7 @@ serve(async (req) => {
 
     const baseUrl = appUrl 
       ? appUrl
-      : 'https://ais-dev-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app';
+      :  'https://ais-dev-fjrcrkmhkbuzcz4zrklcla-612426073473.europe-west2.run.app';
 
     const backendUrl = isCron
       ? `${baseUrl}/api/automation/run-processor`
