@@ -23,6 +23,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   const supabase = supabaseAdmin;
   const now = new Date().toISOString();
   
+  console.log(`DEBUG: [PROCESSOR] SUPABASE_URL used: ${process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL}`);
   console.log(`DEBUG: [PROCESSOR] Starting Rating 3.0 processing for fixture: ${fixtureId}`);
 
   if (!fixtureId) throw new Error('No fixtureId provided to processFixtureRatings');
@@ -339,13 +340,13 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     console.log("STEP: insert history start");
     let { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
     
-    if (insError && insError.message && (insError.message.includes('schema cache') || insError.message.includes('neutral_votes') || insError.message.includes('Could not find'))) {
-      throw new Error("Datenbank-Fehler: Die Spalte 'neutral_votes' fehlt in der Tabelle 'player_rating_history'. Bitte führe die SQL-Migration aus und lade den Schema Cache mit 'NOTIFY pgrst, \"reload schema\";' neu.");
+    if (insError && insError.message && insError.message.includes('neutral_votes')) {
+      throw new Error(`Datenbank-Fehler: Die Spalte 'neutral_votes' fehlt in der Tabelle 'player_rating_history'. Bitte führe die SQL-Migration aus und lade den Schema Cache mit 'NOTIFY pgrst, "reload schema";' neu. Original error: ${insError.message}`);
     }
 
     if (insError) {
       console.error(`DEBUG: [PROCESSOR] Rating history insert FAILED:`, insError);
-      throw insError;
+      throw new Error(`Rating history insert failed: ${insError.message}`);
     }
     console.log("STEP: insert history success");
     
