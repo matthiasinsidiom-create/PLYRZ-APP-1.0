@@ -30,12 +30,6 @@ interface SwipeVotingOverlayProps {
   resultsProcessedAt?: string | null;
 }
 
-interface VoteQueueItem {
-  playerId: string;
-  vote: 'up' | 'down' | 'neutral';
-  retries: number;
-}
-
 export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   fixtureId,
   userId,
@@ -54,7 +48,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   });
   
   const [exitDirection, setExitDirection] = useState<number>(0);
-  const [isVoting, setIsVoting] = useState(false);
   const [completed, setCompleted] = useState(() => {
     const hasPlayers = lineup.length > 0;
     const allVoted = hasPlayers && lineup.every(entry => !!userVotes[entry.player_id]);
@@ -65,31 +58,15 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   const [hasCompletedBefore, setHasCompletedBefore] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
-  // Queue System
-  const queueRef = useRef<VoteQueueItem[]>([]);
-  const isProcessingQueue = useRef(false);
-  const completedSwipeCountRef = useRef(currentIndex);
-  const totalPlayersRef = useRef(lineup.length);
+  // Anti-double-click protection
+  const isAnimatingRef = useRef(false);
 
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-25, 25]);
   const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0, 1, 1, 1, 0]);
-  const cardScale = useTransform(x, [-150, 0, 150], [1.05, 1, 1.05]);
-  
-  const upvoteGlow = useTransform(x, [20, 120], [0, 1]);
-  const downvoteGlow = useTransform(x, [-120, -20], [1, 0]);
-  const upvoteScale = useTransform(x, [20, 120], [0.8, 1.1]);
-  const downvoteScale = useTransform(x, [-120, -20], [1.1, 0.8]);
-  const upvoteRotate = useTransform(x, [20, 120], [-10, 0]);
-  const downvoteRotate = useTransform(x, [-120, -20], [0, 10]);
 
   const currentPlayerEntry = useMemo(() => lineup[currentIndex], [lineup, currentIndex]);
-  const nextPlayerEntry = useMemo(() => lineup[currentIndex + 1], [lineup, currentIndex]);
   const totalPlayers = lineup.length;
-
-  useEffect(() => {
-    totalPlayersRef.current = totalPlayers;
-  }, [totalPlayers]);
 
   // Preloading Assets
   useEffect(() => {
@@ -126,10 +103,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
 
   const markAsCompleted = useCallback(async () => {
     if (!userId || !fixtureId) return;
-    
-    if (queueRef.current.length > 0) {
-      return;
-    }
 
     try {
       await supabaseService.markVoteAsCompleted(fixtureId, userId);
@@ -138,40 +111,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
       console.error(`DEBUG: [COMPLETION] Sync error:`, err);
     }
   }, [fixtureId, userId]);
-
-  // Queue background processor
-  const processQueue = useCallback(async () => {
-    if (isProcessingQueue.current || queueRef.current.length === 0) return;
-    
-    isProcessingQueue.current = true;
-    
-    while (queueRef.current.length > 0) {
-      const item = queueRef.current[0];
-      try {
-        await onVote(item.playerId, item.vote);
-        queueRef.current.shift(); // Remove handled item
-      } catch (err: any) {
-        if (err.message?.includes('already completed')) {
-          queueRef.current.shift();
-          continue;
-        }
-
-        item.retries++;
-        if (item.retries >= 3) {
-          queueRef.current.shift();
-        } else {
-          // Wait a bit before retry
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
-    }
-    
-    isProcessingQueue.current = false;
-    
-    if (queueRef.current.length === 0 && completedSwipeCountRef.current >= totalPlayersRef.current) {
-      markAsCompleted();
-    }
-  }, [onVote, markAsCompleted]);
 
   useEffect(() => {
     const checkCompletion = async () => {
@@ -197,31 +136,35 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   }, [userId, fixtureId]);
 
   const handleVoteAction = useCallback((playerId: string, vote: 'up' | 'down' | 'neutral') => {
-    // 1. Add to queue (optimistic)
-    queueRef.current.push({ playerId, vote, retries: 0 });
-    completedSwipeCountRef.current += 1;
-    
-    // Trigger queue asynchronously without react state updates
-    setTimeout(() => {
-      processQueue();
-    }, 0);
+    if (isAnimatingRef.current) return;
+    isAnimatingRef.current = true;
+
+    console.log(`DEBUG: [SWIPE] start ${playerId} -> ${vote}`);
+
+    // 1. Optimistic Background api call
+    onVote(playerId, vote).catch((err) => {
+      console.error(`DEBUG: [VOTE] Backend error for ${playerId}:`, err);
+    });
 
     // 2. UI Update immediately
     const nextIndex = currentIndex + 1;
     
-    if (nextIndex < totalPlayersRef.current) {
+    if (nextIndex < totalPlayers) {
       setCurrentIndex(nextIndex);
-      setExitDirection(0);
       x.set(0);
     } else {
       setCompleted(true);
+      markAsCompleted();
     }
 
-    setIsVoting(false);
-  }, [currentIndex, x, processQueue]);
+    // Free lock quickly
+    setTimeout(() => {
+      isAnimatingRef.current = false;
+    }, 50);
+  }, [currentIndex, totalPlayers, onVote, x, markAsCompleted]);
 
   const handleSwipe = useCallback((direction: 'left' | 'right') => {
-    if (isVoting || completed || !currentPlayerEntry?.players) return;
+    if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
 
     if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
       setCompleted(true);
@@ -232,24 +175,22 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     if (showHint) setShowHint(false);
     
     setExitDirection(direction === 'right' ? 800 : -800);
-    setIsVoting(true);
 
     handleVoteAction(currentPlayerEntry.player_id, vote);
-  }, [isVoting, completed, currentPlayerEntry, votingCloseAt, showHint, handleVoteAction]);
+  }, [completed, currentPlayerEntry, votingCloseAt, showHint, handleVoteAction]);
 
   const handleNeutralVote = useCallback(() => {
-    if (isVoting || completed || !currentPlayerEntry?.players) return;
+    if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
     
     if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
       setCompleted(true);
       return;
     }
 
-    setIsVoting(true);
     setExitDirection(0);
 
     handleVoteAction(currentPlayerEntry.player_id, 'neutral');
-  }, [isVoting, completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
+  }, [completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
 
   const handleDragEnd = useCallback((_: any, info: any) => {
     const threshold = 80; // Smaller threshold for faster reaction
@@ -367,16 +308,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col overflow-hidden"
     >
-      {/* Glow Backgrounds */}
-      <motion.div 
-        style={{ opacity: upvoteGlow }}
-        className="absolute inset-y-0 right-0 w-1/2 bg-emerald-500/20 blur-[120px] pointer-events-none"
-      />
-      <motion.div 
-        style={{ opacity: downvoteGlow }}
-        className="absolute inset-y-0 left-0 w-1/2 bg-red-500/20 blur-[120px] pointer-events-none"
-      />
-
       {/* Header */}
       <div className="p-6 flex items-center justify-between relative z-10">
         <button 
@@ -403,12 +334,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-            {isProcessingQueue.current && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-emerald-500/20 rounded-xl">
-                    <Loader2 className="w-3 h-3 text-emerald-500 animate-spin" />
-                    <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Syching...</span>
-                </div>
-            )}
         </div>
       </div>
 
@@ -426,34 +351,19 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
         </div>
 
         <div className="relative flex flex-col items-center w-full max-w-[350px]">
-            {/* NEXT CARD (Static preview behind) */}
-            {nextPlayerEntry && (
-              <div
-                key={`next-${nextPlayerEntry.player_id}`}
-                className="absolute inset-0 pointer-events-none z-0"
-                style={{ transform: 'scale(0.95) translateY(10px)', opacity: 0.8 }}
-              >
-                <PlayerCard 
-                  player={nextPlayerEntry.players} 
-                  jerseyNumber={nextPlayerEntry.jersey_number}
-                  lineupRole={nextPlayerEntry.lineup_role}
-                />
-              </div>
-            )}
-
-            {/* CURRENT CARD */}
+            {/* CURRENT CARD ONLY */}
             <AnimatePresence>
                 {currentPlayer && (
                   <motion.div
                     key={currentPlayer.id}
-                    style={{ x, rotate, opacity, scale: cardScale }}
+                    style={{ x, rotate, opacity }}
                     drag="x"
                     dragConstraints={{ left: 0, right: 0 }}
                     onDragEnd={handleDragEnd}
-                    initial={{ scale: 0.95, opacity: 1, x: 0 }}
-                    animate={{ scale: 1, opacity: 1, x: 0 }}
-                    exit={{ x: exitDirection, opacity: 0, scale: 0.5, rotate: exitDirection / 10 }}
-                    transition={{ type: 'spring', damping: 30, stiffness: 500 }}
+                    initial={{ opacity: 0, x: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ x: exitDirection, opacity: 0, scale: 0.9, rotate: exitDirection / 10 }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
                     className="cursor-grab active:cursor-grabbing relative z-10"
                   >
                     <div className="relative rounded-[3rem] overflow-hidden shadow-2xl">
@@ -462,24 +372,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
                         jerseyNumber={currentPlayerEntry?.jersey_number}
                         lineupRole={currentPlayerEntry?.lineup_role}
                       />
-                      
-                      <motion.div 
-                        style={{ opacity: upvoteGlow, scale: upvoteScale, rotate: upvoteRotate }}
-                        className="absolute inset-0 bg-emerald-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
-                      >
-                        <div className="bg-emerald-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-emerald-400 shadow-2xl scale-110">
-                          👍 GUT
-                        </div>
-                      </motion.div>
-                      
-                      <motion.div 
-                        style={{ opacity: downvoteGlow, scale: downvoteScale, rotate: downvoteRotate }}
-                        className="absolute inset-0 bg-red-500/40 flex items-center justify-center z-30 backdrop-blur-[2px]"
-                      >
-                        <div className="bg-red-500 text-black font-black italic uppercase tracking-tighter px-10 py-5 rounded-2xl border-4 border-red-400 shadow-2xl scale-110">
-                          👎 SCHLECHT
-                        </div>
-                      </motion.div>
                     </div>
                   </motion.div>
                 )}
@@ -507,7 +399,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             onClick={handleNeutralVote}
-            disabled={isVoting}
             className="flex flex-col items-center gap-1.5 group transition-all active:scale-95 mx-auto"
           >
             <span className="text-zinc-400 group-hover:text-zinc-200 font-black italic uppercase tracking-[0.3em] text-[10px] py-2.5 px-10 bg-zinc-900/80 border border-white/20 rounded-full transition-colors">
@@ -522,7 +413,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
         <div className="flex items-center gap-8">
           <button
             onClick={() => handleSwipe('left')}
-            disabled={isVoting}
             className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-all active:scale-90 shadow-2xl"
           >
             <ThumbsDown className="w-8 h-8" />
@@ -530,7 +420,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
           
           <button
             onClick={() => handleSwipe('right')}
-            disabled={isVoting}
             className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all active:scale-90 shadow-2xl"
           >
             <ThumbsUp className="w-8 h-8" />
