@@ -870,9 +870,10 @@ export const MatchDetail: React.FC = () => {
     setIsProcessing(true);
     try {
       const results = await supabaseService.processFixtureRatings(id);
-      console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS. ${results.length} players updated.`);
+      const count = results.processedCount || (Array.isArray(results) ? results.length : 0);
+      console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS. ${count} players updated.`);
       setIsProcessed(true);
-      setProcessedCount(results.length);
+      setProcessedCount(count);
       
       // Auto-navigate to result screen after a short delay
       setTimeout(() => {

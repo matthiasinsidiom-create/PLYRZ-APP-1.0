@@ -42,23 +42,36 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   }
 
   // 2. Load Lineup
+  console.log(`DEBUG: [PROCESSOR] Loading lineup for fixture ${fixtureId}`);
   const { data: lineupData, error: lineupError } = await supabase
     .from('fixture_lineups')
     .select('*, players(*)')
     .eq('fixture_id', fixtureId);
   
-  if (lineupError || !lineupData || lineupData.length === 0) {
+  if (lineupError) {
+    console.error(`DEBUG: [PROCESSOR] Lineup fetch failed:`, lineupError);
+    throw new Error(`Lineup fetch failed: ${lineupError.message}`);
+  }
+  
+  if (!lineupData || lineupData.length === 0) {
+    console.warn(`DEBUG: [PROCESSOR] No players found in lineup for fixture ${fixtureId}`);
     throw new Error('No players in lineup for this fixture.');
   }
+  console.log(`DEBUG: [PROCESSOR] Found ${lineupData.length} lineup entries`);
 
   // 3. Load Player Stats
   const playerIds = lineupData.map(e => e.player_id).filter(Boolean);
+  console.log(`DEBUG: [PROCESSOR] Fetching stats for ${playerIds.length} players`);
   const { data: statsData, error: statsError } = await supabase
     .from('player_stats')
     .select('*')
     .in('player_id', playerIds);
   
-  if (statsError) throw new Error(`Stats fetch failed: ${statsError.message}`);
+  if (statsError) {
+    console.error(`DEBUG: [PROCESSOR] Stats fetch failed:`, statsError);
+    throw new Error(`Stats fetch failed: ${statsError.message}`);
+  }
+  console.log(`DEBUG: [PROCESSOR] Found ${statsData?.length || 0} stats records`);
 
   const statsByPlayer: Record<string, PlayerStats[]> = {};
   statsData?.forEach(stat => {
@@ -67,12 +80,18 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   });
 
   // 4. Load Votes
+  console.log(`DEBUG: [PROCESSOR] Fetching votes for fixture ${fixtureId}`);
   const { data: votes, error: votesError } = await supabase
     .from('player_votes')
     .select('*')
     .eq('fixture_id', fixtureId);
   
-  if (votesError) throw new Error(`Votes fetch failed: ${votesError.message}`);
+  if (votesError) {
+    console.error(`DEBUG: [PROCESSOR] Votes fetch failed:`, votesError);
+    throw new Error(`Votes fetch failed: ${votesError.message}`);
+  }
+  console.log(`DEBUG: [PROCESSOR] Found ${votes?.length || 0} votes`);
+
 
   const votesByPlayer: Record<string, any[]> = {};
   votes?.forEach(v => {
@@ -82,17 +101,25 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
   });
 
   // 5. Load Match Events
-  const { data: matchEventsData } = await supabase
+  console.log(`DEBUG: [PROCESSOR] Fetching match events for fixture ${fixtureId}`);
+  const { data: matchEventsData, error: matchEventsError } = await supabase
     .from('match_events')
     .select('*')
     .eq('fixture_id', fixtureId);
+  
+  if (matchEventsError) {
+    console.error(`DEBUG: [PROCESSOR] Match events fetch failed:`, matchEventsError);
+    // Continue anyway as events are optional
+  }
   const matchEvents = matchEventsData || [];
+  console.log(`DEBUG: [PROCESSOR] Found ${matchEvents.length} match events`);
 
   // Team Details
   const homeTeamId = fixture.home_team_id;
   const awayTeamId = fixture.away_team_id;
   const homeScore = fixture.home_score || 0;
   const awayScore = fixture.away_score || 0;
+  console.log(`DEBUG: [PROCESSOR] Home ID: ${homeTeamId}, Away ID: ${awayTeamId}, Score: ${homeScore}-${awayScore}`);
 
   const getPlayerRating = (playerId: string) => {
     const playerStats = statsByPlayer[playerId] || [];
@@ -255,10 +282,10 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     });
 
     finalHistory.push({
-      id: '', // Will be assigned by DB
+      id: '', // Will be removed
       fixture_id: fixtureId, player_id: p.playerId,
       old_overall: Math.round(p.oldOverall), new_overall: newOverall, delta_overall: finalDelta,
-      votes_up: p.upVotes, votes_down: p.downVotes, neutral_votes: p.neutralVotes,
+      votes_up: p.upVotes, votes_down: p.downVotes,
       positive_votes: p.upVotes, negative_votes: p.downVotes,
       vote_score: p.voteScore, vote_impact: p.voteImpact,
       result_impact: p.resultImpact, event_impact: p.eventImpact,
@@ -284,9 +311,14 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
 
 
   // 9. Database Writes
+  console.log(`DEBUG: [PROCESSOR] Preparing database writes for ${fixtureId}`);
   try {
+    console.log(`DEBUG: [PROCESSOR] Deleting existing rating history for ${fixtureId}`);
     const { error: delError } = await supabase.from('player_rating_history').delete().eq('fixture_id', fixtureId);
-    if (delError) throw delError;
+    if (delError) {
+      console.error(`DEBUG: [PROCESSOR] Rating history delete FAILED:`, delError);
+      throw delError;
+    }
     
     // Remove 'id' from history objects to let DB auto-generate
     const historyToInsert = finalHistory.map(({ id, ...rest }) => ({
@@ -301,20 +333,33 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       mvp_bonus: Number(rest.mvp_bonus.toFixed(4))
     }));
     
+    console.log(`DEBUG: [PROCESSOR] Inserting ${historyToInsert.length} history records`);
     const { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
-    if (insError) throw insError;
+    if (insError) {
+      console.error(`DEBUG: [PROCESSOR] Rating history insert FAILED:`, insError);
+      throw insError;
+    }
     
     if (statsUpdates.length > 0) {
+      console.log(`DEBUG: [PROCESSOR] Upserting ${statsUpdates.length} stats updates`);
       const { error: statsError } = await supabase.from('player_stats').upsert(statsUpdates, { onConflict: 'player_id' });
-      if (statsError) throw statsError;
+      if (statsError) {
+        console.error(`DEBUG: [PROCESSOR] Stats upsert FAILED:`, statsError);
+        throw statsError;
+      }
     }
 
+    console.log(`DEBUG: [PROCESSOR] Updating fixture ${fixtureId} status to finished and processed`);
     const { error: fixError } = await supabase.from('fixtures').update({ 
       results_processed_at: now, status: 'finished', updated_at: now 
     }).eq('id', fixtureId);
-    if (fixError) throw fixError;
+    if (fixError) {
+      console.error(`DEBUG: [PROCESSOR] Fixture update FAILED:`, fixError);
+      throw fixError;
+    }
 
     console.log(`DEBUG: [PROCESSOR] Rating 3.0 processing COMPLETED for fixture: ${fixtureId}. MVP: ${mvpId}`);
+
     return finalHistory;
   } catch (err) {
     console.error(`DEBUG: [PROCESSOR] CRITICAL FAILURE in Rating 3.0:`, err);

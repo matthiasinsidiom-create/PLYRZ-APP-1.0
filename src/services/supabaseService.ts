@@ -1521,12 +1521,47 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
-    console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor' for fixtureId: ${fixtureId}`);
+    const currentOrigin = window.location.origin;
+    // For Capacitor, we might need a specific URL, but for web currentOrigin is perfect
+    const backendBaseUrl = currentOrigin.startsWith('capacitor://') 
+      ? (import.meta.env.VITE_APP_URL || 'https://ais-dev-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app')
+      : currentOrigin;
+
+    console.log(`DEBUG: [SERVICE] Attempting direct backend call to: ${backendBaseUrl}/api/admin/process-fixture-results`);
 
     try {
-      // Invoke the Supabase Edge Function to avoid the TestFlight capacitor://localhost fallback issue
-      const { data, error, error: invokeError } = await supabase.functions.invoke('match-processor', {
-        body: { fixtureId },
+      // Step 1: Try Direct Call (Bypassing Edge Function)
+      const directResponse = await fetch(`${backendBaseUrl}/api/admin/process-fixture-results`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ fixtureId })
+      });
+
+      console.log(`DEBUG: [SERVICE] Direct backend status: ${directResponse.status}`);
+
+      if (directResponse.ok) {
+        const data = await directResponse.json();
+        console.log(`DEBUG: [SERVICE] Direct call success:`, data);
+        return data;
+      }
+
+      // If direct call fails with 404 or something, maybe we are on a platform that requires the Edge Function
+      console.warn(`DEBUG: [SERVICE] Direct call failed with status ${directResponse.status}. Falling back to Edge Function...`);
+    } catch (directError) {
+      console.warn(`DEBUG: [SERVICE] Direct call network error. Falling back to Edge Function...`, directError);
+    }
+
+    // Step 2: Fallback to Edge Function (for Capacitor / specific network setups)
+    try {
+      console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor' as fallback...`);
+      const { data, error: invokeError } = await supabase.functions.invoke('match-processor', {
+        body: { 
+          fixtureId,
+          appUrl: backendBaseUrl
+        },
         headers: {
           Authorization: `Bearer ${session.access_token}`
         }
