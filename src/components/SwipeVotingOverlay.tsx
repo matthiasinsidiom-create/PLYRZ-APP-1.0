@@ -7,15 +7,11 @@ import {
   X, 
   CheckCircle2, 
   Trophy,
-  ArrowRight,
   Loader2,
   AlertCircle,
   Clock
 } from 'lucide-react';
 import { PlayerCard } from './PlayerCard';
-import { Player } from '../types';
-import { getPositionShort } from '../lib/positions';
-
 import { supabaseService } from '../services/supabaseService';
 
 interface SwipeVotingOverlayProps {
@@ -29,6 +25,66 @@ interface SwipeVotingOverlayProps {
   votingCloseAt?: string | null;
   resultsProcessedAt?: string | null;
 }
+
+const variants = {
+  enter: { opacity: 0, x: 0, scale: 0.95, y: 0 },
+  center: { opacity: 1, x: 0, scale: 1, y: 0 },
+  exit: (direction: number) => ({
+    x: direction,
+    y: direction === 0 ? -50 : 0,
+    opacity: 0,
+    scale: 0.9,
+    rotate: direction / 10
+  })
+};
+
+const SwipeablePlayerCard = ({
+  player,
+  currentPlayerEntry,
+  exitDirection,
+  onSwipe
+}: {
+  player: any;
+  currentPlayerEntry: any;
+  exitDirection: number;
+  onSwipe: (dir: 'left'|'right') => void;
+}) => {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 200], [-25, 25]);
+
+  const handleDragEnd = useCallback((_: any, info: any) => {
+    const threshold = 80;
+    if (info.offset.x > threshold) {
+      onSwipe('right');
+    } else if (info.offset.x < -threshold) {
+      onSwipe('left');
+    }
+  }, [onSwipe]);
+
+  return (
+    <motion.div
+      custom={exitDirection}
+      variants={variants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      style={{ x, rotate }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      onDragEnd={handleDragEnd}
+      transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+      className="cursor-grab active:cursor-grabbing z-10 w-full col-start-1 row-start-1"
+    >
+      <div className="relative rounded-[3rem] overflow-hidden shadow-2xl">
+        <PlayerCard 
+          player={player} 
+          jerseyNumber={currentPlayerEntry?.jersey_number}
+          lineupRole={currentPlayerEntry?.lineup_role}
+        />
+      </div>
+    </motion.div>
+  );
+};
 
 export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
   fixtureId,
@@ -60,10 +116,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
 
   // Anti-double-click protection
   const isAnimatingRef = useRef(false);
-
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-25, 25]);
-  const opacity = useTransform(x, [-200, -150, 0, 150, 200], [0, 1, 1, 1, 0]);
 
   const currentPlayerEntry = useMemo(() => lineup[currentIndex], [lineup, currentIndex]);
   const totalPlayers = lineup.length;
@@ -151,7 +203,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     
     if (nextIndex < totalPlayers) {
       setCurrentIndex(nextIndex);
-      x.set(0);
     } else {
       setCompleted(true);
       markAsCompleted();
@@ -161,7 +212,7 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
     setTimeout(() => {
       isAnimatingRef.current = false;
     }, 50);
-  }, [currentIndex, totalPlayers, onVote, x, markAsCompleted]);
+  }, [currentIndex, totalPlayers, onVote, markAsCompleted]);
 
   const handleSwipe = useCallback((direction: 'left' | 'right') => {
     if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
@@ -191,15 +242,6 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
 
     handleVoteAction(currentPlayerEntry.player_id, 'neutral');
   }, [completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
-
-  const handleDragEnd = useCallback((_: any, info: any) => {
-    const threshold = 80; // Smaller threshold for faster reaction
-    if (info.offset.x > threshold) {
-      handleSwipe('right');
-    } else if (info.offset.x < -threshold) {
-      handleSwipe('left');
-    }
-  }, [handleSwipe]);
 
   if (totalPlayers === 0) {
     return (
@@ -350,30 +392,17 @@ export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
           </div>
         </div>
 
-        <div className="relative flex flex-col items-center w-full max-w-[350px]">
+        <div className="relative grid place-items-center w-[350px]">
             {/* CURRENT CARD ONLY */}
-            <AnimatePresence>
+            <AnimatePresence custom={exitDirection}>
                 {currentPlayer && (
-                  <motion.div
+                  <SwipeablePlayerCard
                     key={currentPlayer.id}
-                    style={{ x, rotate, opacity }}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    onDragEnd={handleDragEnd}
-                    initial={{ opacity: 0, x: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ x: exitDirection, opacity: 0, scale: 0.9, rotate: exitDirection / 10 }}
-                    transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-                    className="cursor-grab active:cursor-grabbing relative z-10"
-                  >
-                    <div className="relative rounded-[3rem] overflow-hidden shadow-2xl">
-                      <PlayerCard 
-                        player={currentPlayer} 
-                        jerseyNumber={currentPlayerEntry?.jersey_number}
-                        lineupRole={currentPlayerEntry?.lineup_role}
-                      />
-                    </div>
-                  </motion.div>
+                    player={currentPlayer}
+                    currentPlayerEntry={currentPlayerEntry}
+                    exitDirection={exitDirection}
+                    onSwipe={handleSwipe}
+                  />
                 )}
             </AnimatePresence>
         </div>

@@ -336,21 +336,8 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     console.log(`DEBUG: [PROCESSOR] Inserting ${historyToInsert.length} history records`);
     let { error: insError } = await supabase.from('player_rating_history').insert(historyToInsert);
     
-    // Fallback if the user hasn't synced the new columns in their Supabase Postgres database
-    if (insError && insError.message && (insError.message.includes('schema cache') || insError.message.includes('neutral_votes'))) {
-      console.warn(`DEBUG: [PROCESSOR] Schema cache error detected for new columns. Retrying without neutral_votes columns... You may need to run "NOTIFY pgrst, 'reload schema';" in Supabase SQL editor.`);
-      const historyWithoutExtraColumns = historyToInsert.map(entry => {
-        const { 
-          positive_votes, 
-          negative_votes, 
-          neutral_votes,
-          votes_neutral,
-          ...rest 
-        } = entry as any;
-        return rest;
-      });
-      const { error: fallbackError } = await supabase.from('player_rating_history').insert(historyWithoutExtraColumns);
-      insError = fallbackError;
+    if (insError && insError.message && (insError.message.includes('schema cache') || insError.message.includes('neutral_votes') || insError.message.includes('Could not find'))) {
+      throw new Error("Datenbank-Fehler: Die Spalte 'neutral_votes' fehlt in der Tabelle 'player_rating_history'. Bitte führe die SQL-Migration aus und lade den Schema Cache mit 'NOTIFY pgrst, \"reload schema\";' neu.");
     }
 
     if (insError) {
