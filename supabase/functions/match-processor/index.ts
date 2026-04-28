@@ -1,79 +1,176 @@
+// Supabase Edge Function: match-processor
+// Pure proxy to backend processor.
+// Supports:
+// 1. Manual processing from app with { fixtureId }
+// 2. Cron automation for expired voting fixtures
 
-import { serve } from "https://deno.land/std@0.131.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+async function readBackendJson(response: Response) {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      success: false,
+      error: "Backend returned non-JSON response",
+      status: response.status,
+      responseText: text.slice(0, 1000),
+    };
+  }
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  
-  try {
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch (e) {
-      // Body might be empty for cron
-    }
-    
-    const { fixtureId, type, appUrl } = body;
-    const isCron = type === 'cron' || !fixtureId;
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
-    const authHeader = req.headers.get('Authorization');
+  const APP_URL = Deno.env.get("APP_URL");
+  const CRON_SECRET = Deno.env.get("CRON_SECRET");
 
-    const baseUrl = appUrl 
-      ? appUrl
-      :  'https://ais-dev-fjrcrkmhkbuzcz4zrklcla-612426073473.europe-west2.run.app';
+  console.log("[MATCH_PROCESSOR] Started", new Date().toISOString());
+  console.log("[MATCH_PROCESSOR] ENV CHECK", {
+    hasAppUrl: !!APP_URL,
+    hasCronSecret: !!CRON_SECRET,
+  });
 
-    const backendUrl = isCron
-      ? `${baseUrl}/api/automation/run-processor`
-      : `${baseUrl}/api/admin/process-fixture-results`;
-
-    console.log(`Proxying request to ${backendUrl} for fixtureId: ${fixtureId || 'cron'}`);
-
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (authHeader) requestHeaders['Authorization'] = authHeader;
-
-    const response = await fetch(backendUrl, {
-      method: 'POST',
-      headers: requestHeaders,
-      body: JSON.stringify(isCron ? {} : { fixtureId })
-    });
-
-    let data: any;
-    const responseText = await response.text();
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error(`Backend returned non-JSON response: ${responseText.substring(0, 200)}...`);
-      return new Response(JSON.stringify({
+  if (!APP_URL || !CRON_SECRET) {
+    return jsonResponse(
+      {
         success: false,
-        error: "Backend returned invalid response format",
-        details: responseText.substring(0, 100)
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
+        error: "Missing configuration",
+        hasAppUrl: !!APP_URL,
+        hasCronSecret: !!CRON_SECRET,
+      },
+      500
+    );
+  }
+
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  const manualFixtureId = body?.fixtureId;
+  const baseUrl = APP_URL.endsWith("/") ? APP_URL.slice(0, -1) : APP_URL;
+
+  try {
+    if (manualFixtureId) {
+      const userAuthHeader = req.headers.get("Authorization") ?? "";
+
+      if (!userAuthHeader) {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Missing Authorization header for manual processing",
+            fixtureId: manualFixtureId,
+          },
+          401
+        );
+      }
+
+      const apiUrl = `${baseUrl}/api/admin/process-fixture-results`;
+
+      console.log("[MATCH_PROCESSOR] Calling MANUAL backend processor", {
+        fixtureId: manualFixtureId,
+        apiUrl,
       });
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: userAuthHeader,
+        },
+        body: JSON.stringify({ fixtureId: manualFixtureId }),
+      });
+
+      const backendResult = await readBackendJson(response);
+
+      console.log("[MATCH_PROCESSOR] Manual backend response", {
+        fixtureId: manualFixtureId,
+        status: response.status,
+        ok: response.ok,
+        backendResult,
+      });
+
+      return jsonResponse(
+        {
+          success: response.ok && backendResult?.success !== false,
+          mode: "manual",
+          fixtureId: manualFixtureId,
+          backendResult,
+          error:
+            backendResult?.success === false
+              ? backendResult?.error
+              : undefined,
+        },
+        response.ok && backendResult?.success !== false ? 200 : 500
+      );
     }
 
-    console.log(`Backend response: ${response.status}`, data);
+    // Cron mode: backend decides which fixtures are eligible and updates DB.
+    const apiUrl = `${baseUrl}/api/automation/run-processor`;
 
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    console.log("[MATCH_PROCESSOR] Calling CRON backend processor", { apiUrl });
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${CRON_SECRET}`,
+      },
+      body: JSON.stringify({}),
+    });
+
+    const backendResult = await readBackendJson(response);
+
+    console.log("[MATCH_PROCESSOR] Cron backend response", {
       status: response.status,
+      ok: response.ok,
+      backendResult,
     });
-  } catch (error: any) {
-    console.error(`Edge function proxy error: ${error.message}`);
-    return new Response(JSON.stringify({
-      success: false,
-      error: `Proxy Error: ${error.message}`
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
-    });
+
+    return jsonResponse(
+      {
+        success: response.ok && backendResult?.success !== false,
+        mode: "cron",
+        backendResult,
+        error:
+          backendResult?.success === false ? backendResult?.error : undefined,
+      },
+      response.ok && backendResult?.success !== false ? 200 : 500
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    console.error("[MATCH_PROCESSOR] Fatal error", message);
+
+    return jsonResponse(
+      {
+        success: false,
+        error: message,
+      },
+      500
+    );
   }
 });
