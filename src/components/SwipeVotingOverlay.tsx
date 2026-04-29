@@ -48,6 +48,7 @@ const SwipeablePlayerCard = ({
   currentPlayerEntry: any;
   exitDirection: number;
   onSwipe: (dir: 'left'|'right') => void;
+  key?: any;
 }) => {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-25, 25]);

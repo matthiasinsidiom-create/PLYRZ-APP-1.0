@@ -285,20 +285,33 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       });
 
       finalHistory.push({
-        id: '', // Will be removed
-        fixture_id: fixtureId, player_id: p.playerId,
-        old_overall: Math.round(p.oldOverall), new_overall: newOverall, delta_overall: finalDelta,
-        votes_up: p.upVotes, votes_down: p.downVotes, votes_neutral: p.neutralVotes,
-        positive_votes: p.upVotes, negative_votes: p.downVotes, neutral_votes: p.neutralVotes,
-        vote_score: p.voteScore, vote_impact: p.voteImpact,
-        result_impact: p.resultImpact, event_impact: p.eventImpact,
-        goal_count: p.goalCount, yellow_count: p.yellowCount, red_count: p.redCount,
+        fixture_id: fixtureId, 
+        player_id: p.playerId,
+        old_overall: Math.round(p.oldOverall), 
+        new_overall: newOverall, 
+        delta_overall: finalDelta,
+        positive_votes: p.upVotes, 
+        negative_votes: p.downVotes, 
+        neutral_votes: p.neutralVotes,
+        vote_score: p.voteScore, 
+        vote_impact: p.voteImpact,
+        result_impact: p.resultImpact, 
+        event_impact: p.eventImpact,
+        goal_count: p.goalCount, 
+        yellow_count: p.yellowCount, 
+        red_count: p.redCount,
         participation_multiplier: p.participationMultiplier,
-        expected_score: p.expectedScore, actual_score: p.actual_score,
-        raw_delta: p.rawDelta, final_delta: finalDelta,
-        is_mvp: isMvp, mvp_score: p.mvpScore, mvp_bonus: mvpBonus,
-        rating_version: '3.0', processed_at: now, created_at: now
-      });
+        expected_score: p.expectedScore, 
+        actual_score: p.actual_score,
+        raw_delta: p.rawDelta, 
+        final_delta: finalDelta,
+        is_mvp: isMvp, 
+        mvp_score: p.mvpScore, 
+        mvp_bonus: mvpBonus,
+        rating_version: '3.0', 
+        processed_at: now, 
+        created_at: now
+      } as any);
 
       // Detailed Debug Log
       console.log(`DEBUG: [RATING-3.0] Player: ${p.players?.full_name} (${p.playerId})
@@ -324,17 +337,34 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
       throw delError;
     }
     
-    // Remove 'id' from history objects to let DB auto-generate
-    const historyToInsert = finalHistory.map(({ id, votes_up, votes_down, votes_neutral, ...rest }) => ({
-      ...rest,
-      delta_overall: Number(Math.max(-2, Math.min(2, rest.delta_overall)).toFixed(4)),
-      vote_impact: Number(rest.vote_impact.toFixed(4)),
-      result_impact: Number(rest.result_impact.toFixed(4)),
-      event_impact: Number(rest.event_impact.toFixed(4)),
-      raw_delta: Number(rest.raw_delta.toFixed(4)),
-      final_delta: Number(rest.final_delta.toFixed(4)),
-      mvp_score: Number(rest.mvp_score.toFixed(4)),
-      mvp_bonus: Number(rest.mvp_bonus.toFixed(4))
+    // Map finalHistory to database columns explicitly to avoid accidental non-existent columns (like votes_down)
+    const historyToInsert = finalHistory.map((h: any) => ({
+      fixture_id: h.fixture_id,
+      player_id: h.player_id,
+      old_overall: h.old_overall,
+      new_overall: h.new_overall,
+      delta_overall: Number(Math.max(-2, Math.min(2, h.delta_overall)).toFixed(4)),
+      positive_votes: h.positive_votes,
+      negative_votes: h.negative_votes,
+      neutral_votes: h.neutral_votes,
+      vote_score: h.vote_score,
+      vote_impact: Number((h.vote_impact || 0).toFixed(4)),
+      result_impact: Number((h.result_impact || 0).toFixed(4)),
+      event_impact: Number((h.event_impact || 0).toFixed(4)),
+      goal_count: h.goal_count,
+      yellow_count: h.yellow_count,
+      red_count: h.red_count,
+      participation_multiplier: h.participation_multiplier,
+      expected_score: h.expected_score,
+      actual_score: h.actual_score,
+      raw_delta: Number((h.raw_delta || 0).toFixed(4)),
+      final_delta: Number((h.final_delta || 0).toFixed(4)),
+      is_mvp: h.is_mvp,
+      mvp_score: Number((h.mvp_score || 0).toFixed(4)),
+      mvp_bonus: Number((h.mvp_bonus || 0).toFixed(4)),
+      rating_version: h.rating_version,
+      processed_at: h.processed_at,
+      created_at: h.created_at
     }));
     
     console.log(`DEBUG: [PROCESSOR] Inserting ${historyToInsert.length} history records`);

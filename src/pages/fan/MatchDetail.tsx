@@ -1063,9 +1063,16 @@ export const MatchDetail: React.FC = () => {
             {/* Center: Score & Minute */}
             <div className="flex flex-col items-center gap-0.5 px-2">
               <div className="text-4xl font-black italic tracking-tighter flex items-center gap-2 text-white">
-                <span>{fixture.home_score}</span>
-                <span className="text-zinc-800">:</span>
-                <span>{fixture.away_score}</span>
+                {(() => {
+                  const { homeScore, awayScore } = calculateMatchScore(fixture, matchEvents);
+                  return (
+                    <>
+                      <span>{homeScore}</span>
+                      <span className="text-zinc-800">:</span>
+                      <span>{awayScore}</span>
+                    </>
+                  );
+                })()}
               </div>
               {isLive ? (
                 <div className="flex flex-col items-center">

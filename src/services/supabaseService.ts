@@ -1881,7 +1881,7 @@ export const supabaseService = {
 
     const { data, error } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), fixture_lineups(count)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), fixture_lineups(count), match_events(*)')
       .order('kickoff_at', { ascending: false });
     if (error) throw error;
     
@@ -1912,7 +1912,7 @@ export const supabaseService = {
     // 1. Fetch candidate fixtures
     const { data: fixtures, error: fixturesError } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
       .eq('status', 'finished')
       .is('results_processed_at', null)
       .not('voting_close_at', 'is', null)
@@ -1994,7 +1994,7 @@ export const supabaseService = {
     console.log('supabaseService: getFixtureById called with id:', id);
     const { data, error } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url, latitude, longitude, radius_meters, pitch_name)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url, latitude, longitude, radius_meters, pitch_name)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
       .eq('id', id)
       .single();
     

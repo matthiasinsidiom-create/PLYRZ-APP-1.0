@@ -23,6 +23,7 @@ import {
 import { supabaseService } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
 import { getPositionShort } from '../../lib/positions';
+import { calculateMatchScore } from '../../lib/score';
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal';
 
 const AdminFixtures: React.FC = () => {
@@ -510,13 +511,16 @@ const AdminFixtures: React.FC = () => {
                   </div>
                   
                   <div className="flex flex-col items-center gap-1">
-                    {fixture.status === 'finished' ? (
-                      <div className="text-3xl font-black italic tracking-tighter flex items-center gap-3">
-                        <span>{fixture.home_score}</span>
-                        <span className="text-zinc-700">-</span>
-                        <span>{fixture.away_score}</span>
-                      </div>
-                    ) : (
+                    {fixture.status === 'finished' || fixture.status === 'live' ? (() => {
+                      const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+                      return (
+                        <div className="text-3xl font-black italic tracking-tighter flex items-center gap-3">
+                          <span>{homeScore}</span>
+                          <span className="text-zinc-700">-</span>
+                          <span>{awayScore}</span>
+                        </div>
+                      );
+                    })() : (
                       <div className="px-3 py-1 bg-zinc-800 rounded-lg text-xs font-bold text-zinc-400">
                         VS
                       </div>

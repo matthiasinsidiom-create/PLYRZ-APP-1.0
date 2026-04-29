@@ -193,15 +193,15 @@ const PerformancePanel: React.FC<{ entry: any }> = ({ entry }) => {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title="Upvotes">
             <ThumbsUp className="w-3 h-3 text-emerald-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_up || entry.positive_votes || 0}</span>
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.positive_votes || 0}</span>
           </div>
           <div className="flex items-center gap-1.5" title="Neutral Votes">
             <div className="w-3 h-3 rounded-full bg-zinc-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_neutral || entry.neutral_votes || 0}</span>
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.neutral_votes || 0}</span>
           </div>
           <div className="flex items-center gap-1.5" title="Downvotes">
             <ThumbsDown className="w-3 h-3 text-red-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_down || entry.negative_votes || 0}</span>
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.negative_votes || 0}</span>
           </div>
         </div>
         <EventBadges goals={entry.goal_count} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
@@ -383,6 +383,30 @@ const MatchResult: React.FC = () => {
             <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
               {isVotingOpen ? 'Voting läuft' : 'Ergebnisse ausstehend'}
             </h2>
+            
+            {/* Show Current Score even if results are pending */}
+            {fixture && (
+              <div className="flex flex-col items-center gap-2 py-4">
+                <div className="text-3xl font-black italic tracking-tighter flex items-center gap-3 text-white opacity-80">
+                  {(() => {
+                    const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+                    return (
+                      <>
+                        <span>{homeScore}</span>
+                        <span className="text-zinc-800">:</span>
+                        <span>{awayScore}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-2 opacity-60">
+                   <span className="text-[10px] font-black italic uppercase tracking-tight text-zinc-400">{(fixture as any).home_team?.clubs?.name}</span>
+                   <span className="text-zinc-700 text-[8px] font-black uppercase">VS</span>
+                   <span className="text-[10px] font-black italic uppercase tracking-tight text-zinc-400">{(fixture as any).away_team?.clubs?.name}</span>
+                </div>
+              </div>
+            )}
+
             <p className="text-zinc-500 leading-relaxed text-sm">
               {isVotingOpen 
                 ? 'Die Community stimmt derzeit über dieses Spiel ab. Die Ergebnisse werden automatisch berechnet, sobald das Voting-Fenster schließt.'

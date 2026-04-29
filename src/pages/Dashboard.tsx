@@ -336,9 +336,16 @@ export const Dashboard: React.FC = () => {
 
               <div className="flex items-center justify-center gap-3 py-3 bg-white/5 rounded-2xl border border-white/5 mx-auto max-w-[160px]">
                  <div className="flex items-center gap-3 whitespace-nowrap text-2xl font-black italic text-white tracking-tighter">
-                   <span>{fixture.home_score}</span>
-                   <span className="text-zinc-700">:</span>
-                   <span>{fixture.away_score}</span>
+                   {(() => {
+                     const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+                     return (
+                       <>
+                         <span>{homeScore}</span>
+                         <span className="text-zinc-700">:</span>
+                         <span>{awayScore}</span>
+                       </>
+                     );
+                   })()}
                  </div>
               </div>
 

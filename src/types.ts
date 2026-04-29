@@ -149,9 +149,9 @@ export interface PlayerRatingHistory {
   old_overall: number;
   new_overall: number;
   delta_overall: number;
-  votes_up: number;
-  votes_down: number;
-  votes_neutral?: number;
+  positive_votes: number;
+  negative_votes: number;
+  neutral_votes: number;
   expected_score?: number;
   actual_score?: number;
   participation_multiplier: number;
@@ -167,9 +167,6 @@ export interface PlayerRatingHistory {
   is_mvp?: boolean;
   mvp_score?: number;
   vote_score?: number;
-  positive_votes?: number;
-  negative_votes?: number;
-  neutral_votes?: number;
   raw_delta?: number;
   final_delta?: number;
   mvp_bonus?: number;
