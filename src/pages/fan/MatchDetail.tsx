@@ -30,6 +30,7 @@ import { Fixture, Player, PlayerStats, Team, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
 import { PlayerVoteCard } from '../../components/PlayerVoteCard';
 import { SwipeVotingOverlay } from '../../components/SwipeVotingOverlay';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { VotingCountdown } from '../../components/VotingCountdown';
 import { calculateMatchScore } from '../../lib/score';
 
@@ -999,9 +1000,10 @@ export const MatchDetail: React.FC = () => {
   );
 
   return (
+    <SafeAreaWrapper>
     <div className="min-h-screen bg-zinc-950 text-white font-sans pb-32">
       {/* Header */}
-      <div className="p-3 pt-[calc(env(safe-area-inset-top)+10px)] flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
+      <div className="p-3 pt-3 flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate('/matches')} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
@@ -1721,6 +1723,7 @@ export const MatchDetail: React.FC = () => {
       </AnimatePresence>
       <div className="h-20" /> {/* Spacer */}
     </div>
+    </SafeAreaWrapper>
   );
 };
 

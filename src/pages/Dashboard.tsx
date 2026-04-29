@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import { supabaseService } from '../services/supabaseService';
 import { Player, Fixture, Club, Team, PlayerStats, MatchEvent } from '../types';
 import { PlayerCard } from '../components/PlayerCard';
@@ -544,12 +545,13 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen relative text-white font-sans overflow-x-hidden bg-transparent">
-      {/* Remove previous redundant dark overlay to restore App.tsx background */}
+    <SafeAreaWrapper>
+      <div className="min-h-screen relative text-white font-sans overflow-x-hidden bg-transparent">
+        {/* Remove previous redundant dark overlay to restore App.tsx background */}
 
-      {/* Header - Fixed Top Anchor */}
-      <div className="fixed top-0 left-0 right-0 pt-[calc(env(safe-area-inset-top)+10px)] pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
-        <div className="flex items-center">
+        {/* Header - Fixed Top Anchor */}
+        <div className="sticky top-0 pt-6 pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
+          <div className="flex items-center">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ" 
@@ -589,7 +591,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Main Content Area - Top Aligned */}
-      <div className="relative z-10 w-full pt-[calc(env(safe-area-inset-top)+100px)] pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 w-full pt-[100px] pb-28">
         <div className="max-w-xl mx-auto px-5 space-y-12">
           
           {/* A. HERO SECTION (ONLY ONE) */}
@@ -725,6 +727,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
     </div>
+    </SafeAreaWrapper>
   );
 };
 

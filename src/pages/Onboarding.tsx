@@ -19,12 +19,14 @@ import { Club, Player } from '../types';
 import { getPositionShort } from '../lib/positions';
 import { PlayerCard } from '../components/PlayerCard';
 import { CardRevealWrapper } from '../components/CardRevealWrapper';
+import { RatingLogicContent } from '../components/RatingLogicContent';
 
 type OnboardingStep = 
   | 'role-selection' 
   | 'club-selection' 
   | 'player-search' 
   | 'card-preview' 
+  | 'rating-logic'
   | 'complete';
 
 export const Onboarding: React.FC = () => {
@@ -91,8 +93,8 @@ export const Onboarding: React.FC = () => {
     setLoading(true);
     try {
       const data = await supabaseService.getPlayersByClub(clubId);
-      // Only show unclaimed players
-      setPlayers(data.filter(p => !p.claimed_by_user_id));
+      // Only show unclaimed players or players claimed by the current user
+      setPlayers(data.filter(p => !p.claimed_by_user_id || p.claimed_by_user_id === user?.id));
     } catch (err) {
       console.error('Error loading players:', err);
     } finally {
@@ -283,8 +285,9 @@ export const Onboarding: React.FC = () => {
             className="space-y-6"
           >
             <div className="flex items-center gap-4">
-              <button onClick={() => setStep('role-selection')} className="p-2 bg-zinc-900 rounded-full text-zinc-400">
+              <button onClick={() => setStep('role-selection')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
                 <ArrowLeft className="w-5 h-5" />
+                <span className="font-bold text-sm">Zurück</span>
               </button>
               <div>
                 <h2 className="text-2xl font-black italic uppercase text-white">
@@ -349,8 +352,9 @@ export const Onboarding: React.FC = () => {
             className="space-y-6"
           >
             <div className="flex items-center gap-4">
-              <button onClick={() => setStep('club-selection')} className="p-2 bg-zinc-900 rounded-full text-zinc-400">
+              <button onClick={() => setStep('club-selection')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
                 <ArrowLeft className="w-5 h-5" />
+                <span className="font-bold text-sm">Zurück</span>
               </button>
               <div>
                 <h2 className="text-2xl font-black italic uppercase text-white">Suche deinen Spieler</h2>
@@ -454,15 +458,27 @@ export const Onboarding: React.FC = () => {
         
         if (hasSeenReveal) {
           return (
-            <div className="flex flex-col items-center space-y-8">
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="flex flex-col items-center space-y-8"
+            >
+              <div className="w-full flex justify-start -mb-4">
+                <button onClick={() => setStep('player-search')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="font-bold text-sm">Zurück</span>
+                </button>
+              </div>
               <PlayerCard player={selectedPlayer} />
               <button
-                onClick={() => setStep('complete')}
-                className="w-full max-w-sm bg-emerald-500 text-black font-black py-4 rounded-2xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+                onClick={() => setStep('rating-logic')}
+                className="w-full max-w-sm bg-emerald-500 text-black font-black py-4 rounded-2xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
               >
                 WEITER
+                <ChevronRight className="w-6 h-6" />
               </button>
-            </div>
+            </motion.div>
           );
         }
 
@@ -471,9 +487,46 @@ export const Onboarding: React.FC = () => {
             player={selectedPlayer} 
             onComplete={() => {
               setHasSeenReveal(true);
-              setStep('complete');
+              setStep('rating-logic');
             }} 
           />
+        );
+
+      case 'rating-logic':
+        return (
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="flex items-center gap-4">
+              <button onClick={() => setStep('card-preview')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                <ArrowLeft className="w-5 h-5" />
+                <span className="font-bold text-sm">Zurück</span>
+              </button>
+              <div>
+                <h2 className="text-xl font-black italic uppercase text-white">Dein Rating</h2>
+              </div>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              <RatingLogicContent />
+            </div>
+            <div className="pt-4">
+              <button 
+                onClick={handleComplete}
+                disabled={saving}
+                className="w-full bg-emerald-500 text-black font-black py-4 rounded-2xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : (
+                  <>
+                    WEITER ZUR APP
+                    <ChevronRight className="w-6 h-6" />
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
         );
 
       case 'complete':
@@ -528,10 +581,10 @@ export const Onboarding: React.FC = () => {
 
       {/* Progress Indicator */}
       <div className="flex justify-center gap-2 mt-8">
-        {['role-selection', 'club-selection', 'player-search', 'card-preview', 'complete'].map((s, i) => {
+        {['role-selection', 'club-selection', 'player-search', 'card-preview', 'rating-logic', 'complete'].map((s, i) => {
           const steps = role === 'player' 
-            ? ['role-selection', 'club-selection', 'player-search', 'card-preview', 'complete']
-            : ['role-selection', 'complete'];
+            ? ['role-selection', 'club-selection', 'player-search', 'card-preview', 'rating-logic', 'complete']
+            : ['role-selection', 'club-selection', 'complete'];
           
           if (!steps.includes(s)) return null;
           

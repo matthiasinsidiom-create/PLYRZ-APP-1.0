@@ -22,6 +22,7 @@ import {
   Zap,
   Square
 } from 'lucide-react';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { supabaseService } from '../../services/supabaseService';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture, Player, PlayerStats, Team, Club, PlayerRatingHistory, MatchEvent } from '../../types';
@@ -450,9 +451,10 @@ const MatchResult: React.FC = () => {
   const awayWinner = (fixture.away_score || 0) > (fixture.home_score || 0);
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
+    <SafeAreaWrapper>
+    <div className="min-h-screen bg-transparent text-white font-sans pb-28 selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
       {/* Premium Header */}
-      <div className="relative pt-[calc(env(safe-area-inset-top)+10px)] pb-10 overflow-hidden">
+      <div className="relative pt-3 pb-10 overflow-hidden">
         <div className="relative z-10 max-w-xl mx-auto px-4 flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <button 
@@ -800,6 +802,7 @@ const MatchResult: React.FC = () => {
         </div>
       </div>
     </div>
+    </SafeAreaWrapper>
   );
 };
 
