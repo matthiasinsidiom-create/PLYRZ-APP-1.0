@@ -325,7 +325,7 @@ export async function processFixtureRatings(_passedSupabase: SupabaseClient, fix
     }
     
     // Remove 'id' from history objects to let DB auto-generate
-    const historyToInsert = finalHistory.map(({ id, ...rest }) => ({
+    const historyToInsert = finalHistory.map(({ id, votes_up, votes_down, votes_neutral, ...rest }) => ({
       ...rest,
       delta_overall: Number(Math.max(-2, Math.min(2, rest.delta_overall)).toFixed(4)),
       vote_impact: Number(rest.vote_impact.toFixed(4)),
