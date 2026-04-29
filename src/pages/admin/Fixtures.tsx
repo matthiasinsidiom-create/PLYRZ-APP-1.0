@@ -21,6 +21,7 @@ import {
   Star
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
+import { supabase } from '../../lib/supabase';
 import { getPositionShort } from '../../lib/positions';
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal';
 
@@ -344,27 +345,60 @@ const AdminFixtures: React.FC = () => {
     
     console.log('DEBUG: [FRONTEND] Starting rating processing flow for fixture:', targetId);
     
+    let originalError: any = null;
+    
     try {
-      const result = await supabaseService.processFixtureRatings(targetId);
-      console.log('DEBUG: [FRONTEND] Rating processing successful. Result:', result);
-      
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Complete',
-        message: result.message || `Successfully processed ratings for ${result.processedCount} players. Player stats have been updated.`,
-        type: 'success'
-      });
-      
-      setIsModalOpen(false);
-      await loadData();
+      await supabaseService.processFixtureRatings(targetId);
     } catch (err: any) {
-      console.error('DEBUG: [FRONTEND] Rating processing failed:', err);
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Failed',
-        message: err.message || 'An unexpected error occurred while processing ratings.',
-        type: 'error'
-      });
+      console.warn('DEBUG: [FRONTEND] Rating processing threw an error, verifying if results exist anyway:', err);
+      originalError = err;
+    }
+    
+    try {
+      const updatedFixture = await supabaseService.getFixtureById(targetId);
+      let resultsExist = !!updatedFixture.results_processed_at;
+      
+      if (!resultsExist) {
+        const { data, error } = await supabase
+          .from('player_rating_history')
+          .select('id')
+          .eq('fixture_id', targetId)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          resultsExist = true;
+        }
+      }
+
+      if (resultsExist) {
+        console.log('DEBUG: [FRONTEND] Rating processing successful verified in DB.');
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Complete',
+          message: 'Successfully processed ratings for players. Player stats have been updated.',
+          type: 'success'
+        });
+        
+        setIsModalOpen(false);
+        await loadData();
+      } else {
+        console.error('DEBUG: [FRONTEND] Rating processing failed:', originalError);
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'An unexpected error occurred while processing ratings.',
+          type: 'error'
+        });
+      }
+    } catch (refreshErr) {
+      console.error('DEBUG: [FRONTEND] Error checking processing status:', refreshErr);
+      if (originalError) {
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'An unexpected error occurred while processing ratings.',
+          type: 'error'
+        });
+      }
     } finally {
       setProcessingRatings(false);
     }

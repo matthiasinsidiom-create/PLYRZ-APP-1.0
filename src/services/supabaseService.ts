@@ -2065,11 +2065,24 @@ export const supabaseService = {
   },
 
   async getUserCheckins(userId: string) {
-    return await supabase
+    const nowIso = new Date().toISOString();
+    
+    const { data, error } = await supabase
       .from('match_checkins')
       .select('fixture_id')
       .eq('user_id', userId)
-      .gt('expires_at', new Date().toISOString());
+      .gt('expires_at', nowIso);
+      
+    if (error) {
+      console.error(`DEBUG: [SERVICE] Error in getUserCheckins:`, {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+    }
+    
+    return { data, error };
   },
 
   async sendNotification(userId: string, title: string, message: string, data?: any) {

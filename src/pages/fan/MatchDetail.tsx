@@ -868,20 +868,47 @@ export const MatchDetail: React.FC = () => {
     console.log(`DEBUG: [LIFECYCLE] --- RESULT PROCESSING TRIGGERED ---`);
     console.log(`DEBUG: [LIFECYCLE] Admin: ${profile?.display_name}`);
     setIsProcessing(true);
+    let originalError: any = null;
+    
     try {
-      const results = await supabaseService.processFixtureRatings(id);
-      const count = results.processedCount || (Array.isArray(results) ? results.length : 0);
-      console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS. ${count} players updated.`);
-      setIsProcessed(true);
-      setProcessedCount(count);
-      
-      // Auto-navigate to result screen after a short delay
-      setTimeout(() => {
-        navigate(`/matches/${id}/result`);
-      }, 1500);
+      await supabaseService.processFixtureRatings(id);
     } catch (err) {
-      console.error('DEBUG: [LIFECYCLE] Processing FAILED:', err);
-      alert(err instanceof Error ? err.message : 'Failed to process results');
+      console.warn('DEBUG: [LIFECYCLE] Processing threw an error, verifying if results exist anyway:', err);
+      originalError = err;
+    }
+    
+    try {
+      const updatedFixture = await supabaseService.getFixtureById(id);
+      let resultsExist = !!updatedFixture.results_processed_at;
+      
+      if (!resultsExist) {
+        const { data, error } = await supabase
+          .from('player_rating_history')
+          .select('id')
+          .eq('fixture_id', id)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          resultsExist = true;
+        }
+      }
+
+      if (resultsExist) {
+        console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS verified. Results are available.`);
+        setIsProcessed(true);
+        setProcessedCount(updatedFixture.fixture_lineups?.length || 11);
+        
+        setTimeout(() => {
+          navigate(`/matches/${id}/result`);
+        }, 1500);
+      } else {
+        console.error('DEBUG: [LIFECYCLE] Processing FAILED to create results:', originalError);
+        alert(originalError instanceof Error ? originalError.message : 'Failed to process results');
+      }
+    } catch (refreshErr) {
+      console.error('DEBUG: [LIFECYCLE] Error checking processing status:', refreshErr);
+      if (originalError) {
+        alert(originalError instanceof Error ? originalError.message : 'Failed to process results');
+      }
     } finally {
       setIsProcessing(false);
     }

@@ -417,23 +417,57 @@ const AdminMatchControl: React.FC = () => {
   const handleProcessResults = async () => {
     if (!id) return;
     setSaving(true);
+    let originalError: any = null;
+    
     try {
-      const result = await supabaseService.processFixtureRatings(id);
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Complete',
-        message: result.message || 'Ratings processed successfully.',
-        type: 'success'
-      });
-      await loadMatchData();
+      await supabaseService.processFixtureRatings(id);
     } catch (err: any) {
-      console.error('Error processing ratings:', err);
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Failed',
-        message: err.message || 'Failed to process ratings.',
-        type: 'error'
-      });
+      console.warn('Error processing ratings, verifying if results exist anyway:', err);
+      originalError = err;
+    }
+    
+    try {
+      const updatedFixture = await supabaseService.getFixtureById(id);
+      let resultsExist = !!updatedFixture.results_processed_at;
+      
+      if (!resultsExist) {
+        const { data, error } = await supabase
+          .from('player_rating_history')
+          .select('id')
+          .eq('fixture_id', id)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          resultsExist = true;
+        }
+      }
+
+      if (resultsExist) {
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Complete',
+          message: 'Ratings processed successfully.',
+          type: 'success'
+        });
+        await loadMatchData();
+      } else {
+        console.error('Error processing ratings:', originalError);
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'Failed to process ratings.',
+          type: 'error'
+        });
+      }
+    } catch (refreshErr) {
+      console.error('Error checking processing status:', refreshErr);
+      if (originalError) {
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'Failed to process ratings.',
+          type: 'error'
+        });
+      }
     } finally {
       setSaving(false);
     }
