@@ -75,15 +75,13 @@ async function startServer() {
 
   // Secure Admin Endpoint for Manual Result Processing
   app.post("/api/admin/process-fixture-results", async (req, res) => {
-    const requestId = Math.random().toString(36).substring(7);
-    console.log(`[ADMIN-ROUTE][${requestId}] Incoming request: ${req.method} ${req.url}`);
-    console.log(`[ADMIN-ROUTE][${requestId}] Headers: ${JSON.stringify(req.headers)}`);
-    console.log(`[ADMIN-ROUTE][${requestId}] Body: ${JSON.stringify(req.body)}`);
-    
-    // Set response header to JSON immediately to be safe
-    res.setHeader('Content-Type', 'application/json');
-
     try {
+      res.setHeader('Content-Type', 'application/json');
+      const requestId = Math.random().toString(36).substring(7);
+      console.log(`[ADMIN-ROUTE][${requestId}] Incoming request: ${req.method} ${req.url}`);
+      console.log(`[ADMIN-ROUTE][${requestId}] Headers: ${JSON.stringify(req.headers)}`);
+      console.log(`[ADMIN-ROUTE][${requestId}] Body: ${JSON.stringify(req.body)}`);
+      
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         console.warn(`[ADMIN-ROUTE][${requestId}] Missing or invalid Authorization header`);
@@ -137,22 +135,11 @@ async function startServer() {
 
       // 3. Call processor
       console.log(`[ADMIN-ROUTE][${requestId}] Calling processFixtureRatings for ${fixtureId}`);
+      console.log("STEP: before processor");
       
+      let results;
       try {
-        const results = await processFixtureRatings(supabaseAdmin, fixtureId);
-        console.log(`[ADMIN-ROUTE][${requestId}] Successfully processed ${results?.length || 0} results`);
-
-        const processedCount = results?.length || 0;
-        const responseJson = { 
-          success: true, 
-          processed: processedCount > 0,
-          fixtureId: fixtureId,
-          message: processedCount > 0 ? "Match processed successfully" : "No fixtures needed processing",
-          processedCount: processedCount
-        };
-        console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON: ${JSON.stringify(responseJson)}`);
-
-        return res.status(200).json(responseJson);
+        results = await processFixtureRatings(supabaseAdmin, fixtureId);
       } catch (procErr: any) {
         console.error(`[ADMIN-ROUTE][${requestId}] Internal Processor Failure:`, procErr);
         const errorJson = {
@@ -163,14 +150,31 @@ async function startServer() {
         console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON Error: ${JSON.stringify(errorJson)}`);
         return res.status(500).json(errorJson);
       }
+      
+      console.log("STEP: after processor");
+
+      console.log(`[ADMIN-ROUTE][${requestId}] Successfully processed ${results?.length || 0} results`);
+
+      const processedCount = results?.length || 0;
+      const responseJson = { 
+        success: true, 
+        processed: processedCount > 0,
+        fixtureId: fixtureId,
+        message: processedCount > 0 ? "Match processed successfully" : "No fixtures needed processing",
+        processedCount: processedCount,
+        result: results
+      };
+      
+      console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON: ${JSON.stringify(responseJson)}`);
+      return res.status(200).json(responseJson);
 
     } catch (err: any) {
-      console.error(`[ADMIN-ROUTE][${requestId}] Global Catch:`, err);
+      console.error(`[ADMIN-ROUTE] Global Catch:`, err);
       const errorJson = { 
         success: false, 
         error: `Server error: ${err.message || 'Unexpected failure'}` 
       };
-      console.log(`[ADMIN-ROUTE][${requestId}] Returning JSON Error: ${JSON.stringify(errorJson)}`);
+      console.log(`[ADMIN-ROUTE] Returning JSON Error: ${JSON.stringify(errorJson)}`);
       return res.status(500).json(errorJson);
     }
   });

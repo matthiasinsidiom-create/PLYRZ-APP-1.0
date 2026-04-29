@@ -1524,7 +1524,7 @@ export const supabaseService = {
     const currentOrigin = window.location.origin;
     // For Capacitor, we might need a specific URL, but for web currentOrigin is perfect
     const backendBaseUrl = currentOrigin.startsWith('capacitor://') 
-      ? (import.meta.env.VITE_APP_URL || 'https://ais-dev-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app')
+      ? (import.meta.env.VITE_APP_URL || 'https://ais-pre-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app')
       : currentOrigin;
 
     console.log(`DEBUG: [SERVICE] Attempting direct backend call to: ${backendBaseUrl}/api/admin/process-fixture-results`);

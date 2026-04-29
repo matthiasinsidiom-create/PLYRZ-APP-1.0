@@ -25,7 +25,7 @@ serve(async (req) => {
 
     const baseUrl = appUrl 
       ? appUrl
-      : 'https://ais-dev-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app';
+      : 'https://ais-pre-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app';
 
     const backendUrl = isCron
       ? `${baseUrl}/api/automation/run-processor`
@@ -44,7 +44,22 @@ serve(async (req) => {
       body: JSON.stringify(isCron ? {} : { fixtureId })
     });
 
-    const data = await response.json();
+    let data: any;
+    const responseText = await response.text();
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.error(`Backend returned non-JSON response: ${responseText.substring(0, 200)}...`);
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Backend returned invalid response format",
+        details: responseText.substring(0, 100)
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      });
+    }
+
     console.log(`Backend response: ${response.status}`, data);
 
     return new Response(JSON.stringify(data), {
