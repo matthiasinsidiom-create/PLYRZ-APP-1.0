@@ -1548,8 +1548,10 @@ export const supabaseService = {
         return data;
       }
 
-      // If direct call fails with 404 or something, maybe we are on a platform that requires the Edge Function
-      console.warn(`DEBUG: [SERVICE] Direct call failed with status ${directResponse.status}. Falling back to Edge Function...`);
+      // If direct call fails, log the body
+      const errorBody = await directResponse.text().catch(() => 'No body');
+      console.warn(`DEBUG: [SERVICE] Direct call failed with status ${directResponse.status}. Body: ${errorBody.substring(0, 200)}...`);
+      console.warn(`DEBUG: [SERVICE] Falling back to Edge Function...`);
     } catch (directError) {
       console.warn(`DEBUG: [SERVICE] Direct call network error. Falling back to Edge Function...`, directError);
     }
@@ -1570,6 +1572,12 @@ export const supabaseService = {
       if (invokeError) {
         console.error(`DEBUG: [SERVICE] Edge function invocation error:`, invokeError);
         throw new Error(invokeError.message || 'Failed to invoke match processor');
+      }
+
+      if (!data) {
+        console.warn(`DEBUG: [SERVICE] Edge function returned no data (null) but no error.`);
+        // Don't throw yet, fallback check might still find results
+        return { success: false, message: 'No response from processor' };
       }
 
       console.log(`DEBUG: [SERVICE] Raw response from edge function:`, data);

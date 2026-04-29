@@ -427,6 +427,9 @@ const AdminMatchControl: React.FC = () => {
     }
     
     try {
+      // Add a small delay to allow DB processing to finish if API timed out but started
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       const updatedFixture = await supabaseService.getFixtureById(id);
       let resultsExist = !!updatedFixture.results_processed_at;
       

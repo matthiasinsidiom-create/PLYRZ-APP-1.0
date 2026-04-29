@@ -355,6 +355,9 @@ const AdminFixtures: React.FC = () => {
     }
     
     try {
+      // Add a small delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       const updatedFixture = await supabaseService.getFixtureById(targetId);
       let resultsExist = !!updatedFixture.results_processed_at;
       

@@ -25,6 +25,11 @@ async function startServer() {
   
   const PORT = 3000;
 
+  app.use((req, res, next) => {
+    console.log(`[REQ] ${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
+  });
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ 
@@ -219,6 +224,7 @@ async function startServer() {
 
   // API 404 handler - Ensure all /api/* routes return JSON
   app.all("/api/*", (req, res) => {
+    console.log(`[SERVER] API 404: ${req.method} ${req.url}`);
     res.status(404).json({ 
       success: false, 
       error: `Route ${req.method} ${req.url} not found` 
@@ -234,8 +240,14 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    console.log(`[SERVER] Serving static files from: ${distPath}`);
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    // The catch-all must be the absolute final route for SPA
+    app.get('*', (req, res, next) => {
+      // Avoid catching /api routes that were missed
+      if (req.url.startsWith('/api/')) {
+        return next();
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
