@@ -68,14 +68,61 @@ async function startServer() {
       return res.status(401).json(response);
     }
 
-    // NEW BEHAVIOR: Automatic processing is disabled from the critical path.
-    // We return success but do nothing, as results must now be processed manually by an admin.
-    const response = { 
-      success: true, 
-      message: "Automatic processing is currently disabled. Results must be processed manually by an admin." 
-    };
-    console.log('DEBUG: [AUTOMATION] Automatic processing is disabled. Returning:', JSON.stringify(response));
-    return res.status(200).json(response);
+    try {
+      const now = new Date().toISOString();
+      const { data: fixtures, error } = await supabaseAdmin
+        .from('fixtures')
+        .select('id, voting_close_at')
+        .eq('status', 'finished')
+        .is('results_processed_at', null)
+        .not('voting_close_at', 'is', null)
+        .lt('voting_close_at', now);
+
+      if (error) {
+        throw error;
+      }
+
+      const processed = [];
+      const found = fixtures?.length || 0;
+
+      for (const fixture of fixtures || []) {
+        try {
+          const results = await processFixtureRatings(supabaseAdmin, fixture.id);
+          const count = results?.length || 0;
+          processed.push({
+            fixtureId: fixture.id,
+            success: true,
+            count
+          });
+          console.log(`[AUTOMATION] Success for ${fixture.id}: ${count} players processed.`);
+        } catch (err: any) {
+          console.error(`[AUTOMATION] Failed for ${fixture.id}:`, err);
+          processed.push({
+            fixtureId: fixture.id,
+            success: false,
+            count: 0,
+            error: err.message || String(err)
+          });
+        }
+      }
+
+      const response = {
+        success: true,
+        mode: "cron",
+        checkedAt: now,
+        found,
+        processed
+      };
+
+      console.log('DEBUG: [AUTOMATION] Automatic processing completed. Returning:', JSON.stringify(response));
+      return res.status(200).json(response);
+    } catch (dbErr: any) {
+      console.error('[AUTOMATION] Database query failed:', dbErr);
+      return res.status(500).json({
+        success: false,
+        error: dbErr.message || "Database query failed"
+      });
+    }
   });
 
   // Secure Admin Endpoint for Manual Result Processing
