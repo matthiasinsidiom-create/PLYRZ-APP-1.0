@@ -143,8 +143,13 @@ export const Dashboard: React.FC = () => {
 
       let status: 'live' | 'voting' | 'result' | 'none' = 'none';
 
-      // Load MVPs - Get all processed matches to find the absolute latest for KM/Reserve
-      const processedMatches = f.filter(fixture => fixture.results_processed_at);
+      // Load MVPs - Get all processed matches within the last 24 hours to find the absolute latest for KM/Reserve
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const processedMatches = f.filter(fixture => 
+        fixture.status === 'finished' &&
+        fixture.results_processed_at && 
+        new Date(fixture.results_processed_at) >= twentyFourHoursAgo
+      );
 
       // Try to identify "OUR" club to be more precise
       const ourClubId = profile.favorite_club_id;
