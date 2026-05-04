@@ -82,6 +82,8 @@ export const MatchDetail: React.FC = () => {
   const [opponentJerseyNumber, setOpponentJerseyNumber] = useState('');
   const [opponentMinute, setOpponentMinute] = useState('');
   const [saving, setSaving] = useState(false);
+  const [isPollingResults, setIsPollingResults] = useState(false);
+  const [pollTimeout, setPollTimeout] = useState(false);
 
   const isVotingOpen = !!fixture && fixture.status === 'finished' && !fixture.results_processed_at && !!fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
 
@@ -231,8 +233,8 @@ export const MatchDetail: React.FC = () => {
     if (data) setMatchEvents(data);
   };
 
-  const handleFullTime = async (votingMinutes: number = 10) => {
-    console.log("DEBUG: [LIFECYCLE] --- MATCH END TRIGGERED ---", { fixtureId: id, votingMinutes });
+  const handleFullTime = async () => {
+    console.log("DEBUG: [LIFECYCLE] --- MATCH END TRIGGERED ---", { fixtureId: id });
     
     if (!id) {
       console.error("DEBUG: [LIFECYCLE] Error: Missing fixture ID");
@@ -246,19 +248,15 @@ export const MatchDetail: React.FC = () => {
       console.error("DEBUG: [LIFECYCLE] Error: Fixture object missing");
       return;
     }
-    if (fixture.status === 'finished' && votingMinutes > 0) {
+    if (fixture.status === 'finished') {
       console.log("DEBUG: [LIFECYCLE] Match already finished, skipping redundant trigger");
       return;
     }
 
-    console.log("DEBUG: [LIFECYCLE] Opening voting window for", votingMinutes, "minutes");
-    
-    const votingClose = new Date();
-    votingClose.setMinutes(votingClose.getMinutes() + votingMinutes);
+    console.log("DEBUG: [LIFECYCLE] Opening voting window (duration defined by backend)");
     
     const payload = {
-      p_fixture_id: id,
-      p_voting_minutes: votingMinutes
+      p_fixture_id: id
     };
     
     // Optimistic update
@@ -266,8 +264,6 @@ export const MatchDetail: React.FC = () => {
       ...prev, 
       status: 'finished',
       match_phase: 'full_time',
-      voting_open_at: new Date().toISOString(),
-      voting_close_at: votingClose.toISOString(),
       results_processed_at: null
     } : null);
     
@@ -283,8 +279,6 @@ export const MatchDetail: React.FC = () => {
           .update({
             status: 'finished',
             match_phase: 'full_time',
-            voting_open_at: new Date().toISOString(),
-            voting_close_at: votingClose.toISOString(),
             results_processed_at: null
           })
           .eq('id', id);
@@ -936,6 +930,52 @@ export const MatchDetail: React.FC = () => {
     return () => clearInterval(interval);
   }, [isAdmin, fixture, isProcessing]);
 
+  // Polling for normal users
+  useEffect(() => {
+    let interval: any;
+    
+    const checkResults = async () => {
+      if (!id) return;
+      
+      try {
+        const { data: updatedFixture } = await supabase.from('fixtures').select('results_processed_at').eq('id', id).single();
+        
+        if (updatedFixture?.results_processed_at) {
+          const { data: history } = await supabase.from('player_rating_history').select('id').eq('fixture_id', id).limit(1);
+          
+          if (history && history.length > 0) {
+            setIsPollingResults(false);
+            if (interval) clearInterval(interval);
+            loadData(); // Update full state
+            navigate(`/matches/${id}/result`); // Navigate to results
+          }
+        }
+      } catch (err) {
+        console.error("DEBUG: Polling error", err);
+      }
+    };
+
+    if (fixture?.status === 'finished' && fixture.voting_close_at && !fixture.results_processed_at && !isAdmin) {
+      const closeAt = new Date(fixture.voting_close_at);
+      if (new Date() >= closeAt && !pollTimeout) {
+        setIsPollingResults(true);
+        interval = setInterval(checkResults, 5000);
+        
+        // Timeout after 60 seconds
+        const timeout = setTimeout(() => {
+          setIsPollingResults(false);
+          setPollTimeout(true);
+          if (interval) clearInterval(interval);
+        }, 60000);
+
+        return () => {
+          if (interval) clearInterval(interval);
+          clearTimeout(timeout);
+        };
+      }
+    }
+  }, [fixture?.status, fixture?.voting_close_at, fixture?.results_processed_at, pollTimeout, isAdmin, id, navigate]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center">
@@ -1247,7 +1287,7 @@ export const MatchDetail: React.FC = () => {
                 <button 
                   onClick={() => {
                     console.log("DEBUG: [UI] Abpfiff button clicked");
-                    handleFullTime(60);
+                    handleFullTime();
                   }}
                   className="flex-1 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-black rounded-xl text-[9px] uppercase tracking-widest transition-all border border-red-500/20"
                 >
@@ -1255,12 +1295,12 @@ export const MatchDetail: React.FC = () => {
                 </button>
                 <button 
                   onClick={() => {
-                    console.log("DEBUG: [UI] Test Abpfiff (5m) clicked");
-                    handleFullTime(5);
+                    console.log("DEBUG: [UI] Test Abpfiff clicked");
+                    handleFullTime();
                   }}
                   className="px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-black rounded-xl text-[8px] uppercase tracking-widest transition-all border border-white/5"
                 >
-                  Test (5m)
+                  Test Abpfiff
                 </button>
               </div>
               )}
@@ -1421,7 +1461,11 @@ export const MatchDetail: React.FC = () => {
 
                 {fixture.voting_close_at && new Date(fixture.voting_close_at) > new Date() && (
                   <button 
-                    onClick={() => handleFullTime(0)}
+                    onClick={async () => {
+                      const now = new Date().toISOString();
+                      await supabase.from('fixtures').update({ voting_close_at: now }).eq('id', id);
+                      setFixture(prev => prev ? { ...prev, voting_close_at: now } : null);
+                    }}
                     className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-white/5 transition-all flex items-center justify-center gap-2"
                   >
                     <Clock className="w-3.5 h-3.5" />
@@ -1471,8 +1515,24 @@ export const MatchDetail: React.FC = () => {
                         <p className="text-xs font-black uppercase tracking-widest">Voting beendet</p>
                       </div>
                       <p className="text-zinc-500 text-[10px] font-medium">
-                        Das Voting-Fenster ist geschlossen. Die Ergebnisse werden in Kürze berechnet.
+                        {pollTimeout && !isAdmin
+                          ? "Ergebnisse werden noch verarbeitet."
+                          : "Das Voting-Fenster ist geschlossen. Die Ergebnisse werden in Kürze berechnet."}
                       </p>
+                      {isPollingResults && !pollTimeout && !isAdmin && (
+                        <div className="mt-2 flex items-center gap-2 text-emerald-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest">Suche nach Ergebnissen...</span>
+                        </div>
+                      )}
+                      {pollTimeout && !isAdmin && (
+                        <button 
+                          onClick={() => { setPollTimeout(false); setIsPollingResults(true); }}
+                          className="mt-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
+                        >
+                          Ergebnisse erneut prüfen
+                        </button>
+                      )}
                     </div>
                   );
                 }

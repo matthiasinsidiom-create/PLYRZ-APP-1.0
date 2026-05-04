@@ -185,9 +185,18 @@ export const MatchList: React.FC = () => {
                           ) : <Shield className="w-4 h-4 text-zinc-600" />}
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">
-                            {(fixture as any).home_team?.name}
-                          </span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none">
+                              {(fixture as any).home_team?.name}
+                            </span>
+                            {fixture.match_type && (
+                              <span className={`text-[7px] font-black uppercase px-1 py-0.5 rounded border ${
+                                fixture.match_type === 'reserve' ? 'text-blue-400 border-blue-400/20 bg-blue-400/5' : 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5'
+                              }`}>
+                                {fixture.match_type === 'reserve' ? 'RES' : 'KM'}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-sm font-black italic uppercase tracking-tight text-zinc-100 truncate">
                             {(fixture as any).home_team?.clubs?.name}
                           </span>

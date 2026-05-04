@@ -143,76 +143,147 @@ export const Dashboard: React.FC = () => {
 
       let status: 'live' | 'voting' | 'result' | 'none' = 'none';
 
-      // Load MVPs
-      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      
-      const processedMatches = f.filter(fixture => 
-        fixture.results_processed_at && new Date(fixture.results_processed_at) >= last24h
-      );
+      // Load MVPs - Get all processed matches to find the absolute latest for KM/Reserve
+      const processedMatches = f.filter(fixture => fixture.results_processed_at);
 
       // Try to identify "OUR" club to be more precise
       const ourClubId = profile.favorite_club_id;
       
+      const isReserveTeam = (name: string) => {
+        const n = name.toLowerCase();
+        return n.includes('reserve') || 
+               n.includes('1b') || 
+               n.includes('1.b') || 
+               n.includes(' ii') || 
+               n.includes('res.') || 
+               n.includes(' res') ||
+               n.includes('2.m') ||
+               n.includes('2. m') ||
+               n.includes('u23') ||
+               n.includes('u-23') ||
+               n.includes(' b ') ||
+               n.endsWith(' b') ||
+               n.includes(' 2. mannschaft');
+      };
+
+      const isKMTeam = (name: string) => {
+        const n = name.toLowerCase();
+        // If it's explicitly reserve, it's not KM
+        if (isReserveTeam(name)) return false;
+        
+        // If it has KM markers, definitely KM
+        if (n.includes('kampfmannschaft') || n.includes('km') || n.includes(' i ')) return true;
+        
+        // Default: If it's not a reserve team, assume it's the main (KM) team
+        return true; 
+      };
+
       const latestKM = processedMatches
         .filter(fixture => {
           const homeName = fixture.home_team?.name || '';
           const awayName = fixture.away_team?.name || '';
-          const homeIsKM = homeName.includes('Kampfmannschaft') || homeName.includes('KM');
-          const awayIsKM = awayName.includes('Kampfmannschaft') || awayName.includes('KM');
+          const homeIsRes = isReserveTeam(homeName);
+          const awayIsRes = isReserveTeam(awayName);
+
+          // If match_type is set and says reserve, it is NOT KM
+          if (fixture.match_type === 'reserve') return false;
+          // If team names match reserve, it is NOT KM
+          if (homeIsRes || awayIsRes) {
+            // But check if it's explicitly KM
+            if (fixture.match_type !== 'kampfmannschaft') return false;
+          }
           
           if (ourClubId) {
-            return (homeIsKM && (fixture.home_team as any)?.club_id === ourClubId) || 
-                   (awayIsKM && (fixture.away_team as any)?.club_id === ourClubId);
+            const homeClubId = (fixture.home_team as any)?.club_id;
+            const awayClubId = (fixture.away_team as any)?.club_id;
+            return homeClubId === ourClubId || awayClubId === ourClubId;
           }
-          return homeIsKM || awayIsKM;
+          return true;
         })
-        .sort((a, b) => new Date(b.results_processed_at!).getTime() - new Date(a.results_processed_at!).getTime())[0];
+        .sort((a, b) => new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime())[0];
       
       const latestReserve = processedMatches
         .filter(fixture => {
           const homeName = fixture.home_team?.name || '';
           const awayName = fixture.away_team?.name || '';
-          const homeIsRes = homeName.includes('Reserve') || homeName.includes('RES');
-          const awayIsRes = awayName.includes('Reserve') || awayName.includes('RES');
-          
-          if (ourClubId) {
-            return (homeIsRes && (fixture.home_team as any)?.club_id === ourClubId) || 
-                   (awayIsRes && (fixture.away_team as any)?.club_id === ourClubId);
+          const homeIsRes = isReserveTeam(homeName);
+          const awayIsRes = isReserveTeam(awayName);
+
+          // Priority: match_type
+          if (fixture.match_type === 'reserve') {
+            if (ourClubId) {
+               const homeClubId = (fixture.home_team as any)?.club_id;
+               const awayClubId = (fixture.away_team as any)?.club_id;
+               return homeClubId === ourClubId || awayClubId === ourClubId;
+            }
+            return true;
           }
-          return homeIsRes || awayIsRes;
+
+          // Fallback: keywords
+          if (homeIsRes || awayIsRes) {
+            if (ourClubId) {
+              const homeClubId = (fixture.home_team as any)?.club_id;
+              const awayClubId = (fixture.away_team as any)?.club_id;
+              return (homeIsRes && homeClubId === ourClubId) || (awayIsRes && awayClubId === ourClubId);
+            }
+            return true;
+          }
+
+          return false;
         })
-        .sort((a, b) => new Date(b.results_processed_at!).getTime() - new Date(a.results_processed_at!).getTime())[0];
+        .sort((a, b) => new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime())[0];
+
+      console.log(`DEBUG: [MVP] Gefundene Fixtures - KM: ${latestKM?.id || 'null'}, RES: ${latestReserve?.id || 'null'}`);
 
       const fetchMVP = async (fixture: Fixture | undefined, targetType: 'KM' | 'RES') => {
         if (!fixture) return null;
         
-        const isKM = targetType === 'KM';
-        const isHomeMatch = (fixture.home_team as any)?.club_id === ourClubId;
-        const isAwayMatch = (fixture.away_team as any)?.club_id === ourClubId;
+        const isKMSearch = targetType === 'KM';
         
         console.log(`DEBUG: [MVP] Suche ${targetType} MVP für Fixture ${fixture.id}`);
         const history = await supabaseService.getFixtureRatingHistory(fixture.id);
         
         if (history.length > 0) {
-          const teamPlayers = history.filter(h => {
-             const pTeam = h.players?.teams;
-             const pTeamName = pTeam?.name || '';
-             const nameMatch = isKM 
-               ? (pTeamName.includes('Kampfmannschaft') || pTeamName.includes('KM'))
-               : (pTeamName.includes('Reserve') || pTeamName.includes('RES'));
-               
-             if (ourClubId && pTeam?.club_id) {
-               return nameMatch && pTeam.club_id === ourClubId;
-             }
-             return nameMatch;
+          // Rule: To show an MVP on OUR dashboard, we prioritize consistency with MatchResult.tsx
+          
+          const processedHistory = history.map((h: any) => {
+            const displayDelta = h.final_delta !== undefined && h.final_delta !== null 
+              ? h.final_delta 
+              : h.delta_overall;
+            
+            return {
+              ...h,
+              delta_overall: displayDelta
+            };
+          });
+
+          const clubPlayers = processedHistory.filter(h => {
+             const pTeam = (h as any).players?.teams;
+             if (!pTeam) return false;
+             if (ourClubId && pTeam.club_id !== ourClubId) return false;
+             return true;
           });
           
-          const source = teamPlayers.length > 0 ? teamPlayers : history;
+          // 1. Prioritize absolute match MVP (regardless of club) for consistency with MatchResult page
+          const absoluteMVP = processedHistory.find(h => (h as any).is_mvp);
+          
+          // 2. Fallback to our club's best or the whole match's best using identical sorting logic
+          const sortLogic = (a: any, b: any) => {
+            const bScore = b.mvp_score || b.delta_overall || 0;
+            const aScore = a.mvp_score || a.delta_overall || 0;
+            if (bScore !== aScore) return bScore - aScore;
+            
+            const bVotes = b.positive_votes || 0;
+            const aVotes = a.positive_votes || 0;
+            if (bVotes !== aVotes) return bVotes - aVotes;
+            
+            return (b.new_overall || 0) - (a.new_overall || 0);
+          };
 
-          // is_mvp = true oder höchster delta_overall
-          const mvpEntry = source.find(h => (h as any).is_mvp) || source.reduce((prev, current) => 
-            (prev.delta_overall > current.delta_overall) ? prev : current
-          );
+          const bestOfOurClub = clubPlayers.length > 0 ? [...clubPlayers].sort(sortLogic)[0] : null;
+          const bestOverall = [...processedHistory].sort(sortLogic)[0];
+
+          const mvpEntry = absoluteMVP || bestOfOurClub || bestOverall;
           
           const found = p.find(player => player.id === mvpEntry.player_id) || null;
           console.log(`DEBUG: [MVP] ${targetType} MVP gefunden: ${found?.full_name || 'none'} (${found?.id})`);

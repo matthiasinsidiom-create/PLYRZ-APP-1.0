@@ -323,7 +323,8 @@ export const PlayerCard = React.memo(({
     }
   };
 
-  const lastName = player.full_name.split(' ').pop() || player.full_name;
+  const fullName = player.full_name || 'Unbekannt';
+  const lastName = fullName.split(' ').pop() || fullName;
   const displayName = lastName;
   
   // Use nationality flag from flagcdn

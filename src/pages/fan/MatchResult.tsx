@@ -220,6 +220,29 @@ const MatchResult: React.FC = () => {
   const [results, setResults] = useState<RatingHistoryEntry[]>([]);
   const [lineup, setLineup] = useState<any[]>([]);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [autoProcessed, setAutoProcessed] = useState(false);
+
+  // Auto-process for admins if voting is closed but results are missing
+  useEffect(() => {
+    const shouldAutoProcess = 
+      id && 
+      isAdmin && 
+      fixture && 
+      fixture.status === 'finished' && 
+      !fixture.results_processed_at && 
+      !processing && 
+      !autoProcessed;
+
+    if (shouldAutoProcess) {
+      const closeAt = fixture.voting_close_at ? new Date(fixture.voting_close_at) : null;
+      if (!closeAt || new Date() >= closeAt) {
+        console.log(`DEBUG: [UI] Admin detected on finished result page. Auto-triggering calculation for ${id}...`);
+        setAutoProcessed(true);
+        handleManualProcess();
+      }
+    }
+  }, [id, isAdmin, fixture?.status, fixture?.results_processed_at, processing, autoProcessed]);
 
   useEffect(() => {
     if (id) {
@@ -276,16 +299,32 @@ const MatchResult: React.FC = () => {
 
   const mvp = useMemo(() => {
     if (results.length === 0) return null;
+    
+    // Prioritize marked is_mvp from DB
+    const markedMVP = results.find(r => r.is_mvp);
+    if (markedMVP) return markedMVP;
+
+    // Fallback to sorting logic
     return [...results].sort((a, b) => {
-      if (b.delta_overall !== a.delta_overall) return b.delta_overall - a.delta_overall;
-      if (b.votes_up !== a.votes_up) return b.votes_up - a.votes_up;
-      return b.new_overall - a.new_overall;
+      const bScore = b.mvp_score || b.delta_overall || 0;
+      const aScore = a.mvp_score || a.delta_overall || 0;
+      if (bScore !== aScore) return bScore - aScore;
+      
+      const bVotes = b.positive_votes || 0;
+      const aVotes = a.positive_votes || 0;
+      if (bVotes !== aVotes) return bVotes - aVotes;
+      
+      return (b.new_overall || 0) - (a.new_overall || 0);
     })[0];
   }, [results]);
 
   const top5 = useMemo(() => {
     return [...results]
-      .sort((a, b) => b.delta_overall - a.delta_overall)
+      .sort((a, b) => {
+        const bScore = b.mvp_score || b.delta_overall || 0;
+        const aScore = a.mvp_score || a.delta_overall || 0;
+        return bScore - aScore;
+      })
       .slice(0, 5);
   }, [results]);
 
@@ -358,7 +397,20 @@ const MatchResult: React.FC = () => {
   }
 
   // Prioritize results and skip pending state if results exist
-  const showResults = results.length > 0 && fixture?.results_processed_at;
+  const showResults = (results.length > 0 || (fixture?.results_processed_at && lineup.length === 0)) && fixture?.results_processed_at;
+
+  const handleManualProcess = async () => {
+    if (!id || processing) return;
+    setProcessing(true);
+    try {
+      await supabaseService.processFixtureRatings(id);
+      await loadData();
+    } catch (err) {
+      console.error('Manual processing failed:', err);
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   if (!fixture || !showResults) {
     const now = new Date();
@@ -435,13 +487,47 @@ const MatchResult: React.FC = () => {
               </button>
             )}
 
+            {!isVotingOpen && !fixture?.results_processed_at && isAdmin && (
+              <button 
+                onClick={handleManualProcess}
+                disabled={processing}
+                className="w-full bg-zinc-800 text-white font-bold py-5 rounded-2xl hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-white/5 active:scale-[0.98]"
+              >
+                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                {processing ? 'Wird berechnet...' : 'Ergebnisse manuell berechnen'}
+              </button>
+            )}
+
             <button 
-              onClick={() => navigate(-1)}
-              className="w-full bg-zinc-900 text-white font-black italic uppercase tracking-tighter py-5 rounded-2xl border border-white/5 hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+              onClick={() => navigate('/matches')}
+              className="w-full bg-zinc-900/50 text-zinc-400 font-bold py-5 rounded-2xl hover:bg-zinc-900 transition-all border border-white/5 active:scale-[0.98]"
             >
-              <ArrowLeft className="w-5 h-5" /> Zurück zum Spiel
+              ZUR ÜBERSICHT
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If we reach here, we have results or it's processed with no lineup
+  if (fixture?.results_processed_at && results.length === 0) {
+    return (
+      <div className="min-h-screen bg-transparent text-white p-6 flex flex-col items-center justify-center">
+        <div className="max-w-md w-full space-y-8 text-center bg-zinc-900/40 backdrop-blur-xl border border-white/5 p-12 rounded-[3rem]">
+          <div className="w-20 h-20 bg-zinc-800 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <Info className="w-10 h-10 text-zinc-600" />
+          </div>
+          <div className="space-y-4">
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">Keine Daten</h2>
+            <p className="text-zinc-500 font-medium">Für dieses Spiel wurden keine Bewertungen oder Statistiken erfasst.</p>
+          </div>
+          <button 
+            onClick={() => navigate('/matches')}
+            className="w-full bg-emerald-500 text-black font-black italic uppercase tracking-tight py-5 rounded-2xl hover:bg-emerald-400 transition-all"
+          >
+            ZUR ÜBERSICHT
+          </button>
         </div>
       </div>
     );
