@@ -21,6 +21,7 @@ serve(async (req) => {
     const { fixtureId, type, appUrl } = body;
     const isCron = type === 'cron' || !fixtureId;
 
+    const CRON_SECRET = Deno.env.get('CRON_SECRET');
     const authHeader = req.headers.get('Authorization');
 
     const baseUrl = appUrl 
@@ -31,12 +32,29 @@ serve(async (req) => {
       ? `${baseUrl}/api/automation/run-processor`
       : `${baseUrl}/api/admin/process-fixture-results`;
 
-    console.log(`Proxying request to ${backendUrl} for fixtureId: ${fixtureId || 'cron'}`);
-
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (authHeader) requestHeaders['Authorization'] = authHeader;
+
+    console.log(JSON.stringify({
+      log: 'match-processor-start',
+      mode: isCron ? 'cron' : 'manual',
+      hasIncomingAuthorization: !!authHeader,
+      hasCronSecret: !!CRON_SECRET
+    }));
+
+    if (isCron) {
+      if (CRON_SECRET) {
+        requestHeaders['Authorization'] = `Bearer ${CRON_SECRET}`;
+      } else {
+        console.error('CRON_SECRET is not set in environment!');
+        if (authHeader) requestHeaders['Authorization'] = authHeader;
+      }
+    } else {
+      if (authHeader) requestHeaders['Authorization'] = authHeader;
+    }
+
+    console.log(`Proxying request to ${backendUrl} for fixtureId: ${fixtureId || 'cron'}`);
 
     const response = await fetch(backendUrl, {
       method: 'POST',
@@ -60,7 +78,14 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Backend response: ${response.status}`, data);
+    console.log(JSON.stringify({
+      log: 'match-processor-end',
+      backendStatus: response.status,
+      success: data?.success,
+      error: data?.error || null,
+      found: data?.found,
+      processed: data?.processed
+    }));
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -15,7 +15,12 @@ BEGIN
     IF NEW.match_type IS NULL THEN
       SELECT name INTO v_team_name FROM public.teams WHERE id = NEW.home_team_id;
       
-      IF v_team_name ILIKE '%reserve%' THEN
+      IF v_team_name ILIKE '%reserve%' OR 
+         v_team_name ILIKE '% 1b%' OR 
+         v_team_name ILIKE '% 1.b%' OR 
+         v_team_name ILIKE '% ii%' OR 
+         v_team_name ILIKE '% res%' OR 
+         v_team_name ILIKE '% 2. mannschaft%' THEN
         NEW.match_type := 'reserve';
       ELSE
         NEW.match_type := 'kampfmannschaft';
@@ -42,8 +47,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 UPDATE public.fixtures f
 SET match_type = (
   CASE 
-    WHEN (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '%reserve%' THEN 'reserve'
+    WHEN (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '%reserve%' OR
+         (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '% 1b%' OR
+         (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '% 1.b%' OR
+         (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '% ii%' OR
+         (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '% res%' OR
+         (SELECT name FROM public.teams t WHERE t.id = f.home_team_id) ILIKE '% 2. mannschaft%' THEN 'reserve'
     ELSE 'kampfmannschaft'
   END
 )
-WHERE match_type IS NULL;
+WHERE match_type IS NULL OR match_type = 'kampfmannschaft';
