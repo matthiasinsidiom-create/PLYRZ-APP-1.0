@@ -263,6 +263,13 @@ const MatchResult: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      try {
+        await supabase.auth.getSession();
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 500));
+        await supabase.auth.getSession().catch(() => {});
+      }
+      
       const [fixtureData, resultsData, lineupData, eventsData] = await Promise.all([
         supabaseService.getFixtureById(id!),
         supabaseService.getFixtureRatingHistory(id!),

@@ -1,5 +1,5 @@
-import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { processFixtureRatings } from './matchProcessor';
+import { supabaseAdmin } from '../lib/supabaseAdmin.ts';
+import { processFixtureRatings } from './matchProcessor.ts';
 
 let hasResultsProcessedColumn = true;
 

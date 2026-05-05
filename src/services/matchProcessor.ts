@@ -1,7 +1,7 @@
-import { SupabaseClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '../lib/supabaseAdmin';
-import { PlayerStats, PlayerRatingHistory } from '../types';
-import { mapPlayerWithStats, resolveLatestStats } from '../lib/stats';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '../lib/supabaseAdmin.ts';
+import type { PlayerStats, PlayerRatingHistory } from '../types.ts';
+import { mapPlayerWithStats, resolveLatestStats } from '../lib/stats.ts';
 
 /**
  * Maps a position string to a position group for logic processing.

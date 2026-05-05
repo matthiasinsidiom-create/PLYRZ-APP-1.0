@@ -722,6 +722,17 @@ export const MatchDetail: React.FC = () => {
     try {
       console.log(`DEBUG: [UI] Loading data for fixture ${id}...`);
       
+      // Workaround for iOS Capacitor GoTrue lock stealing bug during concurrent requests:
+      // Wait for a fresh session before launching 8 parallel queries.
+      try {
+        await supabase.auth.getSession();
+      } catch (lockError) {
+        console.warn('DEBUG: Ignored pre-warm session error:', lockError);
+        // Wait 500ms and try once more if it's a lock steal issue
+        await new Promise(r => setTimeout(r, 500));
+        await supabase.auth.getSession().catch(() => {});
+      }
+      
       const [f, l, v, checkin, history, events, isCompleted, teamId] = await Promise.all([
         supabaseService.getFixtureById(id),
         supabaseService.getFixtureLineupWithPlayers(id),
