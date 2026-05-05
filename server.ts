@@ -5,9 +5,9 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { supabaseAdmin } from "./src/lib/supabaseAdmin";
-import { processFixtureRatings } from "./src/services/matchProcessor";
-import { runAutoProcessor } from "./src/services/backgroundProcessor";
+import { supabaseAdmin } from "./src/lib/supabaseAdmin.ts";
+import { processFixtureRatings } from "./src/services/matchProcessor.ts";
+import { runAutoProcessor } from "./src/services/backgroundProcessor.ts";
 
 async function startServer() {
   const app = express();
@@ -33,7 +33,8 @@ async function startServer() {
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ 
-      status: "ok", 
+      success: true, 
+      server: "plyrz-backend-running",
       message: "Supabase migration in progress",
       env: {
         VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? 'Present' : 'Missing',
