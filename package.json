@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "start": "node server.ts",
     "build": "vite build",
-    "cap:sync": "npx cap sync",
+    "clean": "rm -rf dist",
     "cap:add:ios": "npx cap add ios",
     "cap:add:android": "npx cap add android",
     "cap:open:ios": "npx cap open ios",
