@@ -20,10 +20,12 @@ import {
   Star,
   Minus,
   Zap,
-  Square
+  Square,
+  RefreshCw
 } from 'lucide-react';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { supabaseService } from '../../services/supabaseService';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture, Player, PlayerStats, Team, Club, PlayerRatingHistory, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
@@ -114,19 +116,19 @@ const RankingRow: React.FC<{ entry: RatingHistoryEntry; rank?: number }> = ({ en
         )}
         <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 bg-zinc-800">
           <img 
-            src={entry.players.photo_url || "/assets/players/default.png"} 
-            alt="" 
+            src={entry.players?.photo_url || "/assets/players/default.png"} 
+            alt={entry.players?.name || "Player"} 
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players.name}</span>
-          <EventBadges goals={entry.goal_count} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
+          <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players?.name || 'Unbekannter Spieler'}</span>
+          <EventBadges goals={entry.goal_count || 0} yellows={entry.yellow_count || 0} reds={entry.red_count || 0} size="sm" />
         </div>
       </div>
-      <div className={`text-xs font-black italic tabular-nums ${entry.delta_overall > 0 ? 'text-emerald-400' : entry.delta_overall < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
-        {entry.delta_overall > 0 ? '+' : ''}{safeFixed(entry.delta_overall)}
+      <div className={`text-xs font-black italic tabular-nums ${(entry.delta_overall || 0) > 0 ? 'text-emerald-400' : (entry.delta_overall || 0) < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+        {(entry.delta_overall || 0) > 0 ? '+' : ''}{safeFixed(entry.delta_overall)}
       </div>
     </motion.div>
   );
@@ -669,8 +671,8 @@ const MatchResult: React.FC = () => {
                   >
                     <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
                       <PlayerCard 
-                        player={mvp.players} 
-                        clubLogo={mvp.players.teams?.clubs?.logo_url}
+                        player={mvp.players || { name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' }} 
+                        clubLogo={mvp.players?.teams?.clubs?.logo_url}
                         jerseyNumber={mvp.jersey_number}
                         lineupRole={mvp.lineup_role}
                         isTopPerformer={true}
@@ -819,8 +821,8 @@ const MatchResult: React.FC = () => {
                   <div className="w-full flex justify-center items-center">
                     <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
                       <PlayerCard 
-                        player={entry.players} 
-                        clubLogo={entry.players.teams?.clubs?.logo_url}
+                        player={entry.players || { name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' }} 
+                        clubLogo={entry.players?.teams?.clubs?.logo_url}
                         jerseyNumber={entry.jersey_number}
                         lineupRole={entry.lineup_role}
                         onClick={() => navigate(`/players/${entry.player_id}`)}
@@ -875,8 +877,8 @@ const MatchResult: React.FC = () => {
                   <div className="w-full flex justify-center items-center">
                     <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
                       <PlayerCard 
-                        player={entry.players} 
-                        clubLogo={entry.players.teams?.clubs?.logo_url}
+                        player={entry.players || { name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' }} 
+                        clubLogo={entry.players?.teams?.clubs?.logo_url}
                         jerseyNumber={entry.jersey_number}
                         lineupRole={entry.lineup_role}
                         onClick={() => navigate(`/players/${entry.player_id}`)}

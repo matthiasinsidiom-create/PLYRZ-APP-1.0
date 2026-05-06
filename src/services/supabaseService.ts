@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
 import { appConfig } from '../lib/config';
-import { processFixtureRatings as sharedProcessFixtureRatings } from './matchProcessor';
 import { calculateDistance } from '../lib/geo';
 import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStats, PlayerRatingHistory, MatchEvent } from '../types';
 import { mapPlayerWithStats } from '../lib/stats';
@@ -1521,48 +1520,11 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
-    const currentOrigin = window.location.origin;
-    // For Capacitor, we might need a specific URL, but for web currentOrigin is perfect
-    const backendBaseUrl = currentOrigin.startsWith('capacitor://') 
-      ? (import.meta.env.VITE_APP_URL || 'https://ais-pre-547or3d7cc3zl233hltcpp-612426073473.europe-west2.run.app')
-      : currentOrigin;
-
-    console.log(`DEBUG: [SERVICE] Attempting direct backend call to: ${backendBaseUrl}/api/admin/process-fixture-results`);
-
     try {
-      // Step 1: Try Direct Call (Bypassing Edge Function)
-      const directResponse = await fetch(`${backendBaseUrl}/api/admin/process-fixture-results`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ fixtureId })
-      });
-
-      console.log(`DEBUG: [SERVICE] Direct backend status: ${directResponse.status}`);
-
-      if (directResponse.ok) {
-        const data = await directResponse.json();
-        console.log(`DEBUG: [SERVICE] Direct call success:`, data);
-        return data;
-      }
-
-      // If direct call fails, log the body
-      const errorBody = await directResponse.text().catch(() => 'No body');
-      console.warn(`DEBUG: [SERVICE] Direct call failed with status ${directResponse.status}. Body: ${errorBody.substring(0, 200)}...`);
-      console.warn(`DEBUG: [SERVICE] Falling back to Edge Function...`);
-    } catch (directError) {
-      console.warn(`DEBUG: [SERVICE] Direct call network error. Falling back to Edge Function...`, directError);
-    }
-
-    // Step 2: Fallback to Edge Function (for Capacitor / specific network setups)
-    try {
-      console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor' as fallback...`);
+      console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor'...`);
       const { data, error: invokeError } = await supabase.functions.invoke('match-processor', {
         body: { 
           fixtureId,
-          appUrl: backendBaseUrl
         },
         headers: {
           Authorization: `Bearer ${session.access_token}`
@@ -1574,35 +1536,25 @@ export const supabaseService = {
         throw new Error(invokeError.message || 'Failed to invoke match processor');
       }
 
-      if (!data) {
+      const result = data?.backendResult ?? data;
+
+      if (!result) {
         console.warn(`DEBUG: [SERVICE] Edge function returned no data (null) but no error.`);
-        // Don't throw yet, fallback check might still find results
         return { success: false, message: 'No response from processor' };
       }
 
-      console.log(`DEBUG: [SERVICE] Raw response from edge function:`, data);
+      console.log(`DEBUG: [SERVICE] Raw response from edge function/backendResult:`, result);
 
-      if (data && data.success === false) {
-        console.error(`DEBUG: [SERVICE] Edge function returned success: false`, data);
-        let errorMessage = data.error || 'Failed to process ratings';
-        if (data.details) {
-            errorMessage += ` - Details: ${typeof data.details === 'string' ? data.details : JSON.stringify(data.details).substring(0, 300)}`;
+      if (result.success === false) {
+        console.error(`DEBUG: [SERVICE] Edge function returned success: false`, result);
+        let errorMessage = result.error || 'Failed to process ratings';
+        if (result.details) {
+            errorMessage += ` - Details: ${typeof result.details === 'string' ? result.details : JSON.stringify(result.details).substring(0, 300)}`;
         }
         throw new Error(errorMessage);
       }
 
-      // Check if data conforms to our exact expected format
-      if (!data || data.success === undefined) {
-         console.warn(`DEBUG: [SERVICE] Unexpected data shape from edge function:`, data);
-         return {
-            success: true,
-            processed: true,
-            fixtureId: fixtureId,
-            message: "Match processed successfully"
-         };
-      }
-
-      return data;
+      return result;
     } catch (error: any) {
       console.error(`DEBUG: [SERVICE] Critical Network or Execution Error processing ratings:`, error);
       throw error;
