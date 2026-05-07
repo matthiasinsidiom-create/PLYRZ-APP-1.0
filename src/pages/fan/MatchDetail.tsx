@@ -20,7 +20,8 @@ import {
   Plus,
   Trash2,
   Zap,
-  PlusCircle
+  PlusCircle,
+  Search
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
@@ -111,6 +112,8 @@ export const MatchDetail: React.FC = () => {
   }, [isVotingOpen, fixture?.voting_close_at]);
   const [matchMinute, setMatchMinute] = useState<string>('');
   const [subbingOutPlayerId, setSubbingOutPlayerId] = useState<string | null>(null);
+  const [assistSelectionPlayerId, setAssistSelectionPlayerId] = useState<string | null>(null);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
 
   const isPlayerOnPitch = (playerId: string) => {
     const entry = lineup.find(l => l.player_id === playerId);
@@ -330,8 +333,13 @@ export const MatchDetail: React.FC = () => {
     }
   };
 
-  const handleAddEvent = async (playerId: string, type: 'goal' | 'yellow_card' | 'red_card' | 'sub_in' | 'sub_out', relatedPlayerId?: string) => {
+  const handleAddEvent = async (playerId: string, type: 'goal' | 'yellow_card' | 'red_card' | 'sub_in' | 'sub_out', relatedPlayerId?: string | null, assistPlayerId?: string | null) => {
     if (!id || !isAdmin || !fixture) return;
+
+    if (type === 'goal' && assistPlayerId === undefined) {
+      setAssistSelectionPlayerId(playerId);
+      return;
+    }
     
     // Handle Substitution Flow
     if (type === 'sub_out' && !relatedPlayerId) {
@@ -357,10 +365,11 @@ export const MatchDetail: React.FC = () => {
       player_id: playerId, 
       team_id: teamId,
       event_type: eventType,
-      related_player_id: relatedPlayerId,
+      related_player_id: relatedPlayerId || null,
+      assist_player_id: assistPlayerId || null,
       minute: parseInt(matchMinute) || null
     };
-    
+
     // Use updated events list to avoid stale state in score calculation
     const updatedEvents = [...matchEvents, newEvent];
     setMatchEvents(updatedEvents);
@@ -390,7 +399,8 @@ export const MatchDetail: React.FC = () => {
         player_id: playerId, 
         team_id: teamId,
         event_type: eventType,
-        related_player_id: relatedPlayerId,
+        related_player_id: relatedPlayerId || null,
+        assist_player_id: assistPlayerId || null,
         minute: parseInt(matchMinute) || null
       });
       
@@ -1194,7 +1204,12 @@ export const MatchDetail: React.FC = () => {
                     <span className="truncate">
                       {g.event_type === 'opponent_goal' 
                         ? `Gegner #${g.opponent_jersey_number || '?'}` 
-                        : getPlayerName(g.player_id)}
+                        : (
+                          <span className="flex items-center gap-1">
+                            {getPlayerName(g.player_id)}
+                            {g.assist_player_id && <span className="text-zinc-500 font-bold ml-1 text-[8px]">(Assist: {getPlayerName(g.assist_player_id)})</span>}
+                          </span>
+                        )}
                     </span>
                   </div>
                 ))}
@@ -1205,7 +1220,12 @@ export const MatchDetail: React.FC = () => {
                     <span className="truncate">
                       {g.event_type === 'opponent_goal' 
                         ? `Gegner #${g.opponent_jersey_number || '?'}` 
-                        : getPlayerName(g.player_id)}
+                        : (
+                          <span className="flex items-center gap-1 justify-end">
+                            {g.assist_player_id && <span className="text-zinc-500 font-bold mr-1 text-[8px]">(Assist: {getPlayerName(g.assist_player_id)})</span>}
+                            {getPlayerName(g.player_id)}
+                          </span>
+                        )}
                     </span>
                     <span>⚽</span>
                   </div>
@@ -1252,7 +1272,12 @@ export const MatchDetail: React.FC = () => {
                           <span className="text-emerald-500">Ein:</span> {getPlayerName(event.related_player_id)}
                         </span>
                       ) : (
-                        getPlayerName(event.player_id)
+                        <span className="flex items-center gap-1">
+                          {getPlayerName(event.player_id)}
+                          {event.assist_player_id && (
+                            <span className="text-zinc-500 font-bold ml-1 text-[8px]">(Assist: {getPlayerName(event.assist_player_id)})</span>
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1785,6 +1810,98 @@ export const MatchDetail: React.FC = () => {
                     >
                       {saving ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'TOR SPEICHERN'}
                     </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Assist Selection Modal */}
+      <AnimatePresence>
+        {assistSelectionPlayerId && (
+          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[80vh]"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500 rounded-xl text-black">
+                    <Trophy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black italic uppercase tracking-tighter">Assistgeber</h3>
+                    <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none mt-0.5">
+                      Wähle den Assist für {getPlayerName(assistSelectionPlayerId)}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setAssistSelectionPlayerId(null)}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5 text-zinc-400" />
+                </button>
+              </div>
+
+              <div className="p-6 flex-1 overflow-hidden flex flex-col pl-4 pr-1">
+                <div className="space-y-4 flex-1 flex flex-col pr-5">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                    <input 
+                      type="text"
+                      placeholder="Spieler suchen..."
+                      value={playerSearchQuery}
+                      onChange={(e) => setPlayerSearchQuery(e.target.value)}
+                      className="w-full bg-black border border-white/10 rounded-2xl px-12 py-4 text-sm font-bold focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                    <button
+                      onClick={() => {
+                        handleAddEvent(assistSelectionPlayerId, 'goal', null, null);
+                        setAssistSelectionPlayerId(null);
+                      }}
+                      className="w-full mb-4 flex items-center justify-center p-4 bg-zinc-800 hover:bg-zinc-700 border border-white/10 rounded-2xl transition-all group active:scale-[0.98]"
+                    >
+                      <span className="text-[12px] font-black uppercase italic text-zinc-300 group-hover:text-white transition-colors">Kein Assist</span>
+                    </button>
+
+                    {lineup
+                      .filter(entry => {
+                        // Needs to be same team
+                        const scorerEntry = lineup.find(l => l.player_id === assistSelectionPlayerId);
+                        return scorerEntry && entry.team_id === scorerEntry.team_id && entry.player_id !== assistSelectionPlayerId;
+                      })
+                      .filter(entry => !playerSearchQuery || entry.players.full_name.toLowerCase().includes(playerSearchQuery.toLowerCase()))
+                      .map(entry => {
+                        return (
+                          <button
+                            key={entry.player_id}
+                            onClick={() => {
+                              handleAddEvent(assistSelectionPlayerId, 'goal', null, entry.player_id);
+                              setAssistSelectionPlayerId(null);
+                              setPlayerSearchQuery('');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-emerald-500/10 border border-white/5 hover:border-emerald-500/30 rounded-2xl transition-all group active:scale-[0.98]"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-400 group-hover:text-emerald-500 transition-colors">
+                                #{entry.jersey_number || '?'}
+                              </div>
+                              <div className="text-left">
+                                <p className="text-[11px] font-black uppercase italic text-white group-hover:text-emerald-400 transition-colors">{entry.players.full_name}</p>
+                              </div>
+                            </div>
+                            <Plus className="w-4 h-4 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+                          </button>
+                        );
+                    })}
                   </div>
                 </div>
               </div>

@@ -69,11 +69,12 @@ const DeltaBadge: React.FC<{ delta: number }> = ({ delta }) => {
 
 const EventBadges: React.FC<{ 
   goals: number; 
+  assists?: number;
   yellows: number; 
   reds: number; 
   size?: 'sm' | 'md' 
-}> = ({ goals, yellows, reds, size = 'md' }) => {
-  if (goals === 0 && yellows === 0 && reds === 0) return null;
+}> = ({ goals, assists = 0, yellows, reds, size = 'md' }) => {
+  if (goals === 0 && assists === 0 && yellows === 0 && reds === 0) return null;
   const textSize = size === 'sm' ? 'text-[9px]' : 'text-[11px]';
   const gap = size === 'sm' ? 'gap-2' : 'gap-3';
   return (
@@ -82,6 +83,12 @@ const EventBadges: React.FC<{
         <div className="flex items-center gap-1">
           <span className={size === 'sm' ? 'text-[10px]' : 'text-sm'}>⚽</span>
           <span className={`${textSize} font-black italic text-white tabular-nums`}>{goals}</span>
+        </div>
+      )}
+      {assists > 0 && (
+        <div className="flex items-center gap-1">
+          <span className={size === 'sm' ? 'text-[10px]' : 'text-sm'}>🎯</span>
+          <span className={`${textSize} font-black italic text-white tabular-nums`}>{assists}</span>
         </div>
       )}
       {yellows > 0 && (
@@ -124,7 +131,7 @@ const RankingRow: React.FC<{ entry: RatingHistoryEntry; rank?: number }> = ({ en
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players?.name || 'Unbekannter Spieler'}</span>
-          <EventBadges goals={entry.goal_count || 0} yellows={entry.yellow_count || 0} reds={entry.red_count || 0} size="sm" />
+          <EventBadges goals={entry.goal_count || 0} assists={entry.assists || 0} yellows={entry.yellow_count || 0} reds={entry.red_count || 0} size="sm" />
         </div>
       </div>
       <div className={`text-xs font-black italic tabular-nums ${(entry.delta_overall || 0) > 0 ? 'text-emerald-400' : (entry.delta_overall || 0) < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
@@ -207,7 +214,7 @@ const PerformancePanel: React.FC<{ entry: any }> = ({ entry }) => {
             <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.negative_votes || 0}</span>
           </div>
         </div>
-        <EventBadges goals={entry.goal_count} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
+        <EventBadges goals={entry.goal_count} assists={entry.assists} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
       </div>
     </div>
   );
@@ -692,14 +699,14 @@ const MatchResult: React.FC = () => {
                       </motion.div>
 
                       {/* MVP Event Badges */}
-                      {(mvp.goal_count > 0 || mvp.yellow_count > 0 || mvp.red_count > 0) && (
+                      {(mvp.goal_count > 0 || (mvp.assists || 0) > 0 || mvp.yellow_count > 0 || mvp.red_count > 0) && (
                         <motion.div 
                           initial={{ opacity: 0, y: 10 }}
                           whileInView={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.8 }}
                           className="absolute -bottom-[80px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-white/10 rounded-full shadow-2xl"
                         >
-                          <EventBadges goals={mvp.goal_count} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
+                          <EventBadges goals={mvp.goal_count} assists={mvp.assists} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
                         </motion.div>
                       )}
                     </div>

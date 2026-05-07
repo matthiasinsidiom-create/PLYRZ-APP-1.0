@@ -81,6 +81,8 @@ const AdminMatchControl: React.FC = () => {
   const [showLiveGoalModal, setShowLiveGoalModal] = useState(false);
   const [liveGoalTeam, setLiveGoalTeam] = useState<'home' | 'away' | null>(null);
   const [liveGoalFormType, setLiveGoalFormType] = useState<'player' | 'opponent' | null>(null);
+  const [assistSelectionPhase, setAssistSelectionPhase] = useState<'scorer' | 'assist'>('scorer');
+  const [selectedGoalScorerId, setSelectedGoalScorerId] = useState<string | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [showConfirmProcess, setShowConfirmProcess] = useState(false);
   const [statusModal, setStatusModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' }>({
@@ -282,13 +284,24 @@ const AdminMatchControl: React.FC = () => {
     }
   };
 
-  const handleAddEvent = async (playerId: string, type: string, relatedPlayerId?: string) => {
+  const handleAddEvent = async (playerId: string, type: string, relatedPlayerId?: string | null, assistPlayerId?: string | null) => {
     if (!id || !fixture) return;
     
     // Handle Substitution Flow
     if (type === 'sub_out' && !relatedPlayerId) {
       console.log(`DEBUG: Substitution gestartet (player_out_id: ${playerId})`);
       setSubbingOutPlayerId(playerId);
+      return;
+    }
+
+    // Handle Goal without assist selected yet
+    if (type === 'goal' && assistPlayerId === undefined) {
+      const isHomeTeam = lineup.home.some(e => e.player_id === playerId);
+      setLiveGoalTeam(isHomeTeam ? 'home' : 'away');
+      setLiveGoalFormType('player');
+      setSelectedGoalScorerId(playerId);
+      setAssistSelectionPhase('assist');
+      setShowLiveGoalModal(true);
       return;
     }
 
@@ -308,6 +321,7 @@ const AdminMatchControl: React.FC = () => {
       player_id: playerId,
       event_type: eventType,
       related_player_id: relatedPlayerId,
+      assist_player_id: assistPlayerId,
       created_at: new Date().toISOString()
     };
     
@@ -338,7 +352,8 @@ const AdminMatchControl: React.FC = () => {
         team_id: teamId,
         player_id: playerId,
         event_type: eventType,
-        related_player_id: relatedPlayerId
+        related_player_id: relatedPlayerId,
+        assist_player_id: assistPlayerId
       });
       setEvents(prev => prev.map(e => e.id === tempId ? created : e));
       
@@ -695,6 +710,8 @@ const AdminMatchControl: React.FC = () => {
                   console.log('Live own-team goal button clicked');
                   setLiveGoalTeam('home');
                   setLiveGoalFormType('player');
+                  setAssistSelectionPhase('scorer');
+                  setSelectedGoalScorerId(null);
                   setShowLiveGoalModal(true);
                 }}
                 className="p-6 bg-emerald-500 hover:bg-emerald-400 text-black rounded-3xl flex items-center gap-4 transition-all active:scale-[0.98] shadow-xl shadow-emerald-500/10 group overflow-hidden relative"
@@ -763,7 +780,12 @@ const AdminMatchControl: React.FC = () => {
                               <span className="text-emerald-500">Ein:</span> {getPlayerName(event.related_player_id)}
                             </span>
                           ) : (
-                            getPlayerName(event.player_id)
+                            <span className="flex items-center gap-1">
+                              {getPlayerName(event.player_id)}
+                              {event.assist_player_id && (
+                                <span className="text-zinc-500 font-bold ml-1 text-[8px]">(Assist: {getPlayerName(event.assist_player_id)})</span>
+                              )}
+                            </span>
                           )}
                         </span>
                       </div>
@@ -1068,7 +1090,9 @@ const AdminMatchControl: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-black italic uppercase tracking-tighter">
-                      {liveGoalFormType === 'player' ? 'Tor Heimteam' : 'Tor Gegner'}
+                      {liveGoalFormType === 'player' 
+                        ? (assistSelectionPhase === 'scorer' ? 'Torschütze' : 'Assistgeber')
+                        : 'Tor Gegner'}
                     </h3>
                     <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">
                       {liveGoalTeam === 'home' ? fixture.home_team?.clubs?.name : fixture.away_team?.clubs?.name}
@@ -1079,6 +1103,8 @@ const AdminMatchControl: React.FC = () => {
                   onClick={() => {
                     setShowLiveGoalModal(false);
                     setIsAddingOpponentGoal(null);
+                    setAssistSelectionPhase('scorer');
+                    setSelectedGoalScorerId(null);
                   }}
                   className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
                 >
@@ -1136,17 +1162,40 @@ const AdminMatchControl: React.FC = () => {
                     </div>
 
                     <div className="max-h-[350px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                      {assistSelectionPhase === 'assist' && (
+                        <button
+                          onClick={() => {
+                            handleAddEvent(selectedGoalScorerId!, 'goal', null, null);
+                            setShowLiveGoalModal(false);
+                            setAssistSelectionPhase('scorer');
+                            setSelectedGoalScorerId(null);
+                          }}
+                          className="w-full mb-4 flex items-center justify-center p-4 bg-zinc-800 hover:bg-zinc-700 border border-white/10 rounded-2xl transition-all group active:scale-[0.98]"
+                        >
+                          <span className="text-[12px] font-black uppercase italic text-zinc-300 group-hover:text-white transition-colors">Kein Assist</span>
+                        </button>
+                      )}
+
                       {(liveGoalTeam === 'home' ? lineup.home : lineup.away).map(entry => {
                         const player = (liveGoalTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === entry.player_id);
                         if (!player) return null;
                         if (playerSearchQuery && !player.full_name.toLowerCase().includes(playerSearchQuery.toLowerCase())) return null;
+                        if (assistSelectionPhase === 'assist' && player.id === selectedGoalScorerId) return null;
 
                         return (
                           <button
                             key={player.id}
                             onClick={() => {
-                              handleAddEvent(player.id, 'goal');
-                              setShowLiveGoalModal(false);
+                              if (assistSelectionPhase === 'scorer') {
+                                setSelectedGoalScorerId(player.id);
+                                setAssistSelectionPhase('assist');
+                                setPlayerSearchQuery('');
+                              } else {
+                                handleAddEvent(selectedGoalScorerId!, 'goal', null, player.id);
+                                setShowLiveGoalModal(false);
+                                setAssistSelectionPhase('scorer');
+                                setSelectedGoalScorerId(null);
+                              }
                             }}
                             className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-emerald-500/10 border border-white/5 hover:border-emerald-500/30 rounded-2xl transition-all group active:scale-[0.98]"
                           >

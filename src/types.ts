@@ -159,6 +159,7 @@ export interface PlayerRatingHistory {
   result_impact: number;
   event_impact: number;
   goal_count: number;
+  assists?: number;
   yellow_count: number;
   red_count: number;
   rating_version?: string;
@@ -176,6 +177,7 @@ export interface MatchEvent {
   id: string;
   fixture_id: string;
   player_id: string | null;
+  assist_player_id?: string | null;
   team_id?: string | null;
   event_type: 'starting_xi' | 'sub_in' | 'sub_out' | 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'clean_sheet' | 'penalty_saved' | 'penalty_missed' | 'opponent_goal';
   minute?: number | null;
