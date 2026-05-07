@@ -581,76 +581,82 @@ const AdminFixtures: React.FC = () => {
 
         {/* Create/Edit Modal */}
         <AnimatePresence>
-          {isModalOpen && (
-            <div className="fixed inset-0 z-50 flex justify-center p-4 bg-black/60 backdrop-blur-md overflow-y-auto">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl my-auto"
-              >
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingFixture ? 'SPIEL BEARBEITEN' : 'NEUES SPIEL'}
-                  </h2>
-                  <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="p-2 text-zinc-500 hover:text-white transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
+          {isModalOpen && (() => {
+            const availableHomeTeams = teams.filter(t => t.clubs?.league_id === formData.league_id && t.id !== formData.away_team_id);
+            const availableAwayTeams = teams.filter(t => t.clubs?.league_id === formData.league_id && t.id !== formData.home_team_id);
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga</label>
-                    <select
-                      required
-                      value={formData.league_id}
-                      onChange={(e) => setFormData({ ...formData, league_id: e.target.value })}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+            return (
+              <div className="fixed inset-0 z-50 flex justify-center p-4 bg-black/60 backdrop-blur-md overflow-y-auto">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl my-auto"
+                >
+                  <div className="flex items-center justify-between mb-8">
+                    <h2 className="text-2xl font-black italic tracking-tighter uppercase">
+                      {editingFixture ? 'SPIEL BEARBEITEN' : 'NEUES SPIEL'}
+                    </h2>
+                    <button 
+                      onClick={() => setIsModalOpen(false)}
+                      className="p-2 text-zinc-500 hover:text-white transition-colors"
                     >
-                      <option value="">Liga auswählen</option>
-                      {leagues.map(l => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
-                      ))}
-                    </select>
+                      <X className="w-6 h-6" />
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Heimteam</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga</label>
                       <select
                         required
-                        value={formData.home_team_id}
-                        onChange={(e) => setFormData({ ...formData, home_team_id: e.target.value })}
+                        value={formData.league_id}
+                        onChange={(e) => setFormData({ ...formData, league_id: e.target.value, home_team_id: '', away_team_id: '' })}
                         className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
                       >
-                        <option value="">Heimteam auswählen</option>
-                        {teams.map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.clubs?.name} – {t.name}
-                          </option>
+                        <option value="">Liga auswählen</option>
+                        {leagues.map(l => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
                         ))}
                       </select>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Auswärtsteam</label>
-                      <select
-                        required
-                        value={formData.away_team_id}
-                        onChange={(e) => setFormData({ ...formData, away_team_id: e.target.value })}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
-                      >
-                        <option value="">Auswärtsteam auswählen</option>
-                        {teams.map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.clubs?.name} – {t.name}
-                          </option>
-                        ))}
-                      </select>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Heimteam</label>
+                        <select
+                          required
+                          value={formData.home_team_id}
+                          disabled={!formData.league_id}
+                          onChange={(e) => setFormData({ ...formData, home_team_id: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors disabled:opacity-50"
+                        >
+                          <option value="">{formData.league_id ? (availableHomeTeams.length === 0 ? "Kein Team verfügbar" : "Heimteam auswählen") : "Zuerst Liga wählen"}</option>
+                          {availableHomeTeams.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.clubs?.name} – {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Auswärtsteam</label>
+                        <select
+                          required
+                          value={formData.away_team_id}
+                          disabled={!formData.league_id}
+                          onChange={(e) => setFormData({ ...formData, away_team_id: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors disabled:opacity-50"
+                        >
+                          <option value="">{formData.league_id ? (availableAwayTeams.length === 0 ? "Kein Team verfügbar" : "Auswärtsteam auswählen") : "Zuerst Liga wählen"}</option>
+                          {availableAwayTeams.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.clubs?.name} – {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                  </div>
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Spieltag</label>
@@ -689,7 +695,8 @@ const AdminFixtures: React.FC = () => {
                 </form>
               </motion.div>
             </div>
-          )}
+            );
+          })()}
         </AnimatePresence>
 
         {/* Fixture Events Modal */}

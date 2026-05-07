@@ -814,7 +814,7 @@ const AdminMatchControl: React.FC = () => {
             onClick={() => setActiveSection('lineups')}
           >
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <TeamLineupSelector 
                   teamName={fixture.home_team?.name}
                   players={homePlayers}
@@ -1373,60 +1373,60 @@ const TeamLineupSelector: React.FC<{
   
   return (
     <div className="space-y-4">
-      <div className="flex flex-col">
-        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">{teamName}</span>
-        <span className={`text-xs font-black uppercase italic ${colorClass}`}>
+      <div className="flex flex-col mb-4">
+        <span className="text-sm font-black text-zinc-300 uppercase tracking-widest leading-none mb-1">{teamName}</span>
+        <span className={`text-xs font-bold uppercase italic ${colorClass}`}>
           {selectedLineup.filter(l => l.lineup_role === 'starter').length}/11 Startelf
         </span>
       </div>
       
-      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
         {players.map(player => {
           const entry = selectedLineup.find(l => l.player_id === player.id);
           const isSelected = !!entry;
           
           return (
-            <div key={player.id} className="space-y-1">
-              <div className={`w-full p-2 rounded-xl border text-left transition-all flex items-center justify-between ${
+            <div key={player.id} className="space-y-2">
+              <div className={`w-full p-3 rounded-xl border text-left transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                 isSelected 
                   ? `bg-${color}-500/10 border-${color}-500/30` 
                   : 'bg-zinc-900 border-zinc-800 text-zinc-500'
               }`}>
                 <div 
-                  className="flex items-center gap-2 flex-1 cursor-pointer"
+                  className="flex items-center gap-3 flex-1 cursor-pointer min-w-0"
                   onClick={() => onToggle(player.id)}
                 >
-                  <div className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                  <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
                     isSelected ? `${bgClass} text-black` : 'bg-zinc-800 text-zinc-600'
                   }`}>
-                    {isSelected ? <Check className="w-4 h-4" /> : <Plus className="w-3 h-3" />}
+                    {isSelected ? <Check className="w-5 h-5" /> : <Plus className="w-4 h-4" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-[10px] font-bold truncate ${isSelected ? 'text-white' : ''}`}>{player.full_name}</p>
-                    <p className="text-[7px] uppercase tracking-widest opacity-60">{getPositionShort(player.position)}</p>
+                    <p className={`text-sm md:text-base font-bold truncate ${isSelected ? 'text-white' : ''}`}>{player.full_name}</p>
+                    <p className="text-[10px] sm:text-xs uppercase tracking-widest opacity-60 font-medium">{getPositionShort(player.position)}</p>
                   </div>
                 </div>
 
                 {isSelected && (
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-10">
+                  <div className="flex items-center gap-2 sm:shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-800">
+                    <div className="relative w-12">
                       <input
                         type="text"
                         placeholder="#"
                         value={entry.jersey_number}
                         onChange={(e) => onUpdateDetail(player.id, { jersey_number: e.target.value })}
-                        className="w-full h-7 bg-black border border-zinc-700 rounded text-center text-[10px] text-white font-black italic focus:border-emerald-500 outline-none transition-all"
+                        className="w-full h-9 bg-black border border-zinc-700 rounded-lg text-center text-xs text-white font-black italic focus:border-emerald-500 outline-none transition-all placeholder:text-zinc-600"
                       />
                     </div>
                     <select
                       value={entry.lineup_role}
                       onChange={(e) => onUpdateDetail(player.id, { lineup_role: e.target.value as 'starter' | 'sub' })}
-                      className={`h-7 bg-black border rounded text-[8px] font-black uppercase px-1 outline-none transition-all ${
+                      className={`h-9 bg-black border rounded-lg text-[10px] font-black uppercase px-2 outline-none transition-all cursor-pointer ${
                         entry.lineup_role === 'starter' ? 'border-emerald-500/50 text-emerald-500' : 'border-zinc-700 text-zinc-500'
                       }`}
                     >
-                      <option value="starter">STR</option>
-                      <option value="sub">BANK</option>
+                      <option value="starter">Startelf</option>
+                      <option value="sub">Bank</option>
                     </select>
                   </div>
                 )}

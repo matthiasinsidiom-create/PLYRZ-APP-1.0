@@ -1654,7 +1654,7 @@ export const supabaseService = {
   },
 
   async getTeams(clubId?: string) {
-    let query = supabase.from('teams').select('*, clubs(name, logo_url)').order('name');
+    let query = supabase.from('teams').select('*, clubs(name, logo_url, league_id)').order('name');
     if (clubId) query = query.eq('club_id', clubId);
     const { data, error } = await query;
     if (error) throw error;
