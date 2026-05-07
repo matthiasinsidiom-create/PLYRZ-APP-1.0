@@ -15,14 +15,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabaseService } from '../services/supabaseService';
-import { Club, Player } from '../types';
+import { Club, Player, League } from '../types';
 import { getPositionShort } from '../lib/positions';
 import { PlayerCard } from '../components/PlayerCard';
 import { CardRevealWrapper } from '../components/CardRevealWrapper';
-import { RatingLogicContent } from '../components/RatingLogicContent';
 
 type OnboardingStep = 
   | 'role-selection' 
+  | 'league-selection'
   | 'club-selection' 
   | 'player-search' 
   | 'card-preview' 
@@ -43,9 +43,11 @@ export const Onboarding: React.FC = () => {
     return (savedRole as 'player' | 'fan') || null;
   });
 
+  const [selectedLeague, setSelectedLeague] = useState<League | null>(null);
   const [selectedClub, setSelectedClub] = useState<Club | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   
+  const [leagues, setLeagues] = useState<League[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,21 +68,43 @@ export const Onboarding: React.FC = () => {
   }, [role]);
 
   useEffect(() => {
-    if (step === 'club-selection') {
-      loadClubs();
+    if (step === 'league-selection') {
+      loadLeagues();
+      setSearchQuery('');
     }
   }, [step]);
 
   useEffect(() => {
+    if (step === 'club-selection' && selectedLeague) {
+      loadClubs(selectedLeague.id);
+      setSearchQuery('');
+    }
+  }, [step, selectedLeague]);
+
+  useEffect(() => {
     if (step === 'player-search' && selectedClub) {
       loadPlayers(selectedClub.id);
+      setSearchQuery('');
     }
   }, [step, selectedClub]);
 
-  const loadClubs = async () => {
+  const loadLeagues = async () => {
     setLoading(true);
     try {
-      const data = await supabaseService.getClubs();
+      const data = await supabaseService.getLeagues();
+      // Only show active leagues
+      setLeagues(data.filter(l => l.is_active !== false));
+    } catch (err) {
+      console.error('Error loading leagues:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadClubs = async (leagueId: string) => {
+    setLoading(true);
+    try {
+      const data = await supabaseService.getClubs(leagueId);
       setClubs(data);
     } catch (err) {
       console.error('Error loading clubs:', err);
@@ -92,9 +116,14 @@ export const Onboarding: React.FC = () => {
   const loadPlayers = async (clubId: string) => {
     setLoading(true);
     try {
-      const data = await supabaseService.getPlayersByClub(clubId);
-      // Only show unclaimed players or players claimed by the current user
-      setPlayers(data.filter(p => !p.claimed_by_user_id || p.claimed_by_user_id === user?.id));
+      const teams = await supabaseService.getTeams(clubId);
+      let clubPlayers: Player[] = [];
+      for (const team of teams) {
+        const data = await supabaseService.getPlayersByTeam(team.id);
+        const unclaimed = data.filter(p => !p.claimed_by_user_id || p.claimed_by_user_id === user?.id);
+        clubPlayers = [...clubPlayers, ...unclaimed];
+      }
+      setPlayers(clubPlayers);
     } catch (err) {
       console.error('Error loading players:', err);
     } finally {
@@ -104,7 +133,16 @@ export const Onboarding: React.FC = () => {
 
   const handleRoleSelect = async (selectedRole: 'player' | 'fan') => {
     setRole(selectedRole);
-    // Both players and fans now need to select a club
+    setStep('league-selection');
+    setSelectedLeague(null);
+    setSelectedClub(null);
+    setSelectedPlayer(null);
+  };
+
+  const handleLeagueSelect = (league: League) => {
+    setSelectedLeague(league);
+    setSelectedClub(null);
+    setSelectedPlayer(null);
     setStep('club-selection');
   };
 
@@ -217,6 +255,10 @@ export const Onboarding: React.FC = () => {
     }
   };
 
+  const filteredLeagues = leagues.filter(l => 
+    l.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const filteredClubs = clubs.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -277,6 +319,72 @@ export const Onboarding: React.FC = () => {
           </motion.div>
         );
 
+      case 'league-selection':
+        return (
+          <motion.div 
+            key="league-selection"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="space-y-6"
+          >
+            <div className="flex items-center gap-4">
+              <button onClick={() => setStep('role-selection')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                <ArrowLeft className="w-5 h-5" />
+                <span className="font-bold text-sm">Zurück</span>
+              </button>
+              <div>
+                <h2 className="text-2xl font-black italic uppercase text-white">
+                  Wähle zuerst deine Liga
+                </h2>
+                <p className="text-zinc-500 text-sm">In welcher Liga spielst du?</p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <input 
+                type="text"
+                placeholder="Liga suchen..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-white focus:outline-none focus:border-emerald-500 transition-all"
+              />
+            </div>
+
+            <div className="grid gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+              {loading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+                </div>
+              ) : filteredLeagues.length > 0 ? (
+                filteredLeagues.map(league => (
+                  <button 
+                    key={league.id}
+                    onClick={() => handleLeagueSelect(league)}
+                    className="flex items-center gap-4 p-4 bg-zinc-900/50 border border-white/5 rounded-2xl hover:bg-zinc-800 transition-all text-left group"
+                  >
+                    <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center overflow-hidden border border-white/5">
+                      <Trophy className="w-6 h-6 text-zinc-600 group-hover:text-amber-500 transition-all" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-white font-bold">{league.name}</h4>
+                      {league.region && (
+                        <p className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">{league.region}</p>
+                      )}
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+                  </button>
+                ))
+              ) : (
+                <div className="text-center py-12 text-zinc-600">
+                  Keine Ligen gefunden.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        );
+
       case 'club-selection':
         return (
           <motion.div 
@@ -287,7 +395,7 @@ export const Onboarding: React.FC = () => {
             className="space-y-6"
           >
             <div className="flex items-center gap-4">
-              <button onClick={() => setStep('role-selection')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+              <button onClick={() => setStep('league-selection')} className="p-2 -ml-2 bg-transparent rounded-full text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
                 <ArrowLeft className="w-5 h-5" />
                 <span className="font-bold text-sm">Zurück</span>
               </button>
@@ -338,7 +446,7 @@ export const Onboarding: React.FC = () => {
                 ))
               ) : (
                 <div className="text-center py-12 text-zinc-600">
-                  Keine Vereine gefunden.
+                  Für diese Liga wurden noch keine Vereine gefunden.
                 </div>
               )}
             </div>
@@ -433,7 +541,7 @@ export const Onboarding: React.FC = () => {
                 ) : (
                   <div className="text-center py-20 flex flex-col items-center gap-4 opacity-40">
                     <Search className="w-8 h-8 text-zinc-700" />
-                    <p className="text-[10px] font-black italic uppercase tracking-widest">Keine Spieler gefunden</p>
+                    <p className="text-[10px] font-black italic uppercase tracking-widest text-center px-4">Für diesen Verein wurden noch keine Spieler angelegt.</p>
                   </div>
                 )}
               </div>
@@ -543,8 +651,16 @@ export const Onboarding: React.FC = () => {
                 <h2 className="text-xl font-black italic uppercase text-white">Dein Rating</h2>
               </div>
             </div>
-            <div className="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-              <RatingLogicContent />
+            <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4 shadow-lg">
+              <h3 className="text-lg font-black italic uppercase tracking-tight text-emerald-400">So funktioniert's</h3>
+              <p className="text-zinc-300 leading-relaxed text-sm">
+                Dein Rating verändert sich nach jedem Spiel automatisch. Tore bringen +1.0, Assists bringen +0.7. Auch Votes, Karten, Ergebnis und MVP können dein Rating beeinflussen. Neutral Votes werden gezählt, verändern dein Rating aber nicht.
+              </p>
+              <div className="p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
+                <p className="text-emerald-400 font-bold text-sm italic">
+                  Wichtig: Nicht nur Tore zählen – Teamplay wird belohnt.
+                </p>
+              </div>
             </div>
             <div className="pt-4">
               <button 
