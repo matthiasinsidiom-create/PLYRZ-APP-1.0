@@ -4,71 +4,61 @@ export const RatingLogicContent: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
-        <h2 className="text-xl font-black italic uppercase tracking-tighter text-emerald-400">⭐ Rating-Logik (einfach erklärt)</h2>
+        <h2 className="text-xl font-black italic uppercase tracking-tighter text-emerald-400">⭐ So funktioniert dein Rating</h2>
         <p className="text-sm text-zinc-400 leading-relaxed">
-          Dein Rating verändert sich nach jedem Spiel.<br />
-          Es setzt sich aus Votes, Spielereignissen und dem Ergebnis zusammen.
+          Dein Rating verändert sich nach jedem Spiel automatisch. Es zählt nicht nur, wer ein Tor schießt. Auch Vorlagen, Abstimmungen, Spielereignisse und das Ergebnis beeinflussen deine Bewertung.
         </p>
       </div>
 
       <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
-        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">🗳️ Votes (wichtigster Faktor)</h2>
-        <p className="text-sm text-zinc-400 leading-relaxed">Nach dem Spiel wirst du von anderen bewertet:</p>
-        <ul className="text-sm text-zinc-300 space-y-2 list-none">
-          <li>•  👍 Upvote = + Punkte</li>
-          <li>•  👎 Downvote = – Punkte</li>
-          <li>•  ⚪ Neutral = keine Auswirkung</li>
-        </ul>
-        <p className="text-sm text-zinc-400 mt-2">
-          <span className="font-bold text-emerald-400">👉 Berechnung:</span><br/>
-          (Upvotes – Downvotes) bestimmen deinen Vote-Einfluss.
-        </p>
-      </div>
-
-      <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
-        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">⚽ Spielereignisse</h2>
+        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">⚽ Aktionen im Spiel</h2>
         <p className="text-sm text-zinc-400 leading-relaxed">Bestimmte Aktionen im Spiel wirken sich direkt auf dein Rating aus:</p>
         <ul className="text-sm text-zinc-300 space-y-2 list-none">
           <li>•  ⚽ Tor: +1.0</li>
+          <li>•  🎯 Assist (Vorlage): +0.7</li>
           <li>•  🧤 Clean Sheet (kein Gegentor im Team):
             <ul className="ml-4 mt-1 space-y-1 text-zinc-400">
               <li>o Torwart: +1.0</li>
               <li>o Feldspieler: +0.3</li>
             </ul>
           </li>
-          <li>•  ❌ Gegentor: –0.2 pro Gegentor</li>
-          <li>•  🟨 Gelbe Karte: –0.2</li>
-          <li>•  🟥 Rote Karte: –1.5</li>
-        </ul>
-      </div>
-
-      <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
-        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">🏆 Spielergebnis</h2>
-        <p className="text-sm text-zinc-400 leading-relaxed">Das Ergebnis zählt für alle gleich:</p>
-        <ul className="text-sm text-zinc-300 space-y-2 list-none">
-          <li>•  Sieg: +0.2</li>
-          <li>•  Unentschieden: 0.0</li>
-          <li>•  Niederlage: –0.2</li>
-        </ul>
-      </div>
-
-      <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
-        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">⭐ MVP (Most Valuable Player)</h2>
-        <p className="text-sm text-zinc-400 leading-relaxed">Wenn mehrere Spieler gleich stark sind, entscheiden die Votes:</p>
-        <ul className="text-sm text-zinc-300 space-y-2 list-none">
-          <li>•  Der Spieler mit den besten Votes wird MVP</li>
-          <li>•  MVP bekommt +1.0 Bonus</li>
-          <li>•  Maximaler Anstieg pro Spiel:
-            <ul className="ml-4 mt-1 space-y-1 text-zinc-400">
-              <li>o Normal: +2.0</li>
-              <li>o MVP: +3.0</li>
-            </ul>
-          </li>
+          <li>•  ❌ Gegentor: –0.2 pro Gegentor (kann einen kleinen negativen Einfluss haben)</li>
+          <li>•  🟨 Gelbe Karte: –0.2 (kann negativ wirken)</li>
+          <li>•  🟥 Rote Karte: –1.5 (wirkt negativ)</li>
         </ul>
         <p className="text-sm text-zinc-400 mt-2">
-          <span className="font-bold text-red-400">👉 Wichtig:</span><br/>
-          Nur Spieler mit positiven Votes können MVP werden.
+          Gute Aktionen helfen deinem Rating, Fehler können es senken.
         </p>
+      </div>
+
+      <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
+        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">🙌 Warum Assists wichtig sind</h2>
+        <p className="text-sm text-zinc-300 leading-relaxed">
+          Nicht nur Tore zählen. Wenn du ein Tor vorbereitest, bekommst du für den Assist +0.7. So wird auch mannschaftsdienliches Spielen belohnt.
+        </p>
+      </div>
+
+      <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
+        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">🗳️ Stimmen der Fans und Mitspieler</h2>
+        <p className="text-sm text-zinc-400 leading-relaxed">Nach dem Spiel wirst du von anderen bewertet:</p>
+        <ul className="text-sm text-zinc-300 space-y-2 list-none">
+          <li>•  👍 Positive Stimme: wirkt positiv</li>
+          <li>•  👎 Negative Stimme: wirkt negativ</li>
+          <li>•  ⚪ Neutral: wird gezählt, verändert dein Rating aber nicht</li>
+        </ul>
+        <p className="text-sm text-zinc-400 mt-2">
+          Es zählt nicht eine einzelne Stimme allein, sondern das Gesamtbild.
+        </p>
+      </div>
+
+      <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
+        <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">🏆 Ergebnis und MVP</h2>
+        <p className="text-sm text-zinc-400 leading-relaxed">Das Spielergebnis und individuelle Leistungen zählen:</p>
+        <ul className="text-sm text-zinc-300 space-y-2 list-none">
+          <li>•  Das Spielergebnis kann dein Rating beeinflussen (Sieg, Unentschieden, Niederlage).</li>
+          <li>•  Der beste Spieler des Matches kann einen MVP-Bonus (+1.0) erhalten.</li>
+          <li>•  MVP basiert auf Events, Votes und Gesamtleistung.</li>
+        </ul>
       </div>
 
       <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4">
@@ -95,14 +85,16 @@ export const RatingLogicContent: React.FC = () => {
       </div>
       
       <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 rounded-3xl p-6 border border-emerald-500/20 space-y-4">
-        <h2 className="text-xl font-black italic uppercase tracking-tighter text-emerald-400">🎯 Fazit</h2>
-        <p className="text-sm text-zinc-400 leading-relaxed">Dein Rating hängt davon ab:</p>
+        <h2 className="text-xl font-black italic uppercase tracking-tighter text-emerald-400">🎯 Kurz gesagt</h2>
         <ul className="text-sm text-zinc-300 space-y-2 list-none">
-          <li>•  wie gut du spielst (Tore, Aktionen)</li>
-          <li>•  wie dein Team performt</li>
-          <li>•  wie dich andere bewerten</li>
+          <li>•  Tor schießen hilft</li>
+          <li>•  Assist geben hilft</li>
+          <li>•  Gut spielen hilft</li>
+          <li>•  Fair bleiben hilft</li>
+          <li>•  Neutral Votes schaden nicht</li>
+          <li>•  Teamplay wird belohnt</li>
         </ul>
-        <p className="text-sm text-white mt-2 font-bold italic tracking-wide">
+        <p className="text-sm text-white mt-4 font-bold italic tracking-wide">
           👉 Votes + Leistung = dein Rating
         </p>
       </div>
