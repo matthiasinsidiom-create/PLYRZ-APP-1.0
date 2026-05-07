@@ -173,15 +173,16 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
 
       const playerEvents = matchEvents.filter((e: any) => e.player_id === playerId);
       const goalCount = playerEvents.filter((e: any) => e.event_type === 'goal').length;
-      const assistCount = playerEvents.filter((e: any) => e.event_type === 'assist').length;
+      const assistCount = matchEvents.filter((e: any) => e.event_type === 'goal' && e.assist_player_id === playerId).length;
       const yellowCount = playerEvents.filter((e: any) => e.event_type === 'yellow_card').length;
       const redCount = playerEvents.filter((e: any) => e.event_type === 'red_card').length;
-
-      const goalImpact = goalCount * 1.0; 
-      const assistBonus = 0.5;
       const oppGoalPenalty = teamGoalsAgainst * -0.2;
-      
-      const eventImpact = goalImpact + (assistCount * assistBonus) + (yellowCount * -0.2) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
+
+      const goalBonus = goalCount * 1.0;
+      const assistBonus = assistCount * 0.7;
+
+      // Rating-Regel: Tor = +1.0, Assist = +0.7, plus andere impacts (Karten, Clean Sheet, Gegentore)
+      const eventImpact = goalBonus + assistBonus + (yellowCount * -0.2) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
 
       let resultImpact = 0;
       if (actualScore === 1) resultImpact = 0.2;
@@ -193,13 +194,15 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const rawDelta = voteImpact + resultImpact + eventImpact;
       const finalDeltaBase = Math.max(-2, Math.min(2, rawDelta));
 
+      console.log(`[PROCESSOR DEBUG] player_id: ${playerId}, full_name: ${entry.players?.full_name || 'Unknown'}, goal_count: ${goalCount}, assists: ${assistCount}, goalBonus: ${goalBonus}, assistBonus: ${assistBonus}, event_impact: ${eventImpact}, raw_delta: ${rawDelta}, final_delta: ${finalDeltaBase}`);
+
       const voteRatio = (upVotes + downVotes) > 0 ? (upVotes / (upVotes + downVotes)) : 0;
       const mvpScore = voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta;
 
       playerCalcs.push({
         playerId, oldOverall, posGroup, rawPos, isHome, participationMultiplier,
         upVotes, downVotes, neutralVotes, voteScore, voteImpact, voteRatio,
-        goalCount, goalImpact, assistCount, yellowCount, redCount, isCleanSheet, teamGoalsAgainst,
+        goalCount, assistCount, yellowCount, redCount, isCleanSheet, teamGoalsAgainst,
         eventImpact, resultImpact, expectedScore, actual_score: actualScore,
         rawDelta, finalDeltaBase, mvpScore, players: entry.players,
         isStarter: entry.lineup_role === 'starter'
@@ -283,6 +286,7 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
         result_impact: Number((p.resultImpact || 0).toFixed(4)), 
         event_impact: Number((p.eventImpact || 0).toFixed(4)),
         goal_count: p.goalCount, 
+        assists: p.assistCount,
         yellow_count: p.yellowCount, 
         red_count: p.redCount,
         participation_multiplier: p.participationMultiplier,
