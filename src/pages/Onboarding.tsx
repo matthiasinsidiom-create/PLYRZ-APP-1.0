@@ -206,7 +206,7 @@ export const Onboarding: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
-      if (role === 'fan' && selectedClub) {
+      if (selectedClub) {
         updates.favorite_club_id = selectedClub.id;
       }
       
@@ -216,6 +216,7 @@ export const Onboarding: React.FC = () => {
         const updatedProfile = await supabaseService.updateProfile(user.id, updates);
         console.log('Onboarding: Profile updated successfully:', updatedProfile);
       } catch (dbErr: any) {
+        console.error('Onboarding: Fehler beim Speichern des Profils:', dbErr);
         // Check if error is specifically about the missing column
         if (dbErr.message?.includes('favorite_club_id') || dbErr.message?.includes('selected_league_id') || dbErr.code === '42703') {
           console.warn('Onboarding: Missing column in DB. Retrying without it...');
@@ -227,9 +228,6 @@ export const Onboarding: React.FC = () => {
           
           await supabaseService.updateProfile(user.id, fallbackUpdates);
           console.log('Onboarding: Profile updated successfully (fallback mode)');
-          
-          // Inform the user/admin about the missing column
-          alert('Hinweis: Deine Auswahl (Liga/Verein) konnte nicht dauerhaft gespeichert werden, da die Datenbank noch aktualisiert werden muss. Du kannst trotzdem fortfahren, aber bitte informiere den Administrator.');
         } else {
           throw dbErr;
         }
@@ -650,13 +648,13 @@ export const Onboarding: React.FC = () => {
                 <span className="font-bold text-sm">Zurück</span>
               </button>
               <div>
-                <h2 className="text-xl font-black italic uppercase text-white">Dein Rating</h2>
+                <h2 className="text-xl font-black italic uppercase text-white">So funktioniert das Rating</h2>
               </div>
             </div>
             <div className="bg-zinc-900/50 rounded-3xl p-6 border border-white/5 space-y-4 shadow-lg">
               <h3 className="text-lg font-black italic uppercase tracking-tight text-emerald-400">So funktioniert's</h3>
               <p className="text-zinc-300 leading-relaxed text-sm">
-                Dein Rating verändert sich nach jedem Spiel automatisch. Tore bringen +1.0, Assists bringen +0.7. Auch Votes, Karten, Ergebnis und MVP können dein Rating beeinflussen. Neutral Votes werden gezählt, verändern dein Rating aber nicht.
+                Das Rating verändert sich nach jedem Spiel automatisch. Tore bringen +1.0, Assists bringen +0.7. Auch positive/negative Votes, Karten, das Ergebnis und MVP können Einfluss auf das Rating haben. Neutral Votes werden gezählt, verändern das Rating aber nicht.
               </p>
               <div className="p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
                 <p className="text-emerald-400 font-bold text-sm italic">
