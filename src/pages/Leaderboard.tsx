@@ -17,27 +17,43 @@ import { supabaseService } from '../services/supabaseService';
 import { Player, Club, League } from '../types';
 import { PlayerCard } from '../components/PlayerCard';
 
+import { useAuth } from '../context/AuthContext';
+
 export const Leaderboard: React.FC = () => {
   const navigate = useNavigate();
+  const { profile, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [leagues, setLeagues] = useState<League[]>([]);
   
   const [selectedClub, setSelectedClub] = useState<string>('all');
-  const [selectedLeague, setSelectedLeague] = useState<string>('all');
+  // Initialize selectedLeague with profile.selected_league_id if available, otherwise 'all'
+  const [selectedLeague, setSelectedLeague] = useState<string>(profile?.selected_league_id || 'all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Update selectedLeague when profile loads
   useEffect(() => {
-    loadData();
-  }, []);
+    if (profile?.selected_league_id && selectedLeague === 'all') {
+      setSelectedLeague(profile.selected_league_id);
+    }
+  }, [profile?.selected_league_id]);
+
+  useEffect(() => {
+    if (profile) {
+      loadData();
+    }
+  }, [profile?.selected_league_id]);
 
   const loadData = async () => {
     setLoading(true);
     try {
+      // If user is not admin, only fetch players from their selected league
+      const fetchLeagueId = isAdmin ? undefined : profile?.selected_league_id;
+      
       const [p, c, l] = await Promise.all([
-        supabaseService.getPlayers(),
-        supabaseService.getClubs(),
+        supabaseService.getPlayers(undefined, fetchLeagueId),
+        supabaseService.getClubs(fetchLeagueId),
         supabaseService.getLeagues()
       ]);
       

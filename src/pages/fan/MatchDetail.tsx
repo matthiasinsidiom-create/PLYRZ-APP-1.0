@@ -743,8 +743,16 @@ export const MatchDetail: React.FC = () => {
         await supabase.auth.getSession().catch(() => {});
       }
       
-      const [f, l, v, checkin, history, events, isCompleted, teamId] = await Promise.all([
-        supabaseService.getFixtureById(id),
+      const f = await supabaseService.getFixtureById(id);
+      
+      // League check
+      if (f && profile?.selected_league_id && f.league_id !== profile.selected_league_id && !isAdmin) {
+        console.warn('DEBUG: Unallowed league access, redirecting');
+        navigate('/matches');
+        return;
+      }
+
+      const [l, v, checkin, history, events, isCompleted, teamId] = await Promise.all([
         supabaseService.getFixtureLineupWithPlayers(id),
         profile ? supabaseService.getUserVotesForFixture(profile.id, id) : Promise.resolve([]),
         profile ? supabaseService.getMatchCheckin(id) : Promise.resolve(null),

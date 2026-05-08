@@ -8,6 +8,7 @@ export interface Profile {
   role: 'admin' | 'player' | 'fan';
   is_admin?: boolean;
   onboarding_completed?: boolean;
+  selected_league_id?: string;
   favorite_club_id?: string;
   created_at: string;
   updated_at: string;

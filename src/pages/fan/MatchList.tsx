@@ -34,13 +34,15 @@ export const MatchList: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadFixtures();
-  }, []);
+    if (profile) {
+      loadFixtures();
+    }
+  }, [profile?.selected_league_id]);
 
   const loadFixtures = async () => {
     try {
       console.log('DEBUG: [MATCHES] Loading fixtures...');
-      const f = await supabaseService.getFixtures();
+      const f = await supabaseService.getFixtures(profile?.selected_league_id);
       setFixtures(f);
       
       if (f.length > 0) {

@@ -111,9 +111,9 @@ export const Dashboard: React.FC = () => {
     try {
       // Load all necessary data
       const [f, t, p] = await Promise.all([
-        supabaseService.getFixtures(),
-        supabaseService.getTeams(),
-        supabaseService.getPlayers()
+        supabaseService.getFixtures(profile.selected_league_id),
+        supabaseService.getTeams(undefined, profile.selected_league_id),
+        supabaseService.getPlayers(undefined, profile.selected_league_id)
       ]);
       
       setFixtures(f); 

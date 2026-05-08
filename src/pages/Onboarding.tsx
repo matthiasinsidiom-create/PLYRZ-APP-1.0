@@ -202,6 +202,7 @@ export const Onboarding: React.FC = () => {
       const updates: any = {
         role: role,
         onboarding_completed: true,
+        selected_league_id: selectedLeague?.id,
         updated_at: new Date().toISOString()
       };
 
@@ -216,18 +217,19 @@ export const Onboarding: React.FC = () => {
         console.log('Onboarding: Profile updated successfully:', updatedProfile);
       } catch (dbErr: any) {
         // Check if error is specifically about the missing column
-        if (dbErr.message?.includes('favorite_club_id') || dbErr.code === '42703') {
-          console.warn('Onboarding: favorite_club_id column missing in DB. Retrying without it...');
+        if (dbErr.message?.includes('favorite_club_id') || dbErr.message?.includes('selected_league_id') || dbErr.code === '42703') {
+          console.warn('Onboarding: Missing column in DB. Retrying without it...');
           
-          // Fallback: Try saving without the favorite_club_id
+          // Fallback: Try saving without the new columns
           const fallbackUpdates = { ...updates };
           delete fallbackUpdates.favorite_club_id;
+          delete fallbackUpdates.selected_league_id;
           
           await supabaseService.updateProfile(user.id, fallbackUpdates);
           console.log('Onboarding: Profile updated successfully (fallback mode)');
           
           // Inform the user/admin about the missing column
-          alert('Hinweis: Dein Verein konnte nicht dauerhaft gespeichert werden, da die Datenbank noch aktualisiert werden muss. Du kannst trotzdem fortfahren, aber bitte informiere den Administrator.');
+          alert('Hinweis: Deine Auswahl (Liga/Verein) konnte nicht dauerhaft gespeichert werden, da die Datenbank noch aktualisiert werden muss. Du kannst trotzdem fortfahren, aber bitte informiere den Administrator.');
         } else {
           throw dbErr;
         }

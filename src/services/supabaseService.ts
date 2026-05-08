@@ -1653,24 +1653,26 @@ export const supabaseService = {
     return filteredData as Club[];
   },
 
-  async getTeams(clubId?: string) {
-    let query = supabase.from('teams').select('*, clubs(name, logo_url, league_id)').order('name');
+  async getTeams(clubId?: string, leagueId?: string) {
+    let query = supabase.from('teams').select('*, clubs!inner(name, logo_url, league_id)').order('name');
     if (clubId) query = query.eq('club_id', clubId);
+    if (leagueId) query = query.eq('clubs.league_id', leagueId);
     const { data, error } = await query;
     if (error) throw error;
     return data as Team[];
   },
 
-  async getPlayers(teamId?: string) {
-    console.log('DEBUG: [SERVICE] getPlayers started', { teamId });
+  async getPlayers(teamId?: string, leagueId?: string) {
+    console.log('DEBUG: [SERVICE] getPlayers started', { teamId, leagueId });
     
     // 1. Fetch players
     let playersQuery = supabase
       .from('players')
-      .select('*, teams(name, club_id, clubs(name, logo_url))')
+      .select('*, teams!inner(name, club_id, clubs!inner(name, logo_url, league_id))')
       .order('full_name');
     
     if (teamId) playersQuery = playersQuery.eq('team_id', teamId);
+    if (leagueId) playersQuery = playersQuery.eq('teams.clubs.league_id', leagueId);
     
     // Fetch session for filtering
     const isAdmin = await this.isUserAdmin();
@@ -1827,14 +1829,20 @@ export const supabaseService = {
     return null;
   },
 
-  async getFixtures() {
+  async getFixtures(leagueId?: string) {
     // Fetch session for filtering
     const isAdmin = await this.isUserAdmin();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('fixtures')
       .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), fixture_lineups(count), match_events(*)')
       .order('kickoff_at', { ascending: false });
+      
+    if (leagueId) {
+      query = query.eq('league_id', leagueId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     
     // Filter out Gerersdorf fixtures for normal users
@@ -1857,12 +1865,12 @@ export const supabaseService = {
     return mappedData as any[];
   },
 
-  async getOpenVotingFixtures() {
+  async getOpenVotingFixtures(leagueId?: string) {
     const now = new Date().toISOString();
     console.log(`DEBUG: [SERVICE] getOpenVotingFixtures started at ${now}`);
 
     // 1. Fetch candidate fixtures
-    const { data: fixtures, error: fixturesError } = await supabase
+    let query = supabase
       .from('fixtures')
       .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
       .eq('status', 'finished')
@@ -1870,6 +1878,12 @@ export const supabaseService = {
       .not('voting_close_at', 'is', null)
       .gt('voting_close_at', now)
       .order('kickoff_at', { ascending: false });
+
+    if (leagueId) {
+      query = query.eq('league_id', leagueId);
+    }
+    
+    const { data: fixtures, error: fixturesError } = await query;
 
     if (fixturesError) {
       console.error('DEBUG: [SERVICE] Error fetching candidate fixtures:', fixturesError);
