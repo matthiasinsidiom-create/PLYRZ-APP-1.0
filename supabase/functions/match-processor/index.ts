@@ -114,6 +114,17 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
     
     const matchEvents = matchEventsData || [];
 
+    // Calculate global event counts for debugging
+    const eventCounts: Record<string, number> = {};
+    for (const e of matchEvents) {
+      const type = e.event_type || 'unknown';
+      eventCounts[type] = (eventCounts[type] || 0) + 1;
+    }
+    
+    const opponentGoalCount = eventCounts['opponent_goal'] || 0;
+
+    console.log(`[PROCESSOR DEBUG PRE] fixture_id: ${fixtureId}, opponent_goal_count: ${opponentGoalCount}, event_counts:`, eventCounts);
+
     // Team Details
     const homeTeamId = fixture.home_team_id;
     const awayTeamId = fixture.away_team_id;
@@ -150,8 +161,7 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const oppAvg = isHome ? awayAvg : homeAvg;
       const actualScore = isHome ? homeActualScore : awayActualScore;
       const teamGoalsAgainst = isHome ? awayScore : homeScore;
-      const isCleanSheet = teamGoalsAgainst === 0;
-
+      
       const rawPos = entry.players?.position;
       const posGroup = getPositionGroup(rawPos);
 
@@ -165,6 +175,7 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const voteScore = upVotes - downVotes; // Neutral votes have 0 impact on voteScore
       const voteImpact = voteScore * 0.15;
 
+      const isCleanSheet = opponentGoalCount === 0;
       let cleanSheetImpact = 0;
       if (isCleanSheet) {
         if (posGroup === 'Torwart') cleanSheetImpact = 1.0;
@@ -176,7 +187,9 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const assistCount = matchEvents.filter((e: any) => e.event_type === 'goal' && e.assist_player_id === playerId).length;
       const yellowCount = playerEvents.filter((e: any) => e.event_type === 'yellow_card').length;
       const redCount = playerEvents.filter((e: any) => e.event_type === 'red_card').length;
-      const oppGoalPenalty = teamGoalsAgainst * -0.2;
+      
+      // Use opponentGoalCount for penalty instead of teamGoalsAgainst to be consistent with events
+      const oppGoalPenalty = opponentGoalCount * -0.2;
 
       const goalBonus = goalCount * 1.0;
       const assistBonus = assistCount * 0.7;
@@ -194,7 +207,7 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const rawDelta = voteImpact + resultImpact + eventImpact;
       const finalDeltaBase = Math.max(-2, Math.min(2, rawDelta));
 
-      console.log(`[PROCESSOR DEBUG] player_id: ${playerId}, full_name: ${entry.players?.full_name || 'Unknown'}, goal_count: ${goalCount}, assists: ${assistCount}, goalBonus: ${goalBonus}, assistBonus: ${assistBonus}, event_impact: ${eventImpact}, raw_delta: ${rawDelta}, final_delta: ${finalDeltaBase}`);
+      console.log(`[PROCESSOR DEBUG PLAYER] full_name: ${entry.players?.full_name || 'Unknown'}, position: ${rawPos}, goal_count: ${goalCount}, assists: ${assistCount}, cleanSheetBonus: ${cleanSheetImpact}, opponent_goal_count: ${opponentGoalCount}, event_impact: ${eventImpact}, raw_delta: ${rawDelta}, final_delta: ${finalDeltaBase}`);
 
       const voteRatio = (upVotes + downVotes) > 0 ? (upVotes / (upVotes + downVotes)) : 0;
       const mvpScore = voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta;
