@@ -3,6 +3,9 @@ import { Capacitor } from '@capacitor/core';
 import { supabaseService } from '../services/supabaseService';
 
 export const setupPushNotifications = async () => {
+  console.log('[PUSH] setupPushNotifications started');
+  console.log('[PUSH] isNativePlatform', Capacitor.isNativePlatform());
+
   if (!Capacitor.isNativePlatform()) {
     console.log('DEBUG: [PUSH] Not a native platform, skipping push notifications setup.');
     return;
@@ -13,7 +16,7 @@ export const setupPushNotifications = async () => {
     // iOS will prompt user and return if they granted permission or not
     // Android will just grant without prompting
     const result = await PushNotifications.requestPermissions();
-    console.log('DEBUG: [PUSH] Permission status:', result.receive);
+    console.log('[PUSH] permission result', result.receive);
 
     if (result.receive === 'granted') {
       // Register with Apple / Google to receive push via APNS/FCM
@@ -24,14 +27,14 @@ export const setupPushNotifications = async () => {
 
     // On success, we should be able to receive notifications
     PushNotifications.addListener('registration', async (token) => {
-      console.log('DEBUG: [PUSH] Push registration success, token:', token.value);
+      console.log('[PUSH] token received', token.value?.slice(0, 30));
       const platform = Capacitor.getPlatform(); // 'ios' | 'android' | 'web'
       await supabaseService.savePushToken(token.value, platform);
     });
 
     // Some issue with our setup and push will not work
     PushNotifications.addListener('registrationError', (error) => {
-      console.error('DEBUG: [PUSH] Error on registration:', JSON.stringify(error));
+      console.error('[PUSH] registration error', error);
     });
 
     // Show us the notification payload if the app is open on our device

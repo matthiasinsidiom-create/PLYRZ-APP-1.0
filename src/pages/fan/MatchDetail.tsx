@@ -20,7 +20,8 @@ import {
   Plus,
   Trash2,
   Zap,
-  PlusCircle
+  PlusCircle,
+  Search
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
@@ -30,6 +31,7 @@ import { Fixture, Player, PlayerStats, Team, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
 import { PlayerVoteCard } from '../../components/PlayerVoteCard';
 import { SwipeVotingOverlay } from '../../components/SwipeVotingOverlay';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { VotingCountdown } from '../../components/VotingCountdown';
 import { calculateMatchScore } from '../../lib/score';
 
@@ -81,6 +83,8 @@ export const MatchDetail: React.FC = () => {
   const [opponentJerseyNumber, setOpponentJerseyNumber] = useState('');
   const [opponentMinute, setOpponentMinute] = useState('');
   const [saving, setSaving] = useState(false);
+  const [isPollingResults, setIsPollingResults] = useState(false);
+  const [pollTimeout, setPollTimeout] = useState(false);
 
   const isVotingOpen = !!fixture && fixture.status === 'finished' && !fixture.results_processed_at && !!fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
 
@@ -108,6 +112,8 @@ export const MatchDetail: React.FC = () => {
   }, [isVotingOpen, fixture?.voting_close_at]);
   const [matchMinute, setMatchMinute] = useState<string>('');
   const [subbingOutPlayerId, setSubbingOutPlayerId] = useState<string | null>(null);
+  const [assistSelectionPlayerId, setAssistSelectionPlayerId] = useState<string | null>(null);
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
 
   const isPlayerOnPitch = (playerId: string) => {
     const entry = lineup.find(l => l.player_id === playerId);
@@ -125,6 +131,16 @@ export const MatchDetail: React.FC = () => {
     
     return onPitch;
   };
+
+  const hasPlayerPlayed = (playerId: string) => {
+    const entry = lineup.find(l => l.player_id === playerId);
+    if (!entry) return false;
+    if (entry.lineup_role === 'starter') return true;
+    
+    const subsIn = matchEvents.filter(e => e.event_type === 'sub_out' && e.related_player_id === playerId);
+    return subsIn.length > 0;
+  };
+
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -230,8 +246,8 @@ export const MatchDetail: React.FC = () => {
     if (data) setMatchEvents(data);
   };
 
-  const handleFullTime = async (votingMinutes: number = 10) => {
-    console.log("DEBUG: [LIFECYCLE] --- MATCH END TRIGGERED ---", { fixtureId: id, votingMinutes });
+  const handleFullTime = async () => {
+    console.log("DEBUG: [LIFECYCLE] --- MATCH END TRIGGERED ---", { fixtureId: id });
     
     if (!id) {
       console.error("DEBUG: [LIFECYCLE] Error: Missing fixture ID");
@@ -245,19 +261,15 @@ export const MatchDetail: React.FC = () => {
       console.error("DEBUG: [LIFECYCLE] Error: Fixture object missing");
       return;
     }
-    if (fixture.status === 'finished' && votingMinutes > 0) {
+    if (fixture.status === 'finished') {
       console.log("DEBUG: [LIFECYCLE] Match already finished, skipping redundant trigger");
       return;
     }
 
-    console.log("DEBUG: [LIFECYCLE] Opening voting window for", votingMinutes, "minutes");
-    
-    const votingClose = new Date();
-    votingClose.setMinutes(votingClose.getMinutes() + votingMinutes);
+    console.log("DEBUG: [LIFECYCLE] Opening voting window (duration defined by backend)");
     
     const payload = {
-      p_fixture_id: id,
-      p_voting_minutes: votingMinutes
+      p_fixture_id: id
     };
     
     // Optimistic update
@@ -265,8 +277,6 @@ export const MatchDetail: React.FC = () => {
       ...prev, 
       status: 'finished',
       match_phase: 'full_time',
-      voting_open_at: new Date().toISOString(),
-      voting_close_at: votingClose.toISOString(),
       results_processed_at: null
     } : null);
     
@@ -282,8 +292,6 @@ export const MatchDetail: React.FC = () => {
           .update({
             status: 'finished',
             match_phase: 'full_time',
-            voting_open_at: new Date().toISOString(),
-            voting_close_at: votingClose.toISOString(),
             results_processed_at: null
           })
           .eq('id', id);
@@ -335,8 +343,13 @@ export const MatchDetail: React.FC = () => {
     }
   };
 
-  const handleAddEvent = async (playerId: string, type: 'goal' | 'yellow_card' | 'red_card' | 'sub_in' | 'sub_out', relatedPlayerId?: string) => {
+  const handleAddEvent = async (playerId: string, type: 'goal' | 'yellow_card' | 'red_card' | 'sub_in' | 'sub_out', relatedPlayerId?: string | null, assistPlayerId?: string | null) => {
     if (!id || !isAdmin || !fixture) return;
+
+    if (type === 'goal' && assistPlayerId === undefined) {
+      setAssistSelectionPlayerId(playerId);
+      return;
+    }
     
     // Handle Substitution Flow
     if (type === 'sub_out' && !relatedPlayerId) {
@@ -362,10 +375,11 @@ export const MatchDetail: React.FC = () => {
       player_id: playerId, 
       team_id: teamId,
       event_type: eventType,
-      related_player_id: relatedPlayerId,
+      related_player_id: relatedPlayerId || null,
+      assist_player_id: assistPlayerId || null,
       minute: parseInt(matchMinute) || null
     };
-    
+
     // Use updated events list to avoid stale state in score calculation
     const updatedEvents = [...matchEvents, newEvent];
     setMatchEvents(updatedEvents);
@@ -395,7 +409,8 @@ export const MatchDetail: React.FC = () => {
         player_id: playerId, 
         team_id: teamId,
         event_type: eventType,
-        related_player_id: relatedPlayerId,
+        related_player_id: relatedPlayerId || null,
+        assist_player_id: assistPlayerId || null,
         minute: parseInt(matchMinute) || null
       });
       
@@ -727,8 +742,27 @@ export const MatchDetail: React.FC = () => {
     try {
       console.log(`DEBUG: [UI] Loading data for fixture ${id}...`);
       
-      const [f, l, v, checkin, history, events, isCompleted, teamId] = await Promise.all([
-        supabaseService.getFixtureById(id),
+      // Workaround for iOS Capacitor GoTrue lock stealing bug during concurrent requests:
+      // Wait for a fresh session before launching 8 parallel queries.
+      try {
+        await supabase.auth.getSession();
+      } catch (lockError) {
+        console.warn('DEBUG: Ignored pre-warm session error:', lockError);
+        // Wait 500ms and try once more if it's a lock steal issue
+        await new Promise(r => setTimeout(r, 500));
+        await supabase.auth.getSession().catch(() => {});
+      }
+      
+      const f = await supabaseService.getFixtureById(id);
+      
+      // League check
+      if (f && profile?.selected_league_id && f.league_id !== profile.selected_league_id && !isAdmin) {
+        console.warn('DEBUG: Unallowed league access, redirecting');
+        navigate('/matches');
+        return;
+      }
+
+      const [l, v, checkin, history, events, isCompleted, teamId] = await Promise.all([
         supabaseService.getFixtureLineupWithPlayers(id),
         profile ? supabaseService.getUserVotesForFixture(profile.id, id) : Promise.resolve([]),
         profile ? supabaseService.getMatchCheckin(id) : Promise.resolve(null),
@@ -868,20 +902,50 @@ export const MatchDetail: React.FC = () => {
     console.log(`DEBUG: [LIFECYCLE] --- RESULT PROCESSING TRIGGERED ---`);
     console.log(`DEBUG: [LIFECYCLE] Admin: ${profile?.display_name}`);
     setIsProcessing(true);
+    let originalError: any = null;
+    
     try {
-      const results = await supabaseService.processFixtureRatings(id);
-      const count = results.processedCount || (Array.isArray(results) ? results.length : 0);
-      console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS. ${count} players updated.`);
-      setIsProcessed(true);
-      setProcessedCount(count);
-      
-      // Auto-navigate to result screen after a short delay
-      setTimeout(() => {
-        navigate(`/matches/${id}/result`);
-      }, 1500);
+      await supabaseService.processFixtureRatings(id);
     } catch (err) {
-      console.error('DEBUG: [LIFECYCLE] Processing FAILED:', err);
-      alert(err instanceof Error ? err.message : 'Failed to process results');
+      console.warn('DEBUG: [LIFECYCLE] Processing threw an error, verifying if results exist anyway:', err);
+      originalError = err;
+    }
+    
+    try {
+      // Add a small delay to allow DB processing to finish if API timed out but started
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const updatedFixture = await supabaseService.getFixtureById(id);
+      let resultsExist = !!updatedFixture.results_processed_at;
+      
+      if (!resultsExist) {
+        const { data, error } = await supabase
+          .from('player_rating_history')
+          .select('id')
+          .eq('fixture_id', id)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          resultsExist = true;
+        }
+      }
+
+      if (resultsExist) {
+        console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS verified. Results are available.`);
+        setIsProcessed(true);
+        setProcessedCount(updatedFixture.fixture_lineups?.length || 11);
+        
+        setTimeout(() => {
+          navigate(`/matches/${id}/result`);
+        }, 1500);
+      } else {
+        console.error('DEBUG: [LIFECYCLE] Processing FAILED to create results:', originalError);
+        alert(originalError instanceof Error ? originalError.message : 'Failed to process results');
+      }
+    } catch (refreshErr) {
+      console.error('DEBUG: [LIFECYCLE] Error checking processing status:', refreshErr);
+      if (originalError) {
+        alert(originalError instanceof Error ? originalError.message : 'Failed to process results');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -904,6 +968,52 @@ export const MatchDetail: React.FC = () => {
     const interval = setInterval(checkWindow, 5000);
     return () => clearInterval(interval);
   }, [isAdmin, fixture, isProcessing]);
+
+  // Polling for normal users
+  useEffect(() => {
+    let interval: any;
+    
+    const checkResults = async () => {
+      if (!id) return;
+      
+      try {
+        const { data: updatedFixture } = await supabase.from('fixtures').select('results_processed_at').eq('id', id).single();
+        
+        if (updatedFixture?.results_processed_at) {
+          const { data: history } = await supabase.from('player_rating_history').select('id').eq('fixture_id', id).limit(1);
+          
+          if (history && history.length > 0) {
+            setIsPollingResults(false);
+            if (interval) clearInterval(interval);
+            loadData(); // Update full state
+            navigate(`/matches/${id}/result`); // Navigate to results
+          }
+        }
+      } catch (err) {
+        console.error("DEBUG: Polling error", err);
+      }
+    };
+
+    if (fixture?.status === 'finished' && fixture.voting_close_at && !fixture.results_processed_at && !isAdmin) {
+      const closeAt = new Date(fixture.voting_close_at);
+      if (new Date() >= closeAt && !pollTimeout) {
+        setIsPollingResults(true);
+        interval = setInterval(checkResults, 5000);
+        
+        // Timeout after 60 seconds
+        const timeout = setTimeout(() => {
+          setIsPollingResults(false);
+          setPollTimeout(true);
+          if (interval) clearInterval(interval);
+        }, 60000);
+
+        return () => {
+          if (interval) clearInterval(interval);
+          clearTimeout(timeout);
+        };
+      }
+    }
+  }, [fixture?.status, fixture?.voting_close_at, fixture?.results_processed_at, pollTimeout, isAdmin, id, navigate]);
 
   if (loading) {
     return (
@@ -969,9 +1079,10 @@ export const MatchDetail: React.FC = () => {
   );
 
   return (
+    <SafeAreaWrapper>
     <div className="min-h-screen bg-zinc-950 text-white font-sans pb-32">
       {/* Header */}
-      <div className="p-3 pt-[calc(env(safe-area-inset-top)+10px)] flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
+      <div className="p-3 pt-3 flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-2">
           <button onClick={() => navigate('/matches')} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
@@ -1033,9 +1144,16 @@ export const MatchDetail: React.FC = () => {
             {/* Center: Score & Minute */}
             <div className="flex flex-col items-center gap-0.5 px-2">
               <div className="text-4xl font-black italic tracking-tighter flex items-center gap-2 text-white">
-                <span>{fixture.home_score}</span>
-                <span className="text-zinc-800">:</span>
-                <span>{fixture.away_score}</span>
+                {(() => {
+                  const { homeScore, awayScore } = calculateMatchScore(fixture, matchEvents);
+                  return (
+                    <>
+                      <span>{homeScore}</span>
+                      <span className="text-zinc-800">:</span>
+                      <span>{awayScore}</span>
+                    </>
+                  );
+                })()}
               </div>
               {isLive ? (
                 <div className="flex flex-col items-center">
@@ -1104,7 +1222,12 @@ export const MatchDetail: React.FC = () => {
                     <span className="truncate">
                       {g.event_type === 'opponent_goal' 
                         ? `Gegner #${g.opponent_jersey_number || '?'}` 
-                        : getPlayerName(g.player_id)}
+                        : (
+                          <span className="flex items-center gap-1">
+                            {getPlayerName(g.player_id)}
+                            {g.assist_player_id && <span className="text-zinc-500 font-bold ml-1 text-[8px]">(Assist: {getPlayerName(g.assist_player_id)})</span>}
+                          </span>
+                        )}
                     </span>
                   </div>
                 ))}
@@ -1115,7 +1238,12 @@ export const MatchDetail: React.FC = () => {
                     <span className="truncate">
                       {g.event_type === 'opponent_goal' 
                         ? `Gegner #${g.opponent_jersey_number || '?'}` 
-                        : getPlayerName(g.player_id)}
+                        : (
+                          <span className="flex items-center gap-1 justify-end">
+                            {g.assist_player_id && <span className="text-zinc-500 font-bold mr-1 text-[8px]">(Assist: {getPlayerName(g.assist_player_id)})</span>}
+                            {getPlayerName(g.player_id)}
+                          </span>
+                        )}
                     </span>
                     <span>⚽</span>
                   </div>
@@ -1162,7 +1290,12 @@ export const MatchDetail: React.FC = () => {
                           <span className="text-emerald-500">Ein:</span> {getPlayerName(event.related_player_id)}
                         </span>
                       ) : (
-                        getPlayerName(event.player_id)
+                        <span className="flex items-center gap-1">
+                          {getPlayerName(event.player_id)}
+                          {event.assist_player_id && (
+                            <span className="text-zinc-500 font-bold ml-1 text-[8px]">(Assist: {getPlayerName(event.assist_player_id)})</span>
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1208,7 +1341,7 @@ export const MatchDetail: React.FC = () => {
                 <button 
                   onClick={() => {
                     console.log("DEBUG: [UI] Abpfiff button clicked");
-                    handleFullTime(60);
+                    handleFullTime();
                   }}
                   className="flex-1 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-black rounded-xl text-[9px] uppercase tracking-widest transition-all border border-red-500/20"
                 >
@@ -1216,12 +1349,12 @@ export const MatchDetail: React.FC = () => {
                 </button>
                 <button 
                   onClick={() => {
-                    console.log("DEBUG: [UI] Test Abpfiff (5m) clicked");
-                    handleFullTime(5);
+                    console.log("DEBUG: [UI] Test Abpfiff clicked");
+                    handleFullTime();
                   }}
                   className="px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-black rounded-xl text-[8px] uppercase tracking-widest transition-all border border-white/5"
                 >
-                  Test (5m)
+                  Test Abpfiff
                 </button>
               </div>
               )}
@@ -1382,7 +1515,11 @@ export const MatchDetail: React.FC = () => {
 
                 {fixture.voting_close_at && new Date(fixture.voting_close_at) > new Date() && (
                   <button 
-                    onClick={() => handleFullTime(0)}
+                    onClick={async () => {
+                      const now = new Date().toISOString();
+                      await supabase.from('fixtures').update({ voting_close_at: now }).eq('id', id);
+                      setFixture(prev => prev ? { ...prev, voting_close_at: now } : null);
+                    }}
                     className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-white/5 transition-all flex items-center justify-center gap-2"
                   >
                     <Clock className="w-3.5 h-3.5" />
@@ -1432,8 +1569,24 @@ export const MatchDetail: React.FC = () => {
                         <p className="text-xs font-black uppercase tracking-widest">Voting beendet</p>
                       </div>
                       <p className="text-zinc-500 text-[10px] font-medium">
-                        Das Voting-Fenster ist geschlossen. Die Ergebnisse werden in Kürze berechnet.
+                        {pollTimeout && !isAdmin
+                          ? "Ergebnisse werden noch verarbeitet."
+                          : "Das Voting-Fenster ist geschlossen. Die Ergebnisse werden in Kürze berechnet."}
                       </p>
+                      {isPollingResults && !pollTimeout && !isAdmin && (
+                        <div className="mt-2 flex items-center gap-2 text-emerald-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest">Suche nach Ergebnissen...</span>
+                        </div>
+                      )}
+                      {pollTimeout && !isAdmin && (
+                        <button 
+                          onClick={() => { setPollTimeout(false); setIsPollingResults(true); }}
+                          className="mt-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
+                        >
+                          Ergebnisse erneut prüfen
+                        </button>
+                      )}
                     </div>
                   );
                 }
@@ -1447,6 +1600,18 @@ export const MatchDetail: React.FC = () => {
 
       {/* Lineup Sections (Standard View) */}
       <div className="p-6 space-y-10">
+        {!isAdmin && ((kickoffDate && now < kickoffDate) || (!kickoffDate && !isActuallyLive)) ? (
+          <div className="flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
+            <Users className="w-12 h-12 text-zinc-800" />
+            <div className="space-y-1">
+              <p className="text-zinc-400 font-bold">Aufstellung verborgen</p>
+              <p className="text-zinc-600 text-xs">
+                Die Aufstellung ist ab Spielbeginn sichtbar.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Home Team */}
         <div className="space-y-6">
           <div className="flex items-center gap-3">
@@ -1472,6 +1637,7 @@ export const MatchDetail: React.FC = () => {
                 isAdmin={isAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
                 onAddEvent={handleAddEvent}
                 onRemoveEvent={handleRemoveEvent}
+                hasPlayed={hasPlayerPlayed(entry.player_id)}
               />
             )) : (
               <div className="col-span-full flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
@@ -1516,6 +1682,7 @@ export const MatchDetail: React.FC = () => {
                 isAdmin={isAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
                 onAddEvent={handleAddEvent}
                 onRemoveEvent={handleRemoveEvent}
+                hasPlayed={hasPlayerPlayed(entry.player_id)}
               />
             )) : (
               <div className="col-span-full flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
@@ -1534,6 +1701,8 @@ export const MatchDetail: React.FC = () => {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Swipe Voting Overlay */}
@@ -1542,7 +1711,10 @@ export const MatchDetail: React.FC = () => {
           <SwipeVotingOverlay
             fixtureId={id}
             userId={profile?.id || ''}
-            lineup={lineup.filter(entry => !userTeamId || entry.team_id === userTeamId)}
+            lineup={lineup.filter(entry => {
+              if (userTeamId && entry.team_id !== userTeamId) return false;
+              return hasPlayerPlayed(entry.player_id);
+            })}
             userVotes={userVotes}
             onVote={handleVote}
             onClose={() => setShowSwipeOverlay(false)}
@@ -1682,8 +1854,101 @@ export const MatchDetail: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Assist Selection Modal */}
+      <AnimatePresence>
+        {assistSelectionPlayerId && (
+          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[80vh]"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-500 rounded-xl text-black">
+                    <Trophy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black italic uppercase tracking-tighter">Assistgeber</h3>
+                    <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none mt-0.5">
+                      Wähle den Assist für {getPlayerName(assistSelectionPlayerId)}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setAssistSelectionPlayerId(null)}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+                >
+                  <X className="w-5 h-5 text-zinc-400" />
+                </button>
+              </div>
+
+              <div className="p-6 flex-1 overflow-hidden flex flex-col pl-4 pr-1">
+                <div className="space-y-4 flex-1 flex flex-col pr-5">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                    <input 
+                      type="text"
+                      placeholder="Spieler suchen..."
+                      value={playerSearchQuery}
+                      onChange={(e) => setPlayerSearchQuery(e.target.value)}
+                      className="w-full bg-black border border-white/10 rounded-2xl px-12 py-4 text-sm font-bold focus:border-emerald-500 outline-none transition-all"
+                    />
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                    <button
+                      onClick={() => {
+                        handleAddEvent(assistSelectionPlayerId, 'goal', null, null);
+                        setAssistSelectionPlayerId(null);
+                      }}
+                      className="w-full mb-4 flex items-center justify-center p-4 bg-zinc-800 hover:bg-zinc-700 border border-white/10 rounded-2xl transition-all group active:scale-[0.98]"
+                    >
+                      <span className="text-[12px] font-black uppercase italic text-zinc-300 group-hover:text-white transition-colors">Kein Assist</span>
+                    </button>
+
+                    {lineup
+                      .filter(entry => {
+                        // Needs to be same team
+                        const scorerEntry = lineup.find(l => l.player_id === assistSelectionPlayerId);
+                        return scorerEntry && entry.team_id === scorerEntry.team_id && entry.player_id !== assistSelectionPlayerId;
+                      })
+                      .filter(entry => !playerSearchQuery || entry.players.full_name.toLowerCase().includes(playerSearchQuery.toLowerCase()))
+                      .map(entry => {
+                        return (
+                          <button
+                            key={entry.player_id}
+                            onClick={() => {
+                              handleAddEvent(assistSelectionPlayerId, 'goal', null, entry.player_id);
+                              setAssistSelectionPlayerId(null);
+                              setPlayerSearchQuery('');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-emerald-500/10 border border-white/5 hover:border-emerald-500/30 rounded-2xl transition-all group active:scale-[0.98]"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-[10px] font-black text-zinc-400 group-hover:text-emerald-500 transition-colors">
+                                #{entry.jersey_number || '?'}
+                              </div>
+                              <div className="text-left">
+                                <p className="text-[11px] font-black uppercase italic text-white group-hover:text-emerald-400 transition-colors">{entry.players.full_name}</p>
+                              </div>
+                            </div>
+                            <Plus className="w-4 h-4 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+                          </button>
+                        );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       <div className="h-20" /> {/* Spacer */}
     </div>
+    </SafeAreaWrapper>
   );
 };
 

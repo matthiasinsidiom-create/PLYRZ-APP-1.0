@@ -16,6 +16,7 @@ interface PlayerVoteCardProps {
   isAdmin?: boolean;
   onAddEvent?: (playerId: string, type: 'goal' | 'yellow_card' | 'red_card') => void;
   onRemoveEvent?: (playerId: string, type: string) => void;
+  hasPlayed?: boolean;
 }
 
 export const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({
@@ -30,7 +31,8 @@ export const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({
   events = [],
   isAdmin = false,
   onAddEvent,
-  onRemoveEvent
+  onRemoveEvent,
+  hasPlayed = true
 }) => {
   const goals = events.filter(e => e.event_type === 'goal').length;
   const yellows = events.filter(e => e.event_type === 'yellow_card').length;
@@ -87,7 +89,7 @@ export const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({
       </div>
 
       {/* Admin Event Controls */}
-      {isAdmin && (
+      {isAdmin && hasPlayed && (
         <div className="flex items-center gap-2 mb-2 z-30">
           <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1">
             <button 
@@ -119,51 +121,57 @@ export const PlayerVoteCard: React.FC<PlayerVoteCardProps> = ({
         </div>
       )}
 
-      <div className="flex items-center gap-3 z-20">
-        <button
-          onClick={() => onVote('up')}
-          disabled={disabled || loading}
-          className={`p-3 rounded-xl border transition-all ${
-            vote === 'up'
-              ? 'bg-emerald-500 border-emerald-400 text-black scale-105 shadow-lg shadow-emerald-500/20'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-emerald-500/50'
-          } disabled:opacity-50 active:scale-95`}
-        >
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <ThumbsUp className="w-5 h-5" />
-          )}
-        </button>
+      {hasPlayed ? (
+        <div className="flex items-center gap-3 z-20">
+          <button
+            onClick={() => onVote('up')}
+            disabled={disabled || loading}
+            className={`p-3 rounded-xl border transition-all ${
+              vote === 'up'
+                ? 'bg-emerald-500 border-emerald-400 text-black scale-105 shadow-lg shadow-emerald-500/20'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-emerald-500/50'
+            } disabled:opacity-50 active:scale-95`}
+          >
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <ThumbsUp className="w-5 h-5" />
+            )}
+          </button>
 
-        <button
-          onClick={() => onVote('neutral')}
-          disabled={disabled || loading}
-          className={`px-4 py-2.5 rounded-xl border transition-all font-black italic uppercase text-[10px] tracking-widest ${
-            vote === 'neutral'
-              ? 'bg-zinc-100 border-zinc-200 text-black scale-105 shadow-lg shadow-white/10'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-500/50'
-          } disabled:opacity-50 active:scale-95`}
-        >
-          Neutral
-        </button>
+          <button
+            onClick={() => onVote('neutral')}
+            disabled={disabled || loading}
+            className={`px-4 py-2.5 rounded-xl border transition-all font-black italic uppercase text-[10px] tracking-widest ${
+              vote === 'neutral'
+                ? 'bg-zinc-100 border-zinc-200 text-black scale-105 shadow-lg shadow-white/10'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-500/50'
+            } disabled:opacity-50 active:scale-95`}
+          >
+            Neutral
+          </button>
 
-        <button
-          onClick={() => onVote('down')}
-          disabled={disabled || loading}
-          className={`p-3 rounded-xl border transition-all ${
-            vote === 'down'
-              ? 'bg-red-500 border-red-400 text-black scale-105 shadow-lg shadow-red-500/20'
-              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-red-500/50'
-          } disabled:opacity-50 active:scale-95`}
-        >
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <ThumbsDown className="w-5 h-5" />
-          )}
-        </button>
-      </div>
+          <button
+            onClick={() => onVote('down')}
+            disabled={disabled || loading}
+            className={`p-3 rounded-xl border transition-all ${
+              vote === 'down'
+                ? 'bg-red-500 border-red-400 text-black scale-105 shadow-lg shadow-red-500/20'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-red-500/50'
+            } disabled:opacity-50 active:scale-95`}
+          >
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <ThumbsDown className="w-5 h-5" />
+            )}
+          </button>
+        </div>
+      ) : (
+        <div className="px-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 text-[10px] font-black uppercase tracking-widest italic z-20">
+          Ohne Einsatz
+        </div>
+      )}
     </div>
   );
 };
