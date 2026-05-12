@@ -2177,5 +2177,25 @@ export const supabaseService = {
         away_team: { name: string, clubs: { name: string } } 
       } 
     })[];
+  },
+
+  async savePushToken(token: string, platform: string) {
+    const user = await this.getCurrentUser();
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('push_tokens')
+        .upsert(
+          { user_id: user.id, token, platform, last_seen_at: new Date().toISOString() },
+          { onConflict: 'user_id, token' } // using the unique constraint
+        );
+      if (error) {
+        console.error('DEBUG: [SERVICE] savePushToken error:', error);
+      } else {
+        console.log('DEBUG: [SERVICE] savePushToken success');
+      }
+    } catch (err) {
+      console.error('DEBUG: [SERVICE] savePushToken unexpected error:', err);
+    }
   }
 };

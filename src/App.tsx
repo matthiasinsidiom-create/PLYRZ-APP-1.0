@@ -24,6 +24,7 @@ import { RatingLogicScreen } from './pages/fan/RatingLogicScreen';
 import { VoteList } from './pages/fan/VoteList';
 import { BottomNav } from './components/BottomNav';
 import { motion } from 'framer-motion';
+import { setupPushNotifications } from './lib/pushNotifications';
 
 const AppContent: React.FC = () => {
   const { user, profile, loading, isAdmin, profileError, refreshProfile, signOut } = useAuth();
@@ -38,6 +39,11 @@ const AppContent: React.FC = () => {
       isAdmin, 
       hasProfileError: !!profileError 
     });
+    
+    // Register push notifications when user is authenticated
+    if (user && profile) {
+      setupPushNotifications();
+    }
   }, [user, profile, loading, isAdmin, profileError]);
   
   React.useEffect(() => {
