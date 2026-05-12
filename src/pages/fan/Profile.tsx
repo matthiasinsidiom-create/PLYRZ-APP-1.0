@@ -10,14 +10,95 @@ import {
   ChevronRight,
   Mail,
   Calendar,
-  RotateCcw
+  RotateCcw,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../../services/supabaseService';
+import { 
+  getPushState, 
+  onPushStateChange, 
+  setupPushNotifications, 
+  PushDebugState 
+} from '../../lib/pushNotifications';
+
+const PushDebug: React.FC = () => {
+  const [debugState, setDebugState] = React.useState<PushDebugState>(getPushState());
+
+  React.useEffect(() => {
+    return onPushStateChange((state) => {
+      setDebugState(state);
+    });
+  }, []);
+
+  const handleReRegister = async () => {
+    await setupPushNotifications();
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-zinc-900/80 border border-white/5 rounded-[2rem] p-6 space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4 text-emerald-500" />
+          <h3 className="text-sm font-black italic uppercase tracking-tighter text-emerald-500">Push Debug</h3>
+        </div>
+        <span className={`w-2 h-2 rounded-full ${debugState.lastSuccess ? 'bg-emerald-500' : 'bg-red-500'}`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+        <div>
+          <p className="text-zinc-600 mb-1">Native / Platform</p>
+          <p className="text-white">{debugState.isNative ? 'YES' : 'NO'} / {debugState.platform}</p>
+        </div>
+        <div>
+          <p className="text-zinc-600 mb-1">Permission</p>
+          <p className="text-white">{debugState.permissionStatus}</p>
+        </div>
+        <div>
+          <p className="text-zinc-600 mb-1">Setup / Register</p>
+          <p className="text-white">{debugState.started ? 'YES' : 'NO'} / {debugState.registerCalled ? 'YES' : 'NO'}</p>
+        </div>
+        <div>
+          <p className="text-zinc-600 mb-1">Token Received</p>
+          <p className="text-white">{debugState.tokenReceived ? 'YES' : 'NO'}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-zinc-600 mb-1">Token Start</p>
+          <p className="text-white font-mono break-all">{debugState.tokenStart || 'N/A'}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-zinc-600 mb-1">Session User ID</p>
+          <p className="text-white font-mono break-all text-[8px]">{debugState.userId || 'NONE'}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-zinc-600 mb-1">Last Attempt</p>
+          <p className="text-white">{debugState.lastAttempt ? new Date(debugState.lastAttempt).toLocaleString() : 'NEVER'}</p>
+        </div>
+        {debugState.lastError && (
+          <div className="col-span-2 bg-red-500/10 border border-red-500/20 p-2 rounded-lg">
+            <p className="text-red-500 mb-1">Error</p>
+            <p className="text-red-400 font-mono text-[8px] break-all">{debugState.lastError}</p>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={handleReRegister}
+        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/5 rounded-xl text-[10px] font-black uppercase italic tracking-widest transition-all active:scale-95"
+      >
+        Push erneut registrieren
+      </button>
+    </motion.div>
+  );
+};
 
 export const Profile: React.FC = () => {
-  const { profile, user, signOut, refreshProfile } = useAuth();
+  const { profile, user, signOut, refreshProfile, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [resetting, setResetting] = React.useState(false);
 
@@ -111,6 +192,9 @@ export const Profile: React.FC = () => {
             </motion.button>
           ))}
         </div>
+
+        {/* Push Debug (Admin Only) */}
+        {isAdmin && <PushDebug />}
 
         {/* Sign Out */}
         <button

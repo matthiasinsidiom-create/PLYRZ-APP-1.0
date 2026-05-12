@@ -1,69 +1,138 @@
-import { PushNotifications } from '@capacitor/push-notifications';
+import { PushNotifications, PermissionStatus } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { supabaseService } from '../services/supabaseService';
+import { supabase } from './supabase';
 
-let pushSetupDone = false;
+export interface PushDebugState {
+  started: boolean;
+  isNative: boolean;
+  platform: string;
+  permissionStatus: string;
+  registerCalled: boolean;
+  tokenReceived: boolean;
+  tokenStart: string;
+  userId: string;
+  saveCalled: boolean;
+  lastError: string;
+  lastSuccess: boolean;
+  lastAttempt: string;
+}
+
+let pushState: PushDebugState = {
+  started: false,
+  isNative: Capacitor.isNativePlatform(),
+  platform: Capacitor.getPlatform(),
+  permissionStatus: 'unknown',
+  registerCalled: false,
+  tokenReceived: false,
+  tokenStart: '',
+  userId: '',
+  saveCalled: false,
+  lastError: '',
+  lastSuccess: false,
+  lastAttempt: ''
+};
+
+const listeners: ((state: PushDebugState) => void)[] = [];
+
+const updateState = (update: Partial<PushDebugState>) => {
+  pushState = { ...pushState, ...update };
+  listeners.forEach(cb => cb(pushState));
+};
+
+export const getPushState = () => pushState;
+
+export const onPushStateChange = (cb: (state: PushDebugState) => void) => {
+  listeners.push(cb);
+  return () => {
+    const index = listeners.indexOf(cb);
+    if (index > -1) listeners.splice(index, 1);
+  };
+};
 
 export const setupPushNotifications = async () => {
+  updateState({ 
+    started: true, 
+    lastAttempt: new Date().toISOString(),
+    isNative: Capacitor.isNativePlatform(),
+    platform: Capacitor.getPlatform()
+  });
+
   console.log('[PUSH] setupPushNotifications started');
   console.log('[PUSH] isNativePlatform', Capacitor.isNativePlatform());
 
   if (!Capacitor.isNativePlatform()) {
-    console.log('[PUSH] Not a native platform, skipping push notifications setup.');
+    console.log('DEBUG: [PUSH] Not a native platform, skipping push notifications setup.');
+    updateState({ permissionStatus: 'n/a (web)' });
     return;
   }
-
-  if (pushSetupDone) {
-    console.log('[PUSH] setup already done, skipping duplicate listener registration.');
-    return;
-  }
-
-  pushSetupDone = true;
 
   try {
+    // Get Session Info
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || '';
+    updateState({ userId });
+    console.log('[PUSH] session user id', userId);
+
+    // Remove existing listeners to avoid duplicates
     await PushNotifications.removeAllListeners();
 
-    PushNotifications.addListener('registration', async (token) => {
+    // Set Listeners BEFORE Register
+    await PushNotifications.addListener('registration', async (token) => {
       console.log('[PUSH] token received', token.value?.slice(0, 30));
+      updateState({ 
+        tokenReceived: true, 
+        tokenStart: token.value?.slice(0, 25) || '' 
+      });
 
+      const platform = Capacitor.getPlatform();
+      updateState({ saveCalled: true });
+      
       try {
-        const platform = Capacitor.getPlatform();
-        await supabaseService.savePushToken(token.value, platform);
-      } catch (error) {
-        console.error('[PUSH] error while saving token', error);
+        const { error } = await supabaseService.savePushToken(token.value, platform);
+        if (error) {
+          updateState({ lastError: JSON.stringify(error), lastSuccess: false });
+        } else {
+          updateState({ lastSuccess: true, lastError: '' });
+        }
+      } catch (err: any) {
+        updateState({ lastError: err.message || String(err), lastSuccess: false });
       }
     });
 
-    PushNotifications.addListener('registrationError', (error) => {
+    await PushNotifications.addListener('registrationError', (error) => {
       console.error('[PUSH] registration error', error);
+      updateState({ lastError: JSON.stringify(error) });
     });
 
-    PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      console.log('[PUSH] push received', JSON.stringify(notification));
+    await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('DEBUG: [PUSH] Push received:', JSON.stringify(notification));
     });
 
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('[PUSH] push action performed', JSON.stringify(notification));
+    await PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('DEBUG: [PUSH] Push action performed:', JSON.stringify(notification));
     });
 
-    const currentPermission = await PushNotifications.checkPermissions();
-    console.log('[PUSH] current permission', currentPermission);
+    // Permission check
+    let permStatus = await PushNotifications.checkPermissions();
+    console.log('[PUSH] initial permission check', permStatus.receive);
 
-    let permission = currentPermission;
-
-    if (currentPermission.receive === 'prompt') {
-      permission = await PushNotifications.requestPermissions();
-      console.log('[PUSH] permission request result', permission);
+    if (permStatus.receive !== 'granted') {
+      permStatus = await PushNotifications.requestPermissions();
     }
+    
+    console.log('[PUSH] permission result', permStatus.receive);
+    updateState({ permissionStatus: permStatus.receive });
 
-    if (permission.receive === 'granted') {
-      console.log('[PUSH] registering for push notifications...');
+    if (permStatus.receive === 'granted') {
+      updateState({ registerCalled: true });
       await PushNotifications.register();
     } else {
-      console.warn('[PUSH] permission not granted', permission);
+      console.log('DEBUG: [PUSH] Permission not granted.');
     }
-  } catch (error) {
-    pushSetupDone = false;
-    console.error('[PUSH] setup error', error);
+
+  } catch (error: any) {
+    console.error('DEBUG: [PUSH] Error setting up push notifications:', error);
+    updateState({ lastError: error.message || String(error) });
   }
 };

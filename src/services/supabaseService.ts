@@ -2180,22 +2180,47 @@ export const supabaseService = {
   },
 
   async savePushToken(token: string, platform: string) {
-    const user = await this.getCurrentUser();
-    if (!user) return;
     try {
-      const { error } = await supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[PUSH] session user id', session?.user?.id);
+
+      const userId = session?.user?.id;
+      if (!userId) {
+        console.error('[PUSH] No user ID in session');
+        return { error: 'No session' };
+      }
+
+      console.log('[PUSH] saving token payload', {
+        userId,
+        platform,
+        tokenStart: token.slice(0, 30)
+      });
+
+      const { data, error } = await supabase
         .from('push_tokens')
         .upsert(
-          { user_id: user.id, token, platform, last_seen_at: new Date().toISOString() },
-          { onConflict: 'user_id, token' } // using the unique constraint
-        );
+          { 
+            user_id: userId, 
+            token, 
+            platform,
+            updated_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString() 
+          },
+          { onConflict: 'user_id, token' }
+        )
+        .select();
+
+      console.log('[PUSH] save result', { data, error });
+
       if (error) {
         console.error('DEBUG: [SERVICE] savePushToken error:', error);
       } else {
         console.log('DEBUG: [SERVICE] savePushToken success');
       }
-    } catch (err) {
+      return { data, error };
+    } catch (err: any) {
       console.error('DEBUG: [SERVICE] savePushToken unexpected error:', err);
+      return { error: err };
     }
   }
 };
