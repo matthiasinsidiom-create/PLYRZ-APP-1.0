@@ -124,13 +124,13 @@ const RankingRow: React.FC<{ entry: RatingHistoryEntry; rank?: number }> = ({ en
         <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 bg-zinc-800">
           <img 
             src={entry.players?.photo_url || "/assets/players/default.png"} 
-            alt={entry.players?.name || "Player"} 
+            alt={entry.players?.full_name || "Player"} 
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players?.name || 'Unbekannter Spieler'}</span>
+          <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players?.full_name || 'Unbekannter Spieler'}</span>
           <EventBadges goals={entry.goal_count || 0} assists={entry.assists || 0} yellows={entry.yellow_count || 0} reds={entry.red_count || 0} size="sm" />
         </div>
       </div>
@@ -678,7 +678,7 @@ const MatchResult: React.FC = () => {
                   >
                     <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
                       <PlayerCard 
-                        player={mvp.players || { name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' }} 
+                        player={mvp.players || { full_name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' } as any} 
                         clubLogo={mvp.players?.teams?.clubs?.logo_url}
                         jerseyNumber={mvp.jersey_number}
                         lineupRole={mvp.lineup_role}
@@ -828,7 +828,7 @@ const MatchResult: React.FC = () => {
                   <div className="w-full flex justify-center items-center">
                     <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
                       <PlayerCard 
-                        player={entry.players || { name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' }} 
+                        player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
                         clubLogo={entry.players?.teams?.clubs?.logo_url}
                         jerseyNumber={entry.jersey_number}
                         lineupRole={entry.lineup_role}
@@ -884,7 +884,7 @@ const MatchResult: React.FC = () => {
                   <div className="w-full flex justify-center items-center">
                     <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
                       <PlayerCard 
-                        player={entry.players || { name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' }} 
+                        player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
                         clubLogo={entry.players?.teams?.clubs?.logo_url}
                         jerseyNumber={entry.jersey_number}
                         lineupRole={entry.lineup_role}

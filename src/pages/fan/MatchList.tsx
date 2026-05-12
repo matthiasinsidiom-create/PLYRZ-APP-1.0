@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../../services/supabaseService';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture } from '../../types';
+import { calculateMatchScore } from '../../lib/score';
 
 export const MatchList: React.FC = () => {
   const navigate = useNavigate();
@@ -235,9 +236,19 @@ export const MatchList: React.FC = () => {
                             <span className="text-[10px] font-black text-white">{getMatchMinute(fixture.kickoff_at)}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-2xl font-black italic tracking-tighter text-white">{fixture.home_score}</span>
-                            <span className="text-zinc-600 font-bold">-</span>
-                            <span className="text-2xl font-black italic tracking-tighter text-white">{fixture.away_score}</span>
+                            {(() => {
+                              const { homeScore, awayScore, isOwnTeamHome } = calculateMatchScore(fixture, (fixture as any).match_events || []) as any;
+                              const goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='goal').length;
+                              const opponent_goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='opponent_goal').length;
+                              console.log(`DEBUG [SCORE LIVE]: fixture_id=${fixture.id}, match_type=${(fixture as any).leagues?.name || 'unknown'}, home_team=${(fixture as any).home_team?.name}, away_team=${(fixture as any).away_team?.name}, isOwnTeamHome=${isOwnTeamHome}, goal_count=${goal_count}, opponent_goal_count=${opponent_goal_count}, displayedHomeScore=${homeScore}, displayedAwayScore=${awayScore}`);
+                              return (
+                                <>
+                                  <span className="text-2xl font-black italic tracking-tighter text-white">{homeScore}</span>
+                                  <span className="text-zinc-600 font-bold">-</span>
+                                  <span className="text-2xl font-black italic tracking-tighter text-white">{awayScore}</span>
+                                </>
+                              );
+                            })()}
                           </div>
                           <span className="text-[8px] font-black uppercase tracking-[0.2em] text-red-500 animate-pulse">Live</span>
                         </div>
@@ -253,9 +264,19 @@ export const MatchList: React.FC = () => {
                       ) : (
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-xl font-black italic tracking-tighter text-zinc-300">{fixture.home_score}</span>
-                            <span className="text-zinc-700 font-bold">-</span>
-                            <span className="text-xl font-black italic tracking-tighter text-zinc-300">{fixture.away_score}</span>
+                            {(() => {
+                              const { homeScore, awayScore, isOwnTeamHome } = calculateMatchScore(fixture, (fixture as any).match_events || []) as any;
+                              const goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='goal').length;
+                              const opponent_goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='opponent_goal').length;
+                              console.log(`DEBUG [SCORE FINISHED]: fixture_id=${fixture.id}, match_type=${(fixture as any).leagues?.name || 'unknown'}, home_team=${(fixture as any).home_team?.name}, away_team=${(fixture as any).away_team?.name}, isOwnTeamHome=${isOwnTeamHome}, goal_count=${goal_count}, opponent_goal_count=${opponent_goal_count}, displayedHomeScore=${homeScore}, displayedAwayScore=${awayScore}`);
+                              return (
+                                <>
+                                  <span className="text-xl font-black italic tracking-tighter text-zinc-300">{homeScore}</span>
+                                  <span className="text-zinc-700 font-bold">-</span>
+                                  <span className="text-xl font-black italic tracking-tighter text-zinc-300">{awayScore}</span>
+                                </>
+                              );
+                            })()}
                           </div>
                           <span className={`text-[8px] font-black uppercase tracking-widest ${isVoting ? 'text-emerald-500 animate-pulse' : 'text-zinc-600'}`}>
                             {isVoting ? 'Voten' : 'Beendet'}

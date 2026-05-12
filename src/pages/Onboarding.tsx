@@ -221,15 +221,20 @@ export const Onboarding: React.FC = () => {
         if (dbErr.message?.includes('favorite_club_id') || dbErr.message?.includes('selected_league_id') || dbErr.code === '42703') {
           console.warn('Onboarding: Missing column in DB. Retrying without it...');
           
-          // Fallback: Try saving without the new columns
-          const fallbackUpdates = { ...updates };
-          delete fallbackUpdates.favorite_club_id;
-          delete fallbackUpdates.selected_league_id;
-          
-          await supabaseService.updateProfile(user.id, fallbackUpdates);
-          console.log('Onboarding: Profile updated successfully (fallback mode)');
+          try {
+            // Fallback: Try saving without the new columns
+            const fallbackUpdates = { ...updates };
+            delete fallbackUpdates.favorite_club_id;
+            delete fallbackUpdates.selected_league_id;
+            
+            await supabaseService.updateProfile(user.id, fallbackUpdates);
+            console.log('Onboarding: Profile updated successfully (fallback mode)');
+          } catch (fallbackErr) {
+            console.error('Onboarding: Fallback DB Update failed completely. Proceeding anyway.', fallbackErr);
+          }
         } else {
-          throw dbErr;
+          // Instead of throwing that crashes onboarding completely, log it but don't prevent navigation
+          console.error('Onboarding: DB Update failed completely. Proceeding anyway.', dbErr);
         }
       }
       
@@ -249,7 +254,13 @@ export const Onboarding: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Onboarding: Error completing onboarding:', err);
-      alert(`Fehler beim Abschluss: ${err.message || 'Unbekannter Fehler'}`);
+      // Removed alert as requested to not block user
+      // Falls ein Fehler auftritt, versuchen wir trotzdem weiterzuleiten
+      if (role === 'fan') {
+        navigate('/matches');
+      } else {
+        navigate('/');
+      }
     } finally {
       setSaving(false);
     }
