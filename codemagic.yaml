@@ -12,7 +12,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APPLE_TEAM_ID: "Y2Y64P58P7"
-        PROVISIONING_PROFILE_NAME: "PLYRZ AppStore Profile Push"
+        PROVISIONING_PROFILE_NAME: "plyrz_cert"
       groups:
         - app_store_credentials
 
