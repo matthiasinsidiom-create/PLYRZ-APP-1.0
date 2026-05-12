@@ -155,6 +155,11 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const playerId = entry.player_id;
       if (!playerId) continue;
 
+      const wasStarter = entry.lineup_role === 'starter';
+      const playerEventsForSubIn = matchEvents.filter((e: any) => e.event_type === 'sub_out' && e.related_player_id === playerId);
+      const wasSubbedIn = playerEventsForSubIn.length > 0;
+      const played = wasStarter || wasSubbedIn;
+
       const oldOverall = getPlayerRating(playerId);
       const isHome = entry.team_id === homeTeamId;
       const teamAvg = isHome ? homeAvg : awayAvg;
@@ -167,35 +172,42 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
 
       const participationMultiplier = 1.0;
 
-      const playerVotes = votesByPlayer[playerId] || [];
-      const upVotes = playerVotes.filter((v: any) => (v.vote_type || v.vote) === 'up').length;
-      const downVotes = playerVotes.filter((v: any) => (v.vote_type || v.vote) === 'down').length;
-      const neutralVotes = playerVotes.filter((v: any) => (v.vote_type || v.vote) === 'neutral').length;
-      
-      const voteScore = upVotes - downVotes; // Neutral votes have 0 impact on voteScore
-      const voteImpact = voteScore * 0.15;
+      let upVotes = 0, downVotes = 0, neutralVotes = 0;
+      let voteScore = 0, voteImpact = 0;
+      let isCleanSheet = false, cleanSheetImpact = 0;
+      let goalCount = 0, assistCount = 0, yellowCount = 0, redCount = 0;
+      let oppGoalPenalty = 0, goalBonus = 0, assistBonus = 0, eventImpact = 0;
 
-      const isCleanSheet = opponentGoalCount === 0;
-      let cleanSheetImpact = 0;
-      if (isCleanSheet) {
-        if (posGroup === 'Torwart') cleanSheetImpact = 1.0;
-        else cleanSheetImpact = 0.3;
+      if (played) {
+        const playerVotes = votesByPlayer[playerId] || [];
+        upVotes = playerVotes.filter((v: any) => (v.vote_type || v.vote) === 'up').length;
+        downVotes = playerVotes.filter((v: any) => (v.vote_type || v.vote) === 'down').length;
+        neutralVotes = playerVotes.filter((v: any) => (v.vote_type || v.vote) === 'neutral').length;
+        
+        voteScore = upVotes - downVotes; // Neutral votes have 0 impact on voteScore
+        voteImpact = voteScore * 0.15;
+
+        isCleanSheet = opponentGoalCount === 0;
+        if (isCleanSheet) {
+          if (posGroup === 'Torwart') cleanSheetImpact = 1.0;
+          else cleanSheetImpact = 0.3;
+        }
+
+        const playerEvents = matchEvents.filter((e: any) => e.player_id === playerId);
+        goalCount = playerEvents.filter((e: any) => e.event_type === 'goal').length;
+        assistCount = matchEvents.filter((e: any) => e.event_type === 'goal' && e.assist_player_id === playerId).length;
+        yellowCount = playerEvents.filter((e: any) => e.event_type === 'yellow_card').length;
+        redCount = playerEvents.filter((e: any) => e.event_type === 'red_card').length;
+        
+        // Use opponentGoalCount for penalty instead of teamGoalsAgainst to be consistent with events
+        oppGoalPenalty = opponentGoalCount * -0.2;
+
+        goalBonus = goalCount * 1.0;
+        assistBonus = assistCount * 0.7;
+
+        // Rating-Regel: Tor = +1.0, Assist = +0.7, plus andere impacts (Karten, Clean Sheet, Gegentore)
+        eventImpact = goalBonus + assistBonus + (yellowCount * -0.2) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
       }
-
-      const playerEvents = matchEvents.filter((e: any) => e.player_id === playerId);
-      const goalCount = playerEvents.filter((e: any) => e.event_type === 'goal').length;
-      const assistCount = matchEvents.filter((e: any) => e.event_type === 'goal' && e.assist_player_id === playerId).length;
-      const yellowCount = playerEvents.filter((e: any) => e.event_type === 'yellow_card').length;
-      const redCount = playerEvents.filter((e: any) => e.event_type === 'red_card').length;
-      
-      // Use opponentGoalCount for penalty instead of teamGoalsAgainst to be consistent with events
-      const oppGoalPenalty = opponentGoalCount * -0.2;
-
-      const goalBonus = goalCount * 1.0;
-      const assistBonus = assistCount * 0.7;
-
-      // Rating-Regel: Tor = +1.0, Assist = +0.7, plus andere impacts (Karten, Clean Sheet, Gegentore)
-      const eventImpact = goalBonus + assistBonus + (yellowCount * -0.2) + (redCount * -1.5) + cleanSheetImpact + oppGoalPenalty;
 
       let resultImpact = 0;
       if (actualScore === 1) resultImpact = 0.2;
@@ -207,10 +219,10 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const rawDelta = voteImpact + resultImpact + eventImpact;
       const finalDeltaBase = Math.max(-2, Math.min(2, rawDelta));
 
-      console.log(`[PROCESSOR DEBUG PLAYER] full_name: ${entry.players?.full_name || 'Unknown'}, position: ${rawPos}, goal_count: ${goalCount}, assists: ${assistCount}, cleanSheetBonus: ${cleanSheetImpact}, opponent_goal_count: ${opponentGoalCount}, event_impact: ${eventImpact}, raw_delta: ${rawDelta}, final_delta: ${finalDeltaBase}`);
+      console.log(`[PROCESSOR DEBUG PLAYER] player_id: ${playerId}, full_name: ${entry.players?.full_name || 'Unknown'}, lineup_role: ${entry.lineup_role}, played: ${played}, wasStarter: ${wasStarter}, wasSubbedIn: ${wasSubbedIn}, vote_impact: ${voteImpact}, event_impact: ${eventImpact}, result_impact: ${resultImpact}, final_delta: ${finalDeltaBase}`);
 
       const voteRatio = (upVotes + downVotes) > 0 ? (upVotes / (upVotes + downVotes)) : 0;
-      const mvpScore = voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta;
+      const mvpScore = played ? (voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta) : -9999; // Ensure unplayed players are not MVP
 
       playerCalcs.push({
         playerId, oldOverall, posGroup, rawPos, isHome, participationMultiplier,
@@ -218,13 +230,13 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
         goalCount, assistCount, yellowCount, redCount, isCleanSheet, teamGoalsAgainst,
         eventImpact, resultImpact, expectedScore, actual_score: actualScore,
         rawDelta, finalDeltaBase, mvpScore, players: entry.players,
-        isStarter: entry.lineup_role === 'starter'
+        isStarter: wasStarter, played
       });
     }
 
     // 7. MVP Selection
     let mvpId: string | null = null;
-    const potentialMVPs = playerCalcs.filter((p: any) => p.voteScore > 0);
+    const potentialMVPs = playerCalcs.filter((p: any) => p.voteScore > 0 && p.played);
     
     if (potentialMVPs.length > 0) {
       potentialMVPs.sort((a: any, b: any) => {
