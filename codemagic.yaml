@@ -83,11 +83,48 @@ workflows:
         script: |
           xcode-project use-profiles --project "$XCODE_PROJECT"
 
-      - name: Build iOS app
+      - name: Raw Xcode Archive with full logs
         script: |
           set -o pipefail
-          mkdir -p build/logs
 
+          mkdir -p build/logs
+          mkdir -p build/ios/xcarchive
+
+          echo "=== SHOW BUILD SETTINGS ==="
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -showBuildSettings \
+            2>&1 | tee build/logs/show-build-settings.log
+
+          echo "=== CHECK ENTITLEMENTS BEFORE ARCHIVE ==="
+          echo "App.entitlements:"
+          cat ios/App/App/App.entitlements || true
+
+          echo "CODE_SIGN_ENTITLEMENTS:"
+          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj || true
+
+          echo "=== RAW XCODE ARCHIVE ==="
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -destination "generic/platform=iOS" \
+            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
+            archive \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            DEVELOPMENT_TEAM=Y2Y64P58P7 \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            CODE_SIGN_STYLE=Manual \
+            2>&1 | tee build/logs/xcodebuild-archive.log
+
+      - name: Export IPA
+        script: |
+          set -o pipefail
+
+          mkdir -p build/logs
+          mkdir -p build/ios/ipa
+
+          echo "=== EXPORT IPA ==="
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME" \
@@ -97,6 +134,7 @@ workflows:
     artifacts:
       - build/ios/ipa/*.ipa
       - build/logs/*.log
+      - build/ios/xcarchive/*.xcarchive
 
     publishing:
       app_store_connect:
