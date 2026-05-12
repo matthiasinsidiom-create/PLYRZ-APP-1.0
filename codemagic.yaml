@@ -12,7 +12,6 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APPLE_TEAM_ID: "Y2Y64P58P7"
-        PROVISIONING_PROFILE_NAME: "plyrz_cert"
       groups:
         - app_store_credentials
 
@@ -112,7 +111,6 @@ workflows:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME" \
             2>&1 | tee build/logs/xcodebuild-archive.log
 
       - name: Verify signed app entitlements
@@ -158,11 +156,6 @@ workflows:
               <string>${APPLE_TEAM_ID}</string>
               <key>signingStyle</key>
               <string>manual</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>at.plyrz.app</key>
-                  <string>${PROVISIONING_PROFILE_NAME}</string>
-              </dict>
               <key>stripSwiftSymbols</key>
               <true/>
               <key>uploadBitcode</key>
