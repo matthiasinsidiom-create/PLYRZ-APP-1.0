@@ -20,11 +20,13 @@ import {
   getPushState, 
   onPushStateChange, 
   setupPushNotifications, 
+  sendTestPush,
   PushDebugState 
 } from '../../lib/pushNotifications';
 
 const PushDebug: React.FC = () => {
   const [debugState, setDebugState] = React.useState<PushDebugState>(getPushState());
+  const [sending, setSending] = React.useState(false);
 
   React.useEffect(() => {
     return onPushStateChange((state) => {
@@ -34,6 +36,12 @@ const PushDebug: React.FC = () => {
 
   const handleReRegister = async () => {
     await setupPushNotifications();
+  };
+
+  const handleTestPush = async () => {
+    setSending(true);
+    await sendTestPush();
+    setSending(false);
   };
 
   return (
@@ -85,14 +93,31 @@ const PushDebug: React.FC = () => {
             <p className="text-red-400 font-mono text-[8px] break-all">{debugState.lastError}</p>
           </div>
         )}
+        {debugState.testPushResult && (
+          <div className={`col-span-2 p-2 rounded-lg border ${debugState.testPushResult.success ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+            <p className={`text-[8px] font-black uppercase mb-1 ${debugState.testPushResult.success ? 'text-emerald-500' : 'text-red-500'}`}>Test Push Result</p>
+            <p className="text-white font-mono text-[8px] break-all">Data: {JSON.stringify(debugState.testPushResult.data)}</p>
+            {debugState.testPushResult.error && <p className="text-red-400 font-mono text-[8px] break-all mt-1">Error: {JSON.stringify(debugState.testPushResult.error)}</p>}
+            <p className="text-zinc-600 text-[6px] mt-1 italic uppercase font-black">{new Date(debugState.testPushResult.timestamp).toLocaleString()}</p>
+          </div>
+        )}
       </div>
 
-      <button
-        onClick={handleReRegister}
-        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/5 rounded-xl text-[10px] font-black uppercase italic tracking-widest transition-all active:scale-95"
-      >
-        Push erneut registrieren
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={handleReRegister}
+          className="py-3 bg-zinc-800 hover:bg-zinc-700 border border-white/5 rounded-xl text-[10px] font-black uppercase italic tracking-widest transition-all active:scale-95"
+        >
+          Push erneut registrieren
+        </button>
+        <button
+          onClick={handleTestPush}
+          disabled={sending}
+          className={`py-3 ${sending ? 'bg-zinc-700 opacity-50' : 'bg-emerald-600 hover:bg-emerald-500'} border border-white/5 rounded-xl text-[10px] font-black uppercase italic tracking-widest transition-all active:scale-95 text-white`}
+        >
+          {sending ? 'Sendet...' : 'Test-Push senden'}
+        </button>
+      </div>
     </motion.div>
   );
 };

@@ -16,6 +16,12 @@ export interface PushDebugState {
   lastError: string;
   lastSuccess: boolean;
   lastAttempt: string;
+  testPushResult?: {
+    success: boolean;
+    data?: any;
+    error?: any;
+    timestamp: string;
+  };
 }
 
 let pushState: PushDebugState = {
@@ -30,7 +36,8 @@ let pushState: PushDebugState = {
   saveCalled: false,
   lastError: '',
   lastSuccess: false,
-  lastAttempt: ''
+  lastAttempt: '',
+  testPushResult: undefined
 };
 
 const listeners: ((state: PushDebugState) => void)[] = [];
@@ -134,5 +141,45 @@ export const setupPushNotifications = async () => {
   } catch (error: any) {
     console.error('DEBUG: [PUSH] Error setting up push notifications:', error);
     updateState({ lastError: error.message || String(error) });
+  }
+};
+
+export const sendTestPush = async () => {
+  console.log('[PUSH] Invoking send-test-push function...');
+  updateState({
+    testPushResult: {
+      success: false,
+      timestamp: new Date().toISOString(),
+      data: 'Sending...'
+    }
+  });
+
+  try {
+    const { data, error } = await supabase.functions.invoke('send-test-push', {
+      body: {}
+    });
+
+    console.log('[PUSH] send-test-push result:', { data, error });
+
+    updateState({
+      testPushResult: {
+        success: !error,
+        data,
+        error,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+    return { data, error };
+  } catch (err: any) {
+    console.error('[PUSH] Unexpected error calling send-test-push:', err);
+    updateState({
+      testPushResult: {
+        success: false,
+        error: err.message || String(err),
+        timestamp: new Date().toISOString()
+      }
+    });
+    return { error: err };
   }
 };
