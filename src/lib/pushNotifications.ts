@@ -27,7 +27,7 @@ export const setupPushNotifications = async () => {
       console.log('[PUSH] token received', token.value?.slice(0, 30));
 
       try {
-        const platform = Capacitor.getPlatform(); // ios | android
+        const platform = Capacitor.getPlatform();
         await supabaseService.savePushToken(token.value, platform);
       } catch (error) {
         console.error('[PUSH] error while saving token', error);
