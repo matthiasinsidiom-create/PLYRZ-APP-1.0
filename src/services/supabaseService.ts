@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
 import { appConfig } from '../lib/config';
-import { processFixtureRatings as sharedProcessFixtureRatings } from './matchProcessor';
 import { calculateDistance } from '../lib/geo';
 import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStats, PlayerRatingHistory, MatchEvent } from '../types';
 import { mapPlayerWithStats } from '../lib/stats';
@@ -995,6 +994,22 @@ export const supabaseService = {
 
   // Lineups
   async getFixtureLineup(fixtureId: string) {
+    const isAdmin = await this.isUserAdmin();
+    if (!isAdmin) {
+      const { data: fixture } = await supabase.from('fixtures').select('kickoff_at, status').eq('id', fixtureId).single();
+      if (fixture) {
+        if (!fixture.kickoff_at && fixture.status !== 'live') {
+          console.log(`DEBUG: [SERVICE] Hiding fixture_lineups for non-admin because kickoff_at missing and not live`);
+          return [];
+        } else if (fixture.kickoff_at && new Date(fixture.kickoff_at) > new Date() && fixture.status !== 'live') {
+          console.log(`DEBUG: [SERVICE] Hiding fixture_lineups for non-admin because match has not started`);
+          return [];
+        }
+      } else {
+        return [];
+      }
+    }
+
     console.log(`DEBUG: [SERVICE] getFixtureLineup called for fixture_id=${fixtureId}`);
     // Temporarily removing join to test if rows are returned
     const { data, error } = await supabase
@@ -1037,10 +1052,26 @@ export const supabaseService = {
 
   async getFixtureLineupBulk(fixtureIds: string[]) {
     if (fixtureIds.length === 0) return [];
+
+    const isAdmin = await this.isUserAdmin();
+    let allowedFixtureIds = fixtureIds;
+    if (!isAdmin) {
+      const { data: fixtures } = await supabase.from('fixtures').select('id, kickoff_at, status').in('id', fixtureIds);
+      if (fixtures) {
+        allowedFixtureIds = fixtures.filter(f => 
+          f.status === 'live' || (f.kickoff_at && new Date(f.kickoff_at) <= new Date())
+        ).map(f => f.id);
+      } else {
+        allowedFixtureIds = [];
+      }
+    }
+
+    if (allowedFixtureIds.length === 0) return [];
+
     const { data, error } = await supabase
       .from('fixture_lineups')
       .select('fixture_id')
-      .in('fixture_id', fixtureIds);
+      .in('fixture_id', allowedFixtureIds);
     if (error) throw error;
     return data as { fixture_id: string }[];
   },
@@ -1521,46 +1552,11 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
-    const currentOrigin = window.location.origin;
-    // For Capacitor, we might need a specific URL, but for web currentOrigin is perfect
-    const backendBaseUrl = currentOrigin.startsWith('capacitor://') 
-      ? (import.meta.env.VITE_APP_URL || 'https://ais-dev-fjrcrkmhkbuzcz4zrklcla-612426073473.europe-west2.run.app')
-      : currentOrigin;
-
-    console.log(`DEBUG: [SERVICE] Attempting direct backend call to: ${backendBaseUrl}/api/admin/process-fixture-results`);
-
     try {
-      // Step 1: Try Direct Call (Bypassing Edge Function)
-      const directResponse = await fetch(`${backendBaseUrl}/api/admin/process-fixture-results`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ fixtureId })
-      });
-
-      console.log(`DEBUG: [SERVICE] Direct backend status: ${directResponse.status}`);
-
-      if (directResponse.ok) {
-        const data = await directResponse.json();
-        console.log(`DEBUG: [SERVICE] Direct call success:`, data);
-        return data;
-      }
-
-      // If direct call fails with 404 or something, maybe we are on a platform that requires the Edge Function
-      console.warn(`DEBUG: [SERVICE] Direct call failed with status ${directResponse.status}. Falling back to Edge Function...`);
-    } catch (directError) {
-      console.warn(`DEBUG: [SERVICE] Direct call network error. Falling back to Edge Function...`, directError);
-    }
-
-    // Step 2: Fallback to Edge Function (for Capacitor / specific network setups)
-    try {
-      console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor' as fallback...`);
+      console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor'...`);
       const { data, error: invokeError } = await supabase.functions.invoke('match-processor', {
         body: { 
           fixtureId,
-          appUrl: backendBaseUrl
         },
         headers: {
           Authorization: `Bearer ${session.access_token}`
@@ -1572,29 +1568,25 @@ export const supabaseService = {
         throw new Error(invokeError.message || 'Failed to invoke match processor');
       }
 
-      console.log(`DEBUG: [SERVICE] Raw response from edge function:`, data);
+      const result = data?.backendResult ?? data;
 
-      if (data && data.success === false) {
-        console.error(`DEBUG: [SERVICE] Edge function returned success: false`, data);
-        let errorMessage = data.error || 'Failed to process ratings';
-        if (data.details) {
-            errorMessage += ` - Details: ${typeof data.details === 'string' ? data.details : JSON.stringify(data.details).substring(0, 300)}`;
+      if (!result) {
+        console.warn(`DEBUG: [SERVICE] Edge function returned no data (null) but no error.`);
+        return { success: false, message: 'No response from processor' };
+      }
+
+      console.log(`DEBUG: [SERVICE] Raw response from edge function/backendResult:`, result);
+
+      if (result.success === false) {
+        console.error(`DEBUG: [SERVICE] Edge function returned success: false`, result);
+        let errorMessage = result.error || 'Failed to process ratings';
+        if (result.details) {
+            errorMessage += ` - Details: ${typeof result.details === 'string' ? result.details : JSON.stringify(result.details).substring(0, 300)}`;
         }
         throw new Error(errorMessage);
       }
 
-      // Check if data conforms to our exact expected format
-      if (!data || data.success === undefined) {
-         console.warn(`DEBUG: [SERVICE] Unexpected data shape from edge function:`, data);
-         return {
-            success: true,
-            processed: true,
-            fixtureId: fixtureId,
-            message: "Match processed successfully"
-         };
-      }
-
-      return data;
+      return result;
     } catch (error: any) {
       console.error(`DEBUG: [SERVICE] Critical Network or Execution Error processing ratings:`, error);
       throw error;
@@ -1693,24 +1685,26 @@ export const supabaseService = {
     return filteredData as Club[];
   },
 
-  async getTeams(clubId?: string) {
-    let query = supabase.from('teams').select('*, clubs(name, logo_url)').order('name');
+  async getTeams(clubId?: string, leagueId?: string) {
+    let query = supabase.from('teams').select('*, clubs!inner(name, logo_url, league_id)').order('name');
     if (clubId) query = query.eq('club_id', clubId);
+    if (leagueId) query = query.eq('clubs.league_id', leagueId);
     const { data, error } = await query;
     if (error) throw error;
     return data as Team[];
   },
 
-  async getPlayers(teamId?: string) {
-    console.log('DEBUG: [SERVICE] getPlayers started', { teamId });
+  async getPlayers(teamId?: string, leagueId?: string) {
+    console.log('DEBUG: [SERVICE] getPlayers started', { teamId, leagueId });
     
     // 1. Fetch players
     let playersQuery = supabase
       .from('players')
-      .select('*, teams(name, club_id, clubs(name, logo_url))')
+      .select('*, teams!inner(name, club_id, clubs!inner(name, logo_url, league_id))')
       .order('full_name');
     
     if (teamId) playersQuery = playersQuery.eq('team_id', teamId);
+    if (leagueId) playersQuery = playersQuery.eq('teams.clubs.league_id', leagueId);
     
     // Fetch session for filtering
     const isAdmin = await this.isUserAdmin();
@@ -1867,14 +1861,20 @@ export const supabaseService = {
     return null;
   },
 
-  async getFixtures() {
+  async getFixtures(leagueId?: string) {
     // Fetch session for filtering
     const isAdmin = await this.isUserAdmin();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), fixture_lineups(count)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), fixture_lineups(count), match_events(*)')
       .order('kickoff_at', { ascending: false });
+      
+    if (leagueId) {
+      query = query.eq('league_id', leagueId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     
     // Filter out Gerersdorf fixtures for normal users
@@ -1889,27 +1889,42 @@ export const supabaseService = {
     console.log(`DEBUG: [FILTER] getFixtures: Total loaded: ${data?.length || 0}, Filtered: ${filteredData.length}`);
 
     // Map the count from fixture_lineups
-    const mappedData = filteredData.map(f => ({
-      ...f,
-      lineup_count: f.fixture_lineups?.[0]?.count || 0
-    }));
+    const mappedData = filteredData.map(f => {
+      let lineup_count = f.fixture_lineups?.[0]?.count || 0;
+      if (!isAdmin) {
+         const isStarted = f.status === 'live' || (f.kickoff_at && new Date(f.kickoff_at) <= new Date());
+         if (!isStarted) {
+             lineup_count = 0;
+         }
+      }
+      return {
+        ...f,
+        lineup_count
+      };
+    });
     
     return mappedData as any[];
   },
 
-  async getOpenVotingFixtures() {
+  async getOpenVotingFixtures(leagueId?: string) {
     const now = new Date().toISOString();
     console.log(`DEBUG: [SERVICE] getOpenVotingFixtures started at ${now}`);
 
     // 1. Fetch candidate fixtures
-    const { data: fixtures, error: fixturesError } = await supabase
+    let query = supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
       .eq('status', 'finished')
       .is('results_processed_at', null)
       .not('voting_close_at', 'is', null)
       .gt('voting_close_at', now)
       .order('kickoff_at', { ascending: false });
+
+    if (leagueId) {
+      query = query.eq('league_id', leagueId);
+    }
+    
+    const { data: fixtures, error: fixturesError } = await query;
 
     if (fixturesError) {
       console.error('DEBUG: [SERVICE] Error fetching candidate fixtures:', fixturesError);
@@ -1986,7 +2001,7 @@ export const supabaseService = {
     console.log('supabaseService: getFixtureById called with id:', id);
     const { data, error } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url, latitude, longitude, radius_meters, pitch_name)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url, latitude, longitude, radius_meters, pitch_name)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
       .eq('id', id)
       .single();
     
@@ -2065,11 +2080,24 @@ export const supabaseService = {
   },
 
   async getUserCheckins(userId: string) {
-    return await supabase
+    const nowIso = new Date().toISOString();
+    
+    const { data, error } = await supabase
       .from('match_checkins')
       .select('fixture_id')
       .eq('user_id', userId)
-      .gt('expires_at', new Date().toISOString());
+      .gt('expires_at', nowIso);
+      
+    if (error) {
+      console.error(`DEBUG: [SERVICE] Error in getUserCheckins:`, {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+    }
+    
+    return { data, error };
   },
 
   async sendNotification(userId: string, title: string, message: string, data?: any) {
@@ -2149,5 +2177,25 @@ export const supabaseService = {
         away_team: { name: string, clubs: { name: string } } 
       } 
     })[];
+  },
+
+  async savePushToken(token: string, platform: string) {
+    const user = await this.getCurrentUser();
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('push_tokens')
+        .upsert(
+          { user_id: user.id, token, platform, last_seen_at: new Date().toISOString() },
+          { onConflict: 'user_id, token' } // using the unique constraint
+        );
+      if (error) {
+        console.error('DEBUG: [SERVICE] savePushToken error:', error);
+      } else {
+        console.log('DEBUG: [SERVICE] savePushToken success');
+      }
+    } catch (err) {
+      console.error('DEBUG: [SERVICE] savePushToken unexpected error:', err);
+    }
   }
 };
