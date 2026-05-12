@@ -27,6 +27,49 @@ workflows:
         script: |
           npx cap sync ios
 
+      - name: Ensure iOS push entitlements
+        script: |
+          echo "Writing App.entitlements..."
+
+          cat > ios/App/App/App.entitlements <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>aps-environment</key>
+              <string>production</string>
+          </dict>
+          </plist>
+          EOF
+
+          echo "Ensuring CODE_SIGN_ENTITLEMENTS in project.pbxproj..."
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("ios/App/App.xcodeproj/project.pbxproj")
+          text = path.read_text()
+
+          needle = "CODE_SIGN_ENTITLEMENTS = App/App.entitlements;"
+
+          if needle not in text:
+              text = text.replace(
+                  "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;",
+                  "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;"
+              )
+
+          path.write_text(text)
+          PY
+
+          echo "Final CODE_SIGN_ENTITLEMENTS check:"
+          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj
+
+          echo "Final App.entitlements:"
+          cat ios/App/App/App.entitlements
+
+          echo "Checking aps-environment..."
+          grep -n "aps-environment" ios/App/App/App.entitlements
+
       - name: Set iOS build number
         script: |
           BUILD_NUMBER=$(date +%s)
@@ -77,6 +120,17 @@ workflows:
       - name: Sync Capacitor Android
         script: |
           npx cap sync android
+
+      - name: Verify Android Firebase and permissions
+        script: |
+          echo "Checking google-services.json..."
+          test -f android/app/google-services.json
+
+          echo "Checking Android POST_NOTIFICATIONS permission..."
+          grep -n "POST_NOTIFICATIONS" android/app/src/main/AndroidManifest.xml || true
+
+          echo "Checking Capacitor plugins..."
+          cat android/app/src/main/assets/capacitor.plugins.json || true
 
       - name: Build APK
         script: |
