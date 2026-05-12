@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "657337267446",
+    "project_id": "plyrz-2dda8",
+    "storage_bucket": "plyrz-2dda8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:657337267446:android:02c98f756f6bd496a8e8d7",
+        "android_client_info": {
+          "package_name": "at.plyrz.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWDPzqzpo358r0SBuULQ6O07sbQAk2oUc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
