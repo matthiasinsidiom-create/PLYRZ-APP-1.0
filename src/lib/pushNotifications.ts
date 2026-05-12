@@ -2,49 +2,68 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { supabaseService } from '../services/supabaseService';
 
+let pushSetupDone = false;
+
 export const setupPushNotifications = async () => {
+  console.log('[PUSH] setupPushNotifications started');
+  console.log('[PUSH] isNativePlatform', Capacitor.isNativePlatform());
+
   if (!Capacitor.isNativePlatform()) {
-    console.log('DEBUG: [PUSH] Not a native platform, skipping push notifications setup.');
+    console.log('[PUSH] Not a native platform, skipping push notifications setup.');
     return;
   }
 
-  try {
-    // Request permission to use push notifications
-    // iOS will prompt user and return if they granted permission or not
-    // Android will just grant without prompting
-    const result = await PushNotifications.requestPermissions();
-    console.log('DEBUG: [PUSH] Permission status:', result.receive);
+  if (pushSetupDone) {
+    console.log('[PUSH] setup already done, skipping duplicate listener registration.');
+    return;
+  }
 
-    if (result.receive === 'granted') {
-      // Register with Apple / Google to receive push via APNS/FCM
-      await PushNotifications.register();
-    } else {
-      console.log('DEBUG: [PUSH] Permission not granted.');
+  pushSetupDone = true;
+
+  try {
+    await PushNotifications.removeAllListeners();
+
+    PushNotifications.addListener('registration', async (token) => {
+      console.log('[PUSH] token received', token.value?.slice(0, 30));
+
+      try {
+        const platform = Capacitor.getPlatform();
+        await supabaseService.savePushToken(token.value, platform);
+      } catch (error) {
+        console.error('[PUSH] error while saving token', error);
+      }
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+      console.error('[PUSH] registration error', error);
+    });
+
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('[PUSH] push received', JSON.stringify(notification));
+    });
+
+    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('[PUSH] push action performed', JSON.stringify(notification));
+    });
+
+    const currentPermission = await PushNotifications.checkPermissions();
+    console.log('[PUSH] current permission', currentPermission);
+
+    let permission = currentPermission;
+
+    if (currentPermission.receive === 'prompt') {
+      permission = await PushNotifications.requestPermissions();
+      console.log('[PUSH] permission request result', permission);
     }
 
-    // On success, we should be able to receive notifications
-    PushNotifications.addListener('registration', async (token) => {
-      console.log('DEBUG: [PUSH] Push registration success, token:', token.value);
-      const platform = Capacitor.getPlatform(); // 'ios' | 'android' | 'web'
-      await supabaseService.savePushToken(token.value, platform);
-    });
-
-    // Some issue with our setup and push will not work
-    PushNotifications.addListener('registrationError', (error) => {
-      console.error('DEBUG: [PUSH] Error on registration:', JSON.stringify(error));
-    });
-
-    // Show us the notification payload if the app is open on our device
-    PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      console.log('DEBUG: [PUSH] Push received:', JSON.stringify(notification));
-    });
-
-    // Method called when tapping on a notification
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('DEBUG: [PUSH] Push action performed:', JSON.stringify(notification));
-    });
-
+    if (permission.receive === 'granted') {
+      console.log('[PUSH] registering for push notifications...');
+      await PushNotifications.register();
+    } else {
+      console.warn('[PUSH] permission not granted', permission);
+    }
   } catch (error) {
-    console.error('DEBUG: [PUSH] Error setting up push notifications:', error);
+    pushSetupDone = false;
+    console.error('[PUSH] setup error', error);
   }
 };
