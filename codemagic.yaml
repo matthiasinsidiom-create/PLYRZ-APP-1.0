@@ -11,6 +11,8 @@ workflows:
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
+        APPLE_TEAM_ID: "Y2Y64P58P7"
+        PROVISIONING_PROFILE_NAME: "PLYRZ AppStore Profile Push"
       groups:
         - app_store_credentials
 
@@ -67,13 +69,14 @@ workflows:
           echo "Final App.entitlements:"
           cat ios/App/App/App.entitlements
 
-          echo "Checking aps-environment..."
+          echo "Checking aps-environment in source entitlements..."
           grep -n "aps-environment" ios/App/App/App.entitlements
 
       - name: Set iOS build number
         script: |
           BUILD_NUMBER=$(date +%s)
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" ios/App/App/Info.plist
+          echo "Build number set to $BUILD_NUMBER"
 
       - name: Verify Scheme
         script: |
@@ -83,28 +86,22 @@ workflows:
         script: |
           xcode-project use-profiles --project "$XCODE_PROJECT"
 
-      - name: Raw Xcode Archive with full logs
+          echo "Checking selected provisioning profile in build settings..."
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -showBuildSettings \
+            | grep -E "PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_ENTITLEMENTS|PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM" || true
+
+      - name: Raw Xcode Archive
         script: |
           set -o pipefail
 
           mkdir -p build/logs
           mkdir -p build/ios/xcarchive
 
-          echo "=== SHOW BUILD SETTINGS ==="
-          xcodebuild \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -showBuildSettings \
-            2>&1 | tee build/logs/show-build-settings.log
-
-          echo "=== CHECK ENTITLEMENTS BEFORE ARCHIVE ==="
-          echo "App.entitlements:"
-          cat ios/App/App/App.entitlements || true
-
-          echo "CODE_SIGN_ENTITLEMENTS:"
-          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj || true
-
           echo "=== RAW XCODE ARCHIVE ==="
+
           xcodebuild \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
@@ -112,10 +109,33 @@ workflows:
             -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
             archive \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            DEVELOPMENT_TEAM=Y2Y64P58P7 \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             CODE_SIGN_STYLE=Manual \
             2>&1 | tee build/logs/xcodebuild-archive.log
+
+      - name: Verify signed app entitlements
+        script: |
+          set -o pipefail
+
+          mkdir -p build/logs
+
+          APP_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive/Products/Applications/App.app"
+
+          echo "Checking signed app at:"
+          echo "$APP_PATH"
+
+          echo "=== SIGNED APP ENTITLEMENTS ==="
+          codesign -d --entitlements :- "$APP_PATH" 2>&1 | tee build/logs/signed-entitlements.log
+
+          echo "=== CHECK aps-environment IN SIGNED APP ==="
+          if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "aps-environment"; then
+            echo "SUCCESS: Signed app contains aps-environment entitlement."
+          else
+            echo "ERROR: Signed app does NOT contain aps-environment entitlement."
+            echo "This means the provisioning profile still does not include Push Notifications."
+            exit 1
+          fi
 
       - name: Export IPA
         script: |
@@ -124,17 +144,51 @@ workflows:
           mkdir -p build/logs
           mkdir -p build/ios/ipa
 
+          echo "Writing exportOptions.plist..."
+
+          cat > build/ios/exportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>teamID</key>
+              <string>${APPLE_TEAM_ID}</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>at.plyrz.app</key>
+                  <string>${PROVISIONING_PROFILE_NAME}</string>
+              </dict>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
           echo "=== EXPORT IPA ==="
-          xcode-project build-ipa \
-            --project "$XCODE_PROJECT" \
-            --scheme "$XCODE_SCHEME" \
-            --archive-flags "-destination 'generic/platform=iOS'" \
-            2>&1 | tee build/logs/build-ipa.log
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
+            -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
+            -exportOptionsPlist "$CM_BUILD_DIR/build/ios/exportOptions.plist" \
+            2>&1 | tee build/logs/xcodebuild-export.log
+
+          echo "IPA files:"
+          ls -la build/ios/ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
       - build/logs/*.log
       - build/ios/xcarchive/*.xcarchive
+      - build/ios/exportOptions.plist
 
     publishing:
       app_store_connect:
