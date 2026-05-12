@@ -131,6 +131,16 @@ export const MatchDetail: React.FC = () => {
     
     return onPitch;
   };
+
+  const hasPlayerPlayed = (playerId: string) => {
+    const entry = lineup.find(l => l.player_id === playerId);
+    if (!entry) return false;
+    if (entry.lineup_role === 'starter') return true;
+    
+    const subsIn = matchEvents.filter(e => e.event_type === 'sub_out' && e.related_player_id === playerId);
+    return subsIn.length > 0;
+  };
+
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -1627,6 +1637,7 @@ export const MatchDetail: React.FC = () => {
                 isAdmin={isAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
                 onAddEvent={handleAddEvent}
                 onRemoveEvent={handleRemoveEvent}
+                hasPlayed={hasPlayerPlayed(entry.player_id)}
               />
             )) : (
               <div className="col-span-full flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
@@ -1671,6 +1682,7 @@ export const MatchDetail: React.FC = () => {
                 isAdmin={isAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
                 onAddEvent={handleAddEvent}
                 onRemoveEvent={handleRemoveEvent}
+                hasPlayed={hasPlayerPlayed(entry.player_id)}
               />
             )) : (
               <div className="col-span-full flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
@@ -1699,7 +1711,10 @@ export const MatchDetail: React.FC = () => {
           <SwipeVotingOverlay
             fixtureId={id}
             userId={profile?.id || ''}
-            lineup={lineup.filter(entry => !userTeamId || entry.team_id === userTeamId)}
+            lineup={lineup.filter(entry => {
+              if (userTeamId && entry.team_id !== userTeamId) return false;
+              return hasPlayerPlayed(entry.player_id);
+            })}
             userVotes={userVotes}
             onVote={handleVote}
             onClose={() => setShowSwipeOverlay(false)}
