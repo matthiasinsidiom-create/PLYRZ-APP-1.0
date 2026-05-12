@@ -62,7 +62,7 @@ workflows:
           PY
 
           echo "Final CODE_SIGN_ENTITLEMENTS check:"
-          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj
+          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj || true
 
           echo "Final App.entitlements:"
           cat ios/App/App/App.entitlements
@@ -85,13 +85,18 @@ workflows:
 
       - name: Build iOS app
         script: |
+          set -o pipefail
+          mkdir -p build/logs
+
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME" \
-            --archive-flags "-destination 'generic/platform=iOS'"
+            --archive-flags "-destination 'generic/platform=iOS'" \
+            2>&1 | tee build/logs/build-ipa.log
 
     artifacts:
       - build/ios/ipa/*.ipa
+      - build/logs/*.log
 
     publishing:
       app_store_connect:
