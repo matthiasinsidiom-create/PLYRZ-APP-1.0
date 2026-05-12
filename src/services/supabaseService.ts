@@ -994,6 +994,22 @@ export const supabaseService = {
 
   // Lineups
   async getFixtureLineup(fixtureId: string) {
+    const isAdmin = await this.isUserAdmin();
+    if (!isAdmin) {
+      const { data: fixture } = await supabase.from('fixtures').select('kickoff_at, status').eq('id', fixtureId).single();
+      if (fixture) {
+        if (!fixture.kickoff_at && fixture.status !== 'live') {
+          console.log(`DEBUG: [SERVICE] Hiding fixture_lineups for non-admin because kickoff_at missing and not live`);
+          return [];
+        } else if (fixture.kickoff_at && new Date(fixture.kickoff_at) > new Date() && fixture.status !== 'live') {
+          console.log(`DEBUG: [SERVICE] Hiding fixture_lineups for non-admin because match has not started`);
+          return [];
+        }
+      } else {
+        return [];
+      }
+    }
+
     console.log(`DEBUG: [SERVICE] getFixtureLineup called for fixture_id=${fixtureId}`);
     // Temporarily removing join to test if rows are returned
     const { data, error } = await supabase
@@ -1036,10 +1052,26 @@ export const supabaseService = {
 
   async getFixtureLineupBulk(fixtureIds: string[]) {
     if (fixtureIds.length === 0) return [];
+
+    const isAdmin = await this.isUserAdmin();
+    let allowedFixtureIds = fixtureIds;
+    if (!isAdmin) {
+      const { data: fixtures } = await supabase.from('fixtures').select('id, kickoff_at, status').in('id', fixtureIds);
+      if (fixtures) {
+        allowedFixtureIds = fixtures.filter(f => 
+          f.status === 'live' || (f.kickoff_at && new Date(f.kickoff_at) <= new Date())
+        ).map(f => f.id);
+      } else {
+        allowedFixtureIds = [];
+      }
+    }
+
+    if (allowedFixtureIds.length === 0) return [];
+
     const { data, error } = await supabase
       .from('fixture_lineups')
       .select('fixture_id')
-      .in('fixture_id', fixtureIds);
+      .in('fixture_id', allowedFixtureIds);
     if (error) throw error;
     return data as { fixture_id: string }[];
   },
@@ -1857,10 +1889,19 @@ export const supabaseService = {
     console.log(`DEBUG: [FILTER] getFixtures: Total loaded: ${data?.length || 0}, Filtered: ${filteredData.length}`);
 
     // Map the count from fixture_lineups
-    const mappedData = filteredData.map(f => ({
-      ...f,
-      lineup_count: f.fixture_lineups?.[0]?.count || 0
-    }));
+    const mappedData = filteredData.map(f => {
+      let lineup_count = f.fixture_lineups?.[0]?.count || 0;
+      if (!isAdmin) {
+         const isStarted = f.status === 'live' || (f.kickoff_at && new Date(f.kickoff_at) <= new Date());
+         if (!isStarted) {
+             lineup_count = 0;
+         }
+      }
+      return {
+        ...f,
+        lineup_count
+      };
+    });
     
     return mappedData as any[];
   },

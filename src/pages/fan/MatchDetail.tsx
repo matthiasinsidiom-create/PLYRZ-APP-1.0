@@ -1590,6 +1590,18 @@ export const MatchDetail: React.FC = () => {
 
       {/* Lineup Sections (Standard View) */}
       <div className="p-6 space-y-10">
+        {!isAdmin && ((kickoffDate && now < kickoffDate) || (!kickoffDate && !isActuallyLive)) ? (
+          <div className="flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
+            <Users className="w-12 h-12 text-zinc-800" />
+            <div className="space-y-1">
+              <p className="text-zinc-400 font-bold">Aufstellung verborgen</p>
+              <p className="text-zinc-600 text-xs">
+                Die Aufstellung ist ab Spielbeginn sichtbar.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* Home Team */}
         <div className="space-y-6">
           <div className="flex items-center gap-3">
@@ -1677,6 +1689,8 @@ export const MatchDetail: React.FC = () => {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Swipe Voting Overlay */}
