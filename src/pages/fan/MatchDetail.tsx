@@ -300,9 +300,35 @@ export const MatchDetail: React.FC = () => {
           console.error("DEBUG: [LIFECYCLE] Fallback update failed:", updateError);
         } else {
           console.log("DEBUG: [LIFECYCLE] Fallback update successful");
+          
+          try {
+            const { data: updatedDoc } = await supabase.from('fixtures').select('voting_open_at').eq('id', id).single();
+            console.log(`[PUSH] Checked fallback DB status for fixtureId: ${id}, voting_open_at is: ${updatedDoc?.voting_open_at ? 'SET (' + updatedDoc.voting_open_at + ')' : 'NOT SET'}`);
+            
+            console.log('[PUSH] calling send-fixture-push (voting_open) after fallback...');
+            const { data: pushData, error: pushError } = await supabase.functions.invoke('send-fixture-push', {
+              body: { type: 'voting_open', fixtureId: id }
+            });
+            console.log('[PUSH] voting_open result', pushData, pushError);
+          } catch (err) {
+            console.warn('[PUSH] voting_open failed but flow continues', err);
+          }
         }
       } else {
         console.log("DEBUG: [LIFECYCLE] RPC Success:", data);
+        
+        try {
+          const { data: updatedDoc } = await supabase.from('fixtures').select('voting_open_at').eq('id', id).single();
+          console.log(`[PUSH] Checked RPC DB status for fixtureId: ${id}, voting_open_at is: ${updatedDoc?.voting_open_at ? 'SET (' + updatedDoc.voting_open_at + ')' : 'NOT SET'}`);
+          
+          console.log(`[PUSH] calling send-fixture-push (voting_open) for fixture ${id}...`);
+          const { data: pushData, error: pushError } = await supabase.functions.invoke('send-fixture-push', {
+            body: { type: 'voting_open', fixtureId: id }
+          });
+          console.log('[PUSH] voting_open result', pushData, pushError);
+        } catch (err) {
+          console.warn('[PUSH] voting_open failed but flow continues', err);
+        }
       }
       
       await loadData();
