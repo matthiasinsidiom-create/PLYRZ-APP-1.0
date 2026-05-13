@@ -347,6 +347,30 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
     if (fixError) throw new Error(`Fixture update failed: ${fixError.message}`);
 
     console.log(`[PROCESSOR] Completed fixture: ${fixtureId}. MVP: ${mvpId}`);
+
+    try {
+      const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY');
+      
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        const pushResp = await fetch(`${SUPABASE_URL}/functions/v1/send-fixture-push`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+          },
+          body: JSON.stringify({
+            type: 'results_ready',
+            fixtureId
+          })
+        });
+        const pushData = await pushResp.text();
+        console.log(`[PROCESSOR] Push results_ready: ${pushResp.status} ${pushData}`);
+      }
+    } catch (pushErr: any) {
+      console.log(`[PROCESSOR] Push error: ${pushErr.message}`);
+    }
+
     return finalHistory;
   } catch (err: any) {
     console.error(`[PROCESSOR] Error: ${err.message}`);
