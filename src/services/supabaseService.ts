@@ -948,6 +948,17 @@ export const supabaseService = {
       console.error(`DEBUG: [SERVICE] Error updating fixture ${id}:`, error);
       throw error;
     }
+
+    if (finalUpdates.status === 'finished' && currentFixture?.status !== 'finished') {
+      try {
+        const { data: pushData, error: pushError } = await supabase.functions.invoke('send-fixture-push', {
+          body: { type: 'voting_open', fixtureId: id }
+        });
+        console.log('[PUSH] voting_open sent', pushData, pushError);
+      } catch (pushError) {
+        console.warn('[PUSH] voting_open failed but flow continues', pushError);
+      }
+    }
     
     console.log(`DEBUG: [SERVICE] updateFixture success for ID: ${id}`);
     return data as Fixture;
@@ -2206,7 +2217,7 @@ export const supabaseService = {
             updated_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString() 
           },
-          { onConflict: 'user_id, token' }
+          { onConflict: 'user_id,platform' }
         )
         .select();
 
