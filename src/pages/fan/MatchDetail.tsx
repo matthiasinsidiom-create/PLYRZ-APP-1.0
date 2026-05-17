@@ -348,6 +348,7 @@ export const MatchDetail: React.FC = () => {
     const { error } = await supabase.rpc('start_halftime', { p_fixture_id: id });
     if (error) {
       await supabase.from('fixtures').update({ 
+        status: 'live',
         match_phase: 'halftime', 
         halftime_started_at: nowIso 
       }).eq('id', id);
@@ -363,6 +364,7 @@ export const MatchDetail: React.FC = () => {
     const { error } = await supabase.rpc('start_second_half', { p_fixture_id: id });
     if (error) {
       await supabase.from('fixtures').update({ 
+        status: 'live',
         match_phase: 'second_half', 
         second_half_started_at: nowIso 
       }).eq('id', id);
@@ -845,8 +847,10 @@ export const MatchDetail: React.FC = () => {
       if (f.status === 'upcoming' && isLiveTime) {
         // We only update the local object for UI consistency
         f.status = 'live';
-        f.match_phase = 'first_half';
-        f.first_half_started_at = f.kickoff_at;
+        if (!f.match_phase) {
+          f.match_phase = 'first_half';
+          f.first_half_started_at = f.kickoff_at;
+        }
       }
 
       // Robust score calculation

@@ -165,7 +165,12 @@ export const sendTestPush = async () => {
       testPushResult: {
         success: !error,
         data,
-        error,
+        error: error ? {
+          name: error.name,
+          message: error.message,
+          context: error.context,
+          raw: error
+        } : undefined,
         timestamp: new Date().toISOString()
       }
     });
@@ -176,7 +181,12 @@ export const sendTestPush = async () => {
     updateState({
       testPushResult: {
         success: false,
-        error: err.message || String(err),
+        error: {
+          name: err.name,
+          message: err.message,
+          context: err.context,
+          raw: err
+        },
         timestamp: new Date().toISOString()
       }
     });
