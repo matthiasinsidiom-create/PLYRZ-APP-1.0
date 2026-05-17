@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { 
   Home, 
   Calendar, 
@@ -10,34 +11,55 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 
-export const BottomNav: React.FC = () => {
+interface BottomNavProps {
+  hasAdminAccess?: boolean;
+}
+
+export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHasAdminAccess }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const { user } = useAuth();
+  const [internalHasAdminAccess, setInternalHasAdminAccess] = useState(false);
 
   useEffect(() => {
+    // Only fetch if not provided via props
+    if (externalHasAdminAccess !== undefined) {
+      setInternalHasAdminAccess(externalHasAdminAccess);
+      return;
+    }
+
     const checkAccess = async () => {
-      const [isAdmin, clubAccess] = await Promise.all([
-        supabaseService.isUserAdmin(),
-        supabaseService.getClubAdminAccess()
-      ]);
-      setHasAdminAccess(isAdmin || clubAccess.length > 0);
+      if (!user) {
+        setInternalHasAdminAccess(false);
+        return;
+      }
+      try {
+        const [isAdminResult, clubAccess] = await Promise.all([
+          supabaseService.isUserAdmin(),
+          supabaseService.getClubAdminAccess()
+        ]);
+        setInternalHasAdminAccess(isAdminResult || clubAccess.length > 0);
+      } catch (err) {
+        setInternalHasAdminAccess(false);
+      }
     };
     checkAccess();
-  }, []);
+  }, [user, externalHasAdminAccess]);
+
+  const hasAccess = externalHasAdminAccess !== undefined ? externalHasAdminAccess : internalHasAdminAccess;
 
   const tabs = [
     { id: 'home', label: 'Start', icon: Home, path: '/' },
     { id: 'matches', label: 'Spiele', icon: Calendar, path: '/matches' },
     { id: 'vote', label: 'Voten', icon: ThumbsUp, path: '/vote' },
     { id: 'leaderboard', label: 'Ranking', icon: Trophy, path: '/leaderboard' },
-    { id: 'profile', label: 'Profil', icon: User, path: '/profile' },
   ];
 
-  if (hasAdminAccess) {
-    // Insert Team Admin before profile
-    tabs.splice(4, 0, { id: 'team-admin', label: 'Admin', icon: ShieldAlert, path: '/team-admin' });
+  if (hasAccess) {
+    tabs.push({ id: 'team-admin', label: 'Admin', icon: ShieldAlert, path: '/team-admin' });
   }
+
+  tabs.push({ id: 'profile', label: 'Profil', icon: User, path: '/profile' });
 
   const isActive = (path: string) => {
     if (path === '/') {

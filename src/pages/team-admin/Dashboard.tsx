@@ -35,12 +35,13 @@ export const TeamAdminDashboard: React.FC = () => {
   const loadTeamAdminData = async () => {
     setLoading(true);
     try {
-      const clubAccess = await supabaseService.getClubAdminAccess();
+      const [clubAccess, isMainAdmin] = await Promise.all([
+        supabaseService.getClubAdminAccess(),
+        supabaseService.isMainAdmin()
+      ]);
       setAccess(clubAccess);
 
-      if (clubAccess.length > 0) {
-        const clubIds = clubAccess.map(a => a.club_id);
-        
+      if (clubAccess.length > 0 || isMainAdmin) {
         // Actually, let's just get all fixtures for the current round or upcoming
         const { data, error: fetchError } = await supabase
           .from('fixtures')
@@ -52,6 +53,8 @@ export const TeamAdminDashboard: React.FC = () => {
 
           // Filter fixtures based on access
           const filtered = (data || []).filter(f => {
+            if (isMainAdmin) return true;
+            
             const hClubId = f.home_team?.club_id;
             const aClubId = f.away_team?.club_id;
             
@@ -70,6 +73,12 @@ export const TeamAdminDashboard: React.FC = () => {
     }
   };
 
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    supabaseService.isMainAdmin().then(setIsSuperAdmin);
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -78,7 +87,7 @@ export const TeamAdminDashboard: React.FC = () => {
     );
   }
 
-  if (access.length === 0) {
+  if (access.length === 0 && !isSuperAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center">
         <Shield className="w-16 h-16 text-zinc-700 mb-4" />
