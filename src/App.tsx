@@ -25,11 +25,24 @@ import { VoteList } from './pages/fan/VoteList';
 import { BottomNav } from './components/BottomNav';
 import { motion } from 'framer-motion';
 import { setupPushNotifications } from './lib/pushNotifications';
+import { supabaseService } from './services/supabaseService';
+
+import { TeamAdminDashboard } from './pages/team-admin/Dashboard';
+import { TeamAdminMatchControl } from './pages/team-admin/MatchControl';
 
 const AppContent: React.FC = () => {
   const { user, profile, loading, isAdmin, profileError, refreshProfile, signOut } = useAuth();
   const location = useLocation();
   const [showForceStart, setShowForceStart] = React.useState(false);
+  const [isClubAdmin, setIsClubAdmin] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user) {
+      supabaseService.getClubAdminAccess().then(access => {
+        setIsClubAdmin(access.length > 0);
+      });
+    }
+  }, [user]);
   
   React.useEffect(() => {
     console.log('AppContent: Auth state updated', { 
@@ -184,6 +197,14 @@ const AppContent: React.FC = () => {
               <Route path="/admin/fixtures" element={<AdminFixtures />} />
               <Route path="/admin/fixtures/:id" element={<AdminMatchControl />} />
               <Route path="/admin/lineups" element={<AdminLineups />} />
+            </>
+          )}
+
+          {/* Team Admin Routes */}
+          {(isAdmin || isClubAdmin) && (
+            <>
+              <Route path="/team-admin" element={<TeamAdminDashboard />} />
+              <Route path="/team-admin/fixtures/:id" element={<TeamAdminMatchControl />} />
             </>
           )}
           

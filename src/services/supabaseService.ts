@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { appConfig } from '../lib/config';
 import { calculateDistance } from '../lib/geo';
-import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStats, PlayerRatingHistory, MatchEvent } from '../types';
+import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStats, PlayerRatingHistory, MatchEvent, ClubAdmin } from '../types';
 import { mapPlayerWithStats } from '../lib/stats';
 import { User } from '@supabase/supabase-js';
 
@@ -86,6 +86,69 @@ export const supabaseService = {
         .maybeSingle();
         
       return profile?.role === 'admin';
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async isMainAdmin() {
+    return this.isUserAdmin();
+  },
+
+  async getClubAdminAccess() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
+
+      const { data, error } = await supabase
+        .from('club_admins')
+        .select(`
+          *,
+          clubs (*)
+        `)
+        .eq('user_id', session.user.id)
+        .eq('is_active', true);
+
+      if (error) throw error;
+      return data as ClubAdmin[];
+    } catch (e) {
+      console.error('DEBUG: [SERVICE] getClubAdminAccess error:', e);
+      return [];
+    }
+  },
+
+  async canManageFixture(fixtureId: string) {
+    try {
+      const isAdmin = await this.isMainAdmin();
+      if (isAdmin) return true;
+
+      const access = await this.getClubAdminAccess();
+      if (access.length === 0) return false;
+
+      const { data: fixture, error } = await supabase
+        .from('fixtures')
+        .select('home_team_id, away_team_id, match_type')
+        .eq('id', fixtureId)
+        .single();
+
+      if (error || !fixture) return false;
+
+      // Check if user is admin for home or away club
+      // First, get the clubs for those teams
+      const { data: teams, error: teamsError } = await supabase
+        .from('teams')
+        .select('id, club_id')
+        .in('id', [fixture.home_team_id, fixture.away_team_id]);
+
+      if (teamsError || !teams) return false;
+
+      const homeClubId = teams.find(t => t.id === fixture.home_team_id)?.club_id;
+      const awayClubId = teams.find(t => t.id === fixture.away_team_id)?.club_id;
+
+      return access.some(a => 
+        (a.club_id === homeClubId || a.club_id === awayClubId) &&
+        (a.team_scope === 'all' || a.team_scope === fixture.match_type)
+      );
     } catch (e) {
       return false;
     }
@@ -2233,5 +2296,57 @@ export const supabaseService = {
       console.error('DEBUG: [SERVICE] savePushToken unexpected error:', err);
       return { error: err };
     }
+  },
+
+  async startMatch(id: string) {
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.rpc('start_match', { p_fixture_id: id });
+    if (error) {
+      return this.updateFixture(id, { 
+        status: 'live',
+        match_phase: 'first_half', 
+        first_half_started_at: nowIso 
+      });
+    }
+  },
+
+  async startHalftime(id: string) {
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.rpc('start_halftime', { p_fixture_id: id });
+    if (error) {
+      return this.updateFixture(id, { 
+        status: 'live',
+        match_phase: 'halftime', 
+        halftime_started_at: nowIso 
+      });
+    }
+  },
+
+  async startSecondHalf(id: string) {
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.rpc('start_second_half', { p_fixture_id: id });
+    if (error) {
+      return this.updateFixture(id, { 
+        status: 'live',
+        match_phase: 'second_half', 
+        second_half_started_at: nowIso 
+      });
+    }
+  },
+
+  async finishMatch(id: string) {
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase.rpc('finish_match', { p_fixture_id: id });
+    if (error) {
+      return this.updateFixture(id, { 
+        status: 'finished',
+        match_phase: 'finished', 
+        finished_at: nowIso 
+      });
+    }
+  },
+
+  async addMatchEvent(event: Partial<MatchEvent>) {
+    return this.createMatchEvent(event);
   }
 };

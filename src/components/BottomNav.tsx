@@ -1,16 +1,30 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Home, 
   Calendar, 
   ThumbsUp, 
   Trophy, 
-  User 
+  User,
+  ShieldAlert
 } from 'lucide-react';
+import { supabaseService } from '../services/supabaseService';
 
 export const BottomNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      const [isAdmin, clubAccess] = await Promise.all([
+        supabaseService.isUserAdmin(),
+        supabaseService.getClubAdminAccess()
+      ]);
+      setHasAdminAccess(isAdmin || clubAccess.length > 0);
+    };
+    checkAccess();
+  }, []);
 
   const tabs = [
     { id: 'home', label: 'Start', icon: Home, path: '/' },
@@ -19,6 +33,11 @@ export const BottomNav: React.FC = () => {
     { id: 'leaderboard', label: 'Ranking', icon: Trophy, path: '/leaderboard' },
     { id: 'profile', label: 'Profil', icon: User, path: '/profile' },
   ];
+
+  if (hasAdminAccess) {
+    // Insert Team Admin before profile
+    tabs.splice(4, 0, { id: 'team-admin', label: 'Admin', icon: ShieldAlert, path: '/team-admin' });
+  }
 
   const isActive = (path: string) => {
     if (path === '/') {

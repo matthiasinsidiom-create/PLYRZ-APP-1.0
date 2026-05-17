@@ -174,6 +174,18 @@ export interface PlayerRatingHistory {
   mvp_bonus?: number;
 }
 
+export interface ClubAdmin {
+  id: string;
+  user_id: string;
+  club_id: string;
+  team_scope: 'kampfmannschaft' | 'reserve' | 'all';
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  clubs?: Club;
+}
+
 export interface MatchEvent {
   id: string;
   fixture_id: string;
