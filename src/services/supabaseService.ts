@@ -77,7 +77,7 @@ export const supabaseService = {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return false;
       
-      if (session.user.email === "matthias.insidiom@gmail.com") return true;
+      if (session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com") return true;
       
       const { data: profile } = await supabase
         .from('profiles')

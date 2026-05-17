@@ -197,7 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!data) {
         console.warn('AuthContext: No profile found for user', userId, '- Attempting to create one...');
         // Try to create a profile automatically if it's missing
-        const isAdmin = session.user.email === "matthias.insidiom@gmail.com";
+      const isAdmin = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
         
         // IMPORTANT: We use 'role' as the leading field now.
         // Default for new users is 'fan' unless it's the admin email.
@@ -223,7 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         // Heal profile if role is missing or invalid
-        const isAdminEmail = session.user.email === "matthias.insidiom@gmail.com";
+        const isAdminEmail = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
         
         // If role is missing or 'user' (legacy), or if it's admin email but role isn't admin
         if (!data.role || data.role === 'user' || (isAdminEmail && data.role !== 'admin')) {
@@ -276,7 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user: session?.user ?? null,
       profile,
       loading,
-      isAdmin: (profile?.role === 'admin') || (session?.user?.email === "matthias.insidiom@gmail.com"),
+      isAdmin: (profile?.role === 'admin') || (session?.user?.email?.toLowerCase() === "matthias.insidiom@gmail.com"),
       profileError,
       signOut,
       refreshProfile

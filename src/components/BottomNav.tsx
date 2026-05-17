@@ -22,7 +22,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHa
   const [internalHasAdminAccess, setInternalHasAdminAccess] = useState(false);
 
   useEffect(() => {
-    // Only fetch if not provided via props
+    // If external prop is provided, we use it directly
     if (externalHasAdminAccess !== undefined) {
       setInternalHasAdminAccess(externalHasAdminAccess);
       return;
@@ -46,7 +46,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHa
     checkAccess();
   }, [user, externalHasAdminAccess]);
 
-  const hasAccess = externalHasAdminAccess !== undefined ? externalHasAdminAccess : internalHasAdminAccess;
+  const hasAccess = internalHasAdminAccess;
 
   const tabs = [
     { id: 'home', label: 'Start', icon: Home, path: '/' },

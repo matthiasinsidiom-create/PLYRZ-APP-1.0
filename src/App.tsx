@@ -42,12 +42,25 @@ const AppContent: React.FC = () => {
         setHasAdminPermissions(false);
         return;
       }
-      if (isAdmin) {
-        setHasAdminPermissions(true);
-        return;
+      
+      try {
+        console.log('DEBUG: [APP] Checking permissions for user:', user.email);
+        
+        // Super Admin Check
+        if (isAdmin) {
+          console.log('DEBUG: [APP] User is Super Admin');
+          setHasAdminPermissions(true);
+          return;
+        }
+
+        // Club Admin Check
+        const access = await supabaseService.getClubAdminAccess();
+        console.log('DEBUG: [APP] Club Admin Access count:', access.length);
+        setHasAdminPermissions(access.length > 0);
+      } catch (err) {
+        console.error('DEBUG: [APP] Permission check error:', err);
+        setHasAdminPermissions(false);
       }
-      const access = await supabaseService.getClubAdminAccess();
-      setHasAdminPermissions(access.length > 0);
     };
     checkAccess();
   }, [user, isAdmin]);
