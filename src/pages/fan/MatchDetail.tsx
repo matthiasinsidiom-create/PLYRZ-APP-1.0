@@ -289,20 +289,32 @@ export const MatchDetail: React.FC = () => {
         
       if (error) {
         console.error("DEBUG: [LIFECYCLE] RPC Failed:", error);
+        
+        // Match type based voting duration (fallback logic)
+        const votingMinutes = fixture.match_type === 'reserve' ? 180 : 60;
+        const now = new Date();
+        const closeAt = new Date(now.getTime() + votingMinutes * 60000).toISOString();
+        
         console.log("DEBUG: [LIFECYCLE] Attempting fallback manual DB update...");
         const { error: updateError } = await supabase
           .from('fixtures')
           .update({
             status: 'finished',
             match_phase: 'full_time',
+            voting_open_at: now.toISOString(),
+            voting_close_at: closeAt,
             results_processed_at: null
           })
           .eq('id', id);
           
         if (updateError) {
           console.error("DEBUG: [LIFECYCLE] Fallback update failed:", updateError);
+          alert(`Fehler beim Beenden des Spiels: ${updateError.message || 'Unbekannter Fehler'}`);
+          // Rollback local state
+          loadData();
         } else {
           console.log("DEBUG: [LIFECYCLE] Fallback update successful");
+          alert('Spiel erfolgreich beendet (Fallback-Modus).');
           
           try {
             const { data: updatedDoc } = await supabase.from('fixtures').select('voting_open_at').eq('id', id).single();
@@ -1553,7 +1565,7 @@ export const MatchDetail: React.FC = () => {
           {/* Action Buttons */}
           <div className="space-y-4">
             {/* Admin Processing Button */}
-            {isAdmin && fixture.status === 'finished' && (
+            {isMatchAdmin && fixture.status === 'finished' && (
               <div className="space-y-3">
                 <button 
                   onClick={() => setShowConfirmProcess(true)}
@@ -1624,17 +1636,17 @@ export const MatchDetail: React.FC = () => {
                         <p className="text-xs font-black uppercase tracking-widest">Voting beendet</p>
                       </div>
                       <p className="text-zinc-500 text-[10px] font-medium">
-                        {pollTimeout && !isAdmin
+                        {pollTimeout && !isMatchAdmin
                           ? "Ergebnisse werden noch verarbeitet."
                           : "Das Voting-Fenster ist geschlossen. Die Ergebnisse werden in Kürze berechnet."}
                       </p>
-                      {isPollingResults && !pollTimeout && !isAdmin && (
+                      {isPollingResults && !pollTimeout && !isMatchAdmin && (
                         <div className="mt-2 flex items-center gap-2 text-emerald-500">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           <span className="text-[10px] font-bold uppercase tracking-widest">Suche nach Ergebnissen...</span>
                         </div>
                       )}
-                      {pollTimeout && !isAdmin && (
+                      {pollTimeout && !isMatchAdmin && (
                         <button 
                           onClick={() => { setPollTimeout(false); setIsPollingResults(true); }}
                           className="mt-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
