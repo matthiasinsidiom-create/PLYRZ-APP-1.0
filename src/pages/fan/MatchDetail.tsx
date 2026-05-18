@@ -21,7 +21,8 @@ import {
   Trash2,
   Zap,
   PlusCircle,
-  Search
+  Search,
+  Settings
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
@@ -56,7 +57,9 @@ export const MatchDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, hasAdminAccess } = useAuth();
+  const [isFixtureAdmin, setIsFixtureAdmin] = useState(false);
+  const isMatchAdmin = isAdmin || isFixtureAdmin;
   const [loading, setLoading] = useState(true);
   const [fixture, setFixture] = useState<Fixture | null>(null);
   const [lineup, setLineup] = useState<LineupEntry[]>([]);
@@ -253,8 +256,8 @@ export const MatchDetail: React.FC = () => {
       console.error("DEBUG: [LIFECYCLE] Error: Missing fixture ID");
       return;
     }
-    if (!isAdmin) {
-      console.warn("DEBUG: [LIFECYCLE] Warning: Non-admin attempted to end match");
+    if (!isMatchAdmin) {
+      console.warn("DEBUG: [LIFECYCLE] Warning: Non-admin attempted to end match. isAdmin:", isAdmin, "isFixtureAdmin:", isFixtureAdmin);
       return;
     }
     if (!fixture) {
@@ -340,7 +343,7 @@ export const MatchDetail: React.FC = () => {
   };
 
   const handleStartHalftime = async () => {
-    if (!id || !isAdmin || !fixture) return;
+    if (!id || !isMatchAdmin || !fixture) return;
     const nowIso = new Date().toISOString();
     setFixture(prev => prev ? { ...prev, match_phase: 'halftime', halftime_started_at: nowIso } : null);
     
@@ -356,7 +359,7 @@ export const MatchDetail: React.FC = () => {
   };
 
   const handleStartSecondHalf = async () => {
-    if (!id || !isAdmin || !fixture) return;
+    if (!id || !isMatchAdmin || !fixture) return;
     const nowIso = new Date().toISOString();
     setFixture(prev => prev ? { ...prev, match_phase: 'second_half', second_half_started_at: nowIso } : null);
     
@@ -372,7 +375,7 @@ export const MatchDetail: React.FC = () => {
   };
 
   const handleAddEvent = async (playerId: string, type: 'goal' | 'yellow_card' | 'red_card' | 'sub_in' | 'sub_out', relatedPlayerId?: string | null, assistPlayerId?: string | null) => {
-    if (!id || !isAdmin || !fixture) return;
+    if (!id || !isMatchAdmin || !fixture) return;
 
     if (type === 'goal' && assistPlayerId === undefined) {
       setAssistSelectionPlayerId(playerId);
@@ -430,7 +433,7 @@ export const MatchDetail: React.FC = () => {
       });
     }
 
-    const { error } = await supabase
+    const { error: insertError } = await supabase
       .from('match_events')
       .insert({ 
         fixture_id: id, 
@@ -442,8 +445,14 @@ export const MatchDetail: React.FC = () => {
         minute: parseInt(matchMinute) || null
       });
       
-    if (error) {
-      console.error('Error adding event:', error);
+    if (insertError) {
+      console.error('DEBUG: [LIFECYCLE] Error adding match event:', insertError);
+      console.error('DEBUG: [LIFECYCLE] Failed payload:', {
+        fixture_id: id, 
+        player_id: playerId, 
+        team_id: teamId,
+        event_type: eventType,
+      });
       loadMatchEvents(); // Rollback
     } else if (eventType === 'sub_out' && relatedPlayerId) {
       console.log(`DEBUG: Substitution gespeichert (out: ${playerId}, in: ${relatedPlayerId})`);
@@ -467,7 +476,7 @@ export const MatchDetail: React.FC = () => {
   };
 
   const handleAddOpponentGoal = async (teamType: 'home' | 'away') => {
-    if (!id || !isAdmin || !fixture) return;
+    if (!id || !isMatchAdmin || !fixture) return;
     
     console.log(`DEBUG: [UI] handleAddOpponentGoal called for ${teamType}`);
     const teamId = teamType === 'home' ? fixture.home_team_id : fixture.away_team_id;
@@ -506,7 +515,7 @@ export const MatchDetail: React.FC = () => {
     });
 
     try {
-      const { error } = await supabase
+      const { error: insertError } = await supabase
         .from('match_events')
         .insert({ 
           fixture_id: id, 
@@ -517,7 +526,10 @@ export const MatchDetail: React.FC = () => {
           minute: minute
         });
         
-      if (error) throw error;
+      if (insertError) {
+        console.error('DEBUG: [LIFECYCLE] Error adding opponent goal:', insertError);
+        throw insertError;
+      }
       
       setIsAddingOpponentGoal(null);
       setOpponentJerseyNumber('');
@@ -532,7 +544,7 @@ export const MatchDetail: React.FC = () => {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    if (!id || !isAdmin || !fixture) return;
+    if (!id || !isMatchAdmin || !fixture) return;
     
     const event = matchEvents.find(e => e.id === eventId);
     if (!event) return;
@@ -559,19 +571,19 @@ export const MatchDetail: React.FC = () => {
       });
     }
 
-    const { error } = await supabase
+    const { error: deleteError } = await supabase
       .from('match_events')
       .delete()
       .eq('id', eventId);
 
-    if (error) {
-      console.error('Error deleting event:', error);
+    if (deleteError) {
+      console.error('DEBUG: [LIFECYCLE] Error deleting event:', deleteError);
       loadMatchEvents();
     }
   };
   
   const handleRemoveEvent = async (playerId: string, type: string) => {
-    if (!id || !isAdmin || !fixture) return;
+    if (!id || !isMatchAdmin || !fixture) return;
     
     const eventToRemove = [...matchEvents].reverse().find(e => e.player_id === playerId && e.event_type === type);
     if (!eventToRemove) return;
@@ -597,13 +609,13 @@ export const MatchDetail: React.FC = () => {
       });
     }
 
-    const { error } = await supabase
+    const { error: removeError } = await supabase
       .from('match_events')
       .delete()
       .eq('id', eventToRemove.id);
 
-    if (error) {
-      console.error('Error removing event:', error);
+    if (removeError) {
+      console.error('DEBUG: [LIFECYCLE] Error removing event:', removeError);
       loadMatchEvents(); // Rollback
     }
   };
@@ -790,20 +802,22 @@ export const MatchDetail: React.FC = () => {
         return;
       }
 
-      const [l, v, checkin, history, events, isCompleted, teamId] = await Promise.all([
+      const [l, v, checkin, history, events, isCompleted, teamId, fixtureAdmin] = await Promise.all([
         supabaseService.getFixtureLineupWithPlayers(id),
         profile ? supabaseService.getUserVotesForFixture(profile.id, id) : Promise.resolve([]),
         profile ? supabaseService.getMatchCheckin(id) : Promise.resolve(null),
         supabaseService.getFixtureRatingHistory(id),
         supabase.from('match_events').select('*').eq('fixture_id', id),
         profile ? supabaseService.checkVoteCompletion(id, profile.id) : Promise.resolve(false),
-        profile ? supabaseService.getUserTeamIdForFixture(id) : Promise.resolve(null)
+        profile ? supabaseService.getUserTeamIdForFixture(id) : Promise.resolve(null),
+        profile ? supabaseService.canManageFixture(id) : Promise.resolve(false)
       ]);
 
       const matchEventsData = events.data || [];
       setMatchEvents(matchEventsData);
       setHasCompletedBefore(isCompleted);
       setUserTeamId(teamId);
+      setIsFixtureAdmin(fixtureAdmin);
 
       console.log('DEBUG: [VOTE_COMPLETION] MatchDetail loadData results:', {
         fixtureId: id,
@@ -1129,7 +1143,18 @@ export const MatchDetail: React.FC = () => {
             )}
           </div>
         </div>
-        <img src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" alt="PLYRZ Logo" className="h-8 w-auto object-contain opacity-50" referrerPolicy="no-referrer" />
+        <div className="flex items-center gap-3">
+          {isMatchAdmin && (
+            <button 
+              onClick={() => navigate(isAdmin ? '/admin' : '/team-admin')}
+              className="w-8 h-8 bg-zinc-900 rounded-lg border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+              title="Admin Panel"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
+          <img src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" alt="PLYRZ Logo" className="h-8 w-auto object-contain opacity-50" referrerPolicy="no-referrer" />
+        </div>
       </div>
 
       {/* Live Compact Header */}
@@ -1225,7 +1250,7 @@ export const MatchDetail: React.FC = () => {
           </div>
 
           {/* Admin Quick Live Action - Tor Gegner */}
-          {isAdmin && isLive && !fixture.results_processed_at && (
+          {isMatchAdmin && isLive && !fixture.results_processed_at && (
             <div className="mt-6 pt-4 border-t border-white/5">
               {console.log('DEBUG: [UI] Rendering "Tor Gegner" button on MatchDetail')}
               <button 
@@ -1329,7 +1354,7 @@ export const MatchDetail: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {isAdmin && (
+                  {isMatchAdmin && (
                     <button 
                       onClick={() => handleDeleteEvent(event.id)}
                       className="p-1 hover:bg-red-500/10 rounded group transition-colors"
@@ -1345,7 +1370,7 @@ export const MatchDetail: React.FC = () => {
       )}
 
       {/* Admin Quick Controls */}
-      {isAdmin && !fixture.results_processed_at && fixture.status !== 'finished' && (
+      {isMatchAdmin && !fixture.results_processed_at && fixture.status !== 'finished' && (
         <div className="px-3 mt-6">
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
             {/* Match Phase Controls */}
@@ -1567,7 +1592,7 @@ export const MatchDetail: React.FC = () => {
                 const isVotingOpenNow = (fixture.status === 'finished' && !fixture.results_processed_at && votingCloseAt && now < votingCloseAt);
 
                 if (isVotingOpenNow) {
-                  if (!userTeamId && !isAdmin) {
+                  if (!userTeamId && !isMatchAdmin) {
                     return (
                       <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center gap-3">
                         <AlertCircle className="w-5 h-5 text-zinc-500" />
@@ -1630,7 +1655,7 @@ export const MatchDetail: React.FC = () => {
 
       {/* Lineup Sections (Standard View) */}
       <div className="p-6 space-y-10">
-        {!isAdmin && ((kickoffDate && now < kickoffDate) || (!kickoffDate && !isActuallyLive)) ? (
+        {!isMatchAdmin && ((kickoffDate && now < kickoffDate) || (!kickoffDate && !isActuallyLive)) ? (
           <div className="flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
             <Users className="w-12 h-12 text-zinc-800" />
             <div className="space-y-1">
@@ -1664,7 +1689,7 @@ export const MatchDetail: React.FC = () => {
                 lineupRole={entry.lineup_role as 'starter' | 'sub'}
                 onClick={() => navigate(`/players/${entry.player_id}`)}
                 events={matchEvents.filter(e => e.player_id === entry.player_id)}
-                isAdmin={isAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
+                isAdmin={isMatchAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
                 onAddEvent={handleAddEvent}
                 onRemoveEvent={handleRemoveEvent}
                 hasPlayed={hasPlayerPlayed(entry.player_id)}
@@ -1709,7 +1734,7 @@ export const MatchDetail: React.FC = () => {
                 lineupRole={entry.lineup_role as 'starter' | 'sub'}
                 onClick={() => navigate(`/players/${entry.player_id}`)}
                 events={matchEvents.filter(e => e.player_id === entry.player_id)}
-                isAdmin={isAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
+                isAdmin={isMatchAdmin && fixture.status !== 'finished' && !fixture.results_processed_at}
                 onAddEvent={handleAddEvent}
                 onRemoveEvent={handleRemoveEvent}
                 hasPlayed={hasPlayerPlayed(entry.player_id)}

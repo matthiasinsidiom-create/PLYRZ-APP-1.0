@@ -18,7 +18,7 @@ interface BottomNavProps {
 export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHasAdminAccess }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, isAdmin: isSuperAdmin } = useAuth();
   const [internalHasAdminAccess, setInternalHasAdminAccess] = useState(false);
 
   useEffect(() => {
@@ -54,10 +54,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHa
     { id: 'vote', label: 'Voten', icon: ThumbsUp, path: '/vote' },
     { id: 'leaderboard', label: 'Ranking', icon: Trophy, path: '/leaderboard' },
   ];
-
-  if (hasAccess) {
-    tabs.push({ id: 'team-admin', label: 'Admin', icon: ShieldAlert, path: '/team-admin' });
-  }
 
   tabs.push({ id: 'profile', label: 'Profil', icon: User, path: '/profile' });
 

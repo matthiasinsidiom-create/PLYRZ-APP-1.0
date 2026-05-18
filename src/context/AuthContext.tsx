@@ -9,6 +9,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   isAdmin: boolean;
+  hasAdminAccess: boolean;
   profileError: any | null;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -21,6 +22,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<any | null>(null);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
 
   useEffect(() => {
     console.log('AuthContext: Fetching initial session...');
@@ -197,7 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!data) {
         console.warn('AuthContext: No profile found for user', userId, '- Attempting to create one...');
         // Try to create a profile automatically if it's missing
-      const isAdmin = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
+      const isSuper = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
         
         // IMPORTANT: We use 'role' as the leading field now.
         // Default for new users is 'fan' unless it's the admin email.
@@ -206,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .insert({
             id: userId,
             display_name: session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || 'New User',
-            role: isAdmin ? 'admin' : 'fan',
+            role: isSuper ? 'admin' : 'fan',
             onboarding_completed: false // Everyone starts with onboarding
           })
           .select()
@@ -220,19 +222,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('AuthContext: Profile created successfully', newProfile);
           setProfile(newProfile);
           setProfileError(null);
+          
+          // Check for club admin access
+          const { data: clubAdmins } = await supabase.from('club_admins').select('id').eq('user_id', userId).eq('is_active', true).limit(1);
+          setHasAdminAccess(isSuper || (clubAdmins && clubAdmins.length > 0) || false);
         }
       } else {
         // Heal profile if role is missing or invalid
-        const isAdminEmail = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
+        const isSuper = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
         
         // If role is missing or 'user' (legacy), or if it's admin email but role isn't admin
-        if (!data.role || data.role === 'user' || (isAdminEmail && data.role !== 'admin')) {
-          console.warn('AuthContext: Profile needs healing...', { role: data.role, isAdminEmail });
+        if (!data.role || data.role === 'user' || (isSuper && data.role !== 'admin')) {
+          console.warn('AuthContext: Profile needs healing...', { role: data.role, isSuper });
           const { data: healedProfile, error: healError } = await supabase
             .from('profiles')
             .update({ 
-              role: isAdminEmail ? 'admin' : (data.role && data.role !== 'user' ? data.role : 'fan'),
-              onboarding_completed: isAdminEmail ? true : data.onboarding_completed
+              role: isSuper ? 'admin' : (data.role && data.role !== 'user' ? data.role : 'fan'),
+              onboarding_completed: isSuper ? true : data.onboarding_completed
             })
             .eq('id', userId)
             .select()
@@ -250,6 +256,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(data);
         }
         setProfileError(null);
+        
+        // Check for club admin access
+        const { data: clubAdmins } = await supabase.from('club_admins').select('id').eq('user_id', userId).eq('is_active', true).limit(1);
+        setHasAdminAccess(isSuper || (clubAdmins && clubAdmins.length > 0) || data.role === 'admin' || false);
       }
     } catch (error) {
       console.error('AuthContext: Unexpected error fetching profile:', error);
@@ -277,6 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profile,
       loading,
       isAdmin: (profile?.role === 'admin') || (session?.user?.email?.toLowerCase() === "matthias.insidiom@gmail.com"),
+      hasAdminAccess,
       profileError,
       signOut,
       refreshProfile

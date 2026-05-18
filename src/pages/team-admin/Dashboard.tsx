@@ -143,41 +143,8 @@ export const TeamAdminDashboard: React.FC = () => {
           ))}
         </div>
 
-        {/* Quick Actions */}
-        <div className="space-y-4">
-          <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Schnellzugriff</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <button 
-              onClick={() => {
-                const liveMatch = fixtures.find(f => f.status === 'live');
-                if (liveMatch) navigate(`/team-admin/fixtures/${liveMatch.id}`);
-                else alert('Kein laufendes Spiel gefunden.');
-              }}
-              className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col items-center text-center space-y-2 hover:bg-zinc-800 transition-colors"
-            >
-              <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center text-red-500">
-                <Zap className="w-5 h-5" fill="currentColor" />
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-tight">Live Spiel</span>
-            </button>
-            <button 
-              onClick={() => {
-                const upcoming = fixtures.find(f => f.status === 'upcoming');
-                if (upcoming) navigate(`/team-admin/fixtures/${upcoming.id}/lineup`);
-                else alert('Kein bevorstehendes Spiel gefunden.');
-              }}
-              className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex flex-col items-center text-center space-y-2 hover:bg-zinc-800 transition-colors"
-            >
-              <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500">
-                <Layout className="w-5 h-5" />
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-tight">Aufstellung</span>
-            </button>
-          </div>
-        </div>
-
         {/* Fixtures */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Deine Spiele</h2>
           </div>
@@ -192,51 +159,71 @@ export const TeamAdminDashboard: React.FC = () => {
               fixtures.map(f => (
                 <div 
                   key={f.id}
-                  onClick={() => navigate(`/team-admin/fixtures/${f.id}`)}
-                  className="bg-zinc-900 border border-white/5 overflow-hidden rounded-2xl hover:border-emerald-500/30 transition-colors cursor-pointer group"
+                  className="bg-zinc-900 border border-white/5 overflow-hidden rounded-[2rem] p-5 space-y-5"
                 >
-                  <div className="p-4 flex items-center justify-between">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest ${
-                          f.status === 'live' ? 'bg-red-500 text-white animate-pulse' :
-                          f.status === 'finished' ? 'bg-zinc-800 text-zinc-400' :
-                          'bg-emerald-500/20 text-emerald-500'
-                        }`}>
-                          {f.status === 'live' ? 'Live' : f.status === 'upcoming' ? 'Bevorstehend' : 'Beendet'}
-                        </span>
-                        <span className="text-[8px] text-zinc-500 font-mono uppercase">
-                          {new Date(f.kickoff_at).toLocaleDateString('de-DE')} • {new Date(f.kickoff_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-4">
-                        <div className="flex-1 flex flex-col items-center gap-2">
-                          <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center p-2">
-                            {f.home_team?.clubs?.logo_url ? (
-                              <img src={f.home_team.clubs.logo_url} className="w-full h-full object-contain" />
-                            ) : <Shield className="w-5 h-5 text-zinc-600" />}
-                          </div>
-                          <span className="text-[10px] font-bold text-center leading-tight truncate w-full">{f.home_team?.name}</span>
-                        </div>
-                        
-                        <div className="flex flex-col items-center">
-                          <div className="text-xl font-black italic tracking-tighter">
-                            {f.status === 'upcoming' ? 'VS' : `${f.home_score} : ${f.away_score}`}
-                          </div>
-                        </div>
-                        
-                        <div className="flex-1 flex flex-col items-center gap-2">
-                          <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center p-2">
-                            {f.away_team?.clubs?.logo_url ? (
-                              <img src={f.away_team.clubs.logo_url} className="w-full h-full object-contain" />
-                            ) : <Shield className="w-5 h-5 text-zinc-600" />}
-                          </div>
-                          <span className="text-[10px] font-bold text-center leading-tight truncate w-full">{f.away_team?.name}</span>
-                        </div>
-                      </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${
+                        f.status === 'live' ? 'bg-red-500 text-white animate-pulse' :
+                        f.status === 'finished' ? 'bg-zinc-800 text-zinc-400' :
+                        f.status === 'cancelled' ? 'bg-zinc-800 text-red-500' :
+                        'bg-emerald-500/20 text-emerald-500'
+                      }`}>
+                        {f.status === 'live' ? 'Live' : f.status === 'upcoming' ? 'Upcoming' : f.status === 'cancelled' ? 'Abgesagt' : 'Beendet'}
+                      </span>
+                      <span className="text-[8px] text-zinc-500 font-mono uppercase tracking-widest">
+                        {new Date(f.kickoff_at).toLocaleDateString('de-DE')} • {new Date(f.kickoff_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors ml-4" />
+                  </div>
+                  
+                  <div className="flex items-center gap-4 py-2">
+                    <div className="flex-1 flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center p-2.5 border border-white/5">
+                        {f.home_team?.clubs?.logo_url ? (
+                          <img src={f.home_team.clubs.logo_url} className="w-full h-full object-contain" />
+                        ) : <Shield className="w-6 h-6 text-zinc-600" />}
+                      </div>
+                      <span className="text-[10px] font-black uppercase text-center leading-tight truncate w-full">{f.home_team?.name}</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-center">
+                      <div className="text-xl font-black italic tracking-tighter text-white opacity-40">VS</div>
+                    </div>
+                    
+                    <div className="flex-1 flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center p-2.5 border border-white/5">
+                        {f.away_team?.clubs?.logo_url ? (
+                          <img src={f.away_team.clubs.logo_url} className="w-full h-full object-contain" />
+                        ) : <Shield className="w-6 h-6 text-zinc-600" />}
+                      </div>
+                      <span className="text-[10px] font-black uppercase text-center leading-tight truncate w-full">{f.away_team?.name}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button 
+                      onClick={() => navigate(`/team-admin/lineup/${f.id}`)}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-black font-black italic uppercase tracking-widest py-3 rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 text-[10px]"
+                    >
+                      <Layout className="w-4 h-4" />
+                      Aufstellung
+                    </button>
+                    {f.status !== 'cancelled' && f.status !== 'finished' && (
+                      <button 
+                        onClick={async () => {
+                          if (confirm('Soll dieses Spiel wirklich auf "Abgesagt" gesetzt werden?')) {
+                            const { error } = await supabase.from('fixtures').update({ status: 'cancelled' }).eq('id', f.id);
+                            if (error) alert(error.message);
+                            else loadTeamAdminData();
+                          }
+                        }}
+                        className="bg-zinc-800 hover:bg-zinc-700 text-red-500 font-black italic uppercase tracking-widest py-3 rounded-xl transition-all border border-white/5 shadow-lg active:scale-95 flex items-center justify-center gap-2 text-[10px]"
+                      >
+                        <AlertCircle className="w-4 h-4" />
+                        Absagen
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

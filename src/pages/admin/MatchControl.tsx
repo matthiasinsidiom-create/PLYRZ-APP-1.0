@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -30,6 +30,7 @@ import { supabase } from '../../lib/supabase';
 import { getPositionShort } from '../../lib/positions';
 import { Fixture, FixtureLineup, MatchEvent } from '../../types';
 import { calculateMatchScore } from '../../lib/score';
+import { useAuth } from '../../context/AuthContext';
 
 interface LineupEntryState {
   player_id: string;
@@ -40,6 +41,11 @@ interface LineupEntryState {
 const AdminMatchControl: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAdmin: isSuperAdmin } = useAuth();
+  
+  const isTeamAdminView = location.pathname.startsWith('/team-admin');
+  const backPath = isTeamAdminView ? '/team-admin' : '/admin/fixtures';
   
   const [fixture, setFixture] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -132,15 +138,23 @@ const AdminMatchControl: React.FC = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const fixtures = await supabaseService.getFixtures();
-      const currentFixture = fixtures.find(f => f.id === id);
+      const currentFixture = await supabaseService.getFixtureById(id);
       
       if (!currentFixture) {
-        navigate('/admin/fixtures');
+        navigate(backPath);
         return;
       }
       
       setFixture(currentFixture);
+      
+      // Check permission if it's the team admin view
+      if (isTeamAdminView && !isSuperAdmin) {
+        const canManage = await supabaseService.canManageFixture(id);
+        if (!canManage) {
+          navigate('/team-admin');
+          return;
+        }
+      }
       
       // Load Lineups
       const currentLineup = await supabaseService.getFixtureLineup(id);
@@ -607,7 +621,7 @@ const AdminMatchControl: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <button 
-            onClick={() => navigate('/admin/fixtures')}
+            onClick={() => navigate(backPath)}
             className="p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl"
           >
             <ArrowLeft className="w-5 h-5 text-zinc-400" />

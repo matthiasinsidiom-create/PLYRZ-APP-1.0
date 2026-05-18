@@ -43,8 +43,8 @@ export const supabaseService = {
 
   // --- ADMIN CRUD ---
 
-  // Helper to check admin status with email fallback
-  async checkAdmin() {
+  // Helper to check admin status with optional fixture context
+  async checkAdmin(fixtureId?: string) {
     // Try cached user first
     let user = cachedUser;
     if (!user) {
@@ -56,20 +56,30 @@ export const supabaseService = {
       throw new Error("Nicht authentifiziert");
     }
 
+    // Super Admin Check
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .maybeSingle();
 
-    const isAdmin = profile?.role === 'admin' || user.email === "matthias.insidiom@gmail.com";
+    const isSuperAdmin = profile?.role === 'admin' || user.email === "matthias.insidiom@gmail.com";
     
-    if (!isAdmin) {
-      throw new Error("Nicht autorisiert");
+    if (isSuperAdmin) {
+      cachedUser = user;
+      return { user, profile, isSuperAdmin: true };
+    }
+
+    // If fixtureId is provided, check if user is a club admin for that fixture
+    if (fixtureId) {
+      const hasAccess = await this.canManageFixture(fixtureId);
+      if (hasAccess) {
+        cachedUser = user;
+        return { user, profile, isSuperAdmin: false };
+      }
     }
     
-    cachedUser = user;
-    return { user, profile };
+    throw new Error("Nicht autorisiert");
   },
 
   async isUserAdmin() {
@@ -830,7 +840,8 @@ export const supabaseService = {
   },
 
   async createMatchEvent(event: Partial<MatchEvent>) {
-    await this.checkAdmin();
+    if (!event.fixture_id) throw new Error("Fixture ID erforderlich");
+    await this.checkAdmin(event.fixture_id);
     const { data, error } = await supabase
       .from('match_events')
       .insert({
@@ -844,7 +855,12 @@ export const supabaseService = {
   },
 
   async deleteMatchEvent(id: string) {
-    await this.checkAdmin();
+    const { data: event } = await supabase.from('match_events').select('fixture_id').eq('id', id).single();
+    if (event) {
+      await this.checkAdmin(event.fixture_id);
+    } else {
+      await this.checkAdmin();
+    }
     const { error } = await supabase
       .from('match_events')
       .delete()
@@ -854,7 +870,7 @@ export const supabaseService = {
   },
 
   async deleteMatchEvents(fixtureId: string) {
-    await this.checkAdmin();
+    await this.checkAdmin(fixtureId);
     const { error } = await supabase
       .from('match_events')
       .delete()
@@ -864,7 +880,7 @@ export const supabaseService = {
   },
 
   async syncMatchEvents(fixtureId: string, events: Partial<MatchEvent>[]) {
-    await this.checkAdmin();
+    await this.checkAdmin(fixtureId);
     
     // 1. Delete existing events
     const { error: deleteError } = await supabase
@@ -975,6 +991,9 @@ export const supabaseService = {
 
   async updateFixture(id: string, updates: Partial<Fixture>) {
     console.log(`DEBUG: [SERVICE] updateFixture called for ID: ${id}`, updates);
+    
+    // Check permission for this fixture
+    await this.checkAdmin(id);
     
     // 1. Fetch current fixture to check existing voting window and status
     const { data: currentFixture, error: fetchError } = await supabase
@@ -1162,7 +1181,7 @@ export const supabaseService = {
 
   async updateFixtureLineup(fixtureId: string, lineupEntries: any[]) {
     console.log(`DEBUG: [SERVICE] Attempting to update fixture lineup for fixture: ${fixtureId}`);
-    await this.checkAdmin();
+    await this.checkAdmin(fixtureId);
 
     // 1. Delete existing lineup for this fixture
     console.log(`DEBUG: [SERVICE] Deleting existing lineup for fixture: ${fixtureId}`);
@@ -1621,7 +1640,7 @@ export const supabaseService = {
 
   async processFixtureRatings(fixtureId: string) {
     console.log(`DEBUG: [SERVICE] Starting manual rating processing for fixture: ${fixtureId}`);
-    await this.checkAdmin();
+    await this.checkAdmin(fixtureId);
     
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');

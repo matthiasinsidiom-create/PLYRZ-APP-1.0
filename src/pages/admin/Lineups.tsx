@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   ListOrdered, 
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { getPositionShort } from '../../lib/positions';
+import { useAuth } from '../../context/AuthContext';
 
 interface LineupEntryState {
   player_id: string;
@@ -134,6 +135,13 @@ const PlayerRow = React.memo(({
 
 const AdminLineups: React.FC = () => {
   const navigate = useNavigate();
+  const { fixtureId } = useParams<{ fixtureId: string }>();
+  const location = useLocation();
+  const { isAdmin: isSuperAdmin } = useAuth();
+
+  const isTeamAdminView = location.pathname.startsWith('/team-admin');
+  const backPath = isTeamAdminView ? '/team-admin' : '/admin';
+
   const [fixtures, setFixtures] = useState<any[]>([]);
   const [selectedFixture, setSelectedFixture] = useState<any>(null);
   const [homePlayers, setHomePlayers] = useState<any[]>([]);
@@ -170,13 +178,32 @@ const AdminLineups: React.FC = () => {
     setLoading(true);
     try {
       console.log('DEBUG: Loading fixtures for appearances...');
-      const data = await supabaseService.getFixtures();
-      console.log('DEBUG: Raw fixtures received:', data.length);
-      const uniqueStatuses = Array.from(new Set(data.map(f => f.status)));
-      console.log('DEBUG: Unique statuses in database:', uniqueStatuses);
+      let data = await supabaseService.getFixtures();
       
-      // Store all fixtures, but we'll filter them in the render logic
+      // Filter for Team Admin
+      if (isTeamAdminView && !isSuperAdmin) {
+        const clubAccess = await supabaseService.getClubAdminAccess();
+        data = data.filter(f => {
+          const hClubId = f.home_team?.club_id;
+          const aClubId = f.away_team?.club_id;
+          return clubAccess.some(a => 
+            (a.club_id === hClubId || a.club_id === aClubId) &&
+            (a.team_scope === 'all' || a.team_scope === f.match_type)
+          );
+        });
+      }
+
+      console.log('DEBUG: Raw fixtures received:', data.length);
+      
       setFixtures(data);
+
+      // Auto-select fixture if ID provided in URL
+      if (fixtureId) {
+        const fixture = data.find(f => f.id === fixtureId);
+        if (fixture) {
+          handleSelectFixture(fixture);
+        }
+      }
       
       const liveCount = data.filter(f => f.status === 'live').length;
       const finishedCount = data.filter(f => f.status === 'finished').length;
@@ -403,7 +430,13 @@ const AdminLineups: React.FC = () => {
           <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button 
-                    onClick={() => setSelectedFixture(null)}
+                    onClick={() => {
+                      if (fixtureId) {
+                        navigate(backPath);
+                      } else {
+                        setSelectedFixture(null);
+                      }
+                    }}
                     className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
                   >
                     <ArrowLeft className="w-5 h-5 text-zinc-400" />
@@ -621,7 +654,7 @@ const AdminLineups: React.FC = () => {
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => navigate('/admin')}
+            onClick={() => navigate(backPath)}
             className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-zinc-400" />

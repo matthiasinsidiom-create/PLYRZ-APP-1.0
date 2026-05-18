@@ -28,43 +28,12 @@ import { setupPushNotifications } from './lib/pushNotifications';
 import { supabaseService } from './services/supabaseService';
 
 import { TeamAdminDashboard } from './pages/team-admin/Dashboard';
-import { TeamAdminMatchControl } from './pages/team-admin/MatchControl';
 
 const AppContent: React.FC = () => {
-  const { user, profile, loading, isAdmin, profileError, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isAdmin, hasAdminAccess, profileError, refreshProfile, signOut } = useAuth();
   const location = useLocation();
   const [showForceStart, setShowForceStart] = React.useState(false);
-  const [hasAdminPermissions, setHasAdminPermissions] = React.useState(false);
 
-  React.useEffect(() => {
-    const checkAccess = async () => {
-      if (!user) {
-        setHasAdminPermissions(false);
-        return;
-      }
-      
-      try {
-        console.log('DEBUG: [APP] Checking permissions for user:', user.email);
-        
-        // Super Admin Check
-        if (isAdmin) {
-          console.log('DEBUG: [APP] User is Super Admin');
-          setHasAdminPermissions(true);
-          return;
-        }
-
-        // Club Admin Check
-        const access = await supabaseService.getClubAdminAccess();
-        console.log('DEBUG: [APP] Club Admin Access count:', access.length);
-        setHasAdminPermissions(access.length > 0);
-      } catch (err) {
-        console.error('DEBUG: [APP] Permission check error:', err);
-        setHasAdminPermissions(false);
-      }
-    };
-    checkAccess();
-  }, [user, isAdmin]);
-  
   React.useEffect(() => {
     console.log('AppContent: Auth state updated', { 
       hasUser: !!user, 
@@ -222,10 +191,11 @@ const AppContent: React.FC = () => {
           )}
 
           {/* Team Admin Routes */}
-          {hasAdminPermissions && (
+          {hasAdminAccess && (
             <>
               <Route path="/team-admin" element={<TeamAdminDashboard />} />
-              <Route path="/team-admin/fixtures/:id" element={<TeamAdminMatchControl />} />
+              <Route path="/team-admin/fixtures/:id" element={<AdminMatchControl />} />
+              <Route path="/team-admin/lineup/:fixtureId" element={<AdminLineups />} />
             </>
           )}
           
@@ -245,7 +215,7 @@ const AppContent: React.FC = () => {
       
       {/* Only show bottom nav for fan routes, not admin, login or onboarding */}
       {!location.pathname.startsWith('/admin') && location.pathname !== '/onboarding' && (
-        <BottomNav hasAdminAccess={hasAdminPermissions} />
+        <BottomNav hasAdminAccess={hasAdminAccess} />
       )}
     </div>
   );

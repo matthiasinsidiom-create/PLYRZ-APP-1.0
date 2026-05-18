@@ -29,7 +29,7 @@ import { calculateMatchScore } from '../lib/score';
 // --- MAIN DASHBOARD ---
 
 export const Dashboard: React.FC = () => {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, isAdmin, hasAdminAccess, signOut } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [playerData, setPlayerData] = useState<Player | null>(null);
@@ -637,9 +637,9 @@ export const Dashboard: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-5">
-          {isAdmin && (
+          {hasAdminAccess && (
             <button 
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate(isAdmin ? '/admin' : '/team-admin')}
               className="w-10 h-10 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
               title="Admin Panel"
             >
