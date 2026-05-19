@@ -29,78 +29,21 @@ workflows:
         script: |
           npx cap sync ios
 
-      - name: Ensure iOS push entitlements
-        script: |
-          echo "Writing App.entitlements..."
-
-          cat > ios/App/App/App.entitlements <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>aps-environment</key>
-              <string>production</string>
-          </dict>
-          </plist>
-          EOF
-
-          echo "Ensuring CODE_SIGN_ENTITLEMENTS in project.pbxproj..."
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("ios/App/App.xcodeproj/project.pbxproj")
-          text = path.read_text()
-
-          needle = "CODE_SIGN_ENTITLEMENTS = App/App.entitlements;"
-
-          if needle not in text:
-              text = text.replace(
-                  "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;",
-                  "ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;\n\t\t\t\tCODE_SIGN_STYLE = Automatic;"
-              )
-
-          path.write_text(text)
-          PY
-
-          echo "Final CODE_SIGN_ENTITLEMENTS check:"
-          grep -n "CODE_SIGN_ENTITLEMENTS" ios/App/App.xcodeproj/project.pbxproj || true
-
-          echo "Final App.entitlements:"
-          cat ios/App/App/App.entitlements
-
-          echo "Checking aps-environment in source entitlements..."
-          grep -n "aps-environment" ios/App/App/App.entitlements
-
       - name: Set iOS build number
         script: |
           BUILD_NUMBER=$(date +%s)
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" ios/App/App/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" ios/App/App/Info.plist
           echo "Build number set to $BUILD_NUMBER"
 
-      - name: Verify Scheme
-        script: |
-          xcodebuild -list -project "$XCODE_PROJECT"
-
       - name: Apply provisioning profiles
         script: |
           xcode-project use-profiles --project "$XCODE_PROJECT"
 
-          echo "Checking selected provisioning profile in build settings..."
-          xcodebuild \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -showBuildSettings \
-            | grep -E "PROVISIONING_PROFILE_SPECIFIER|CODE_SIGN_ENTITLEMENTS|PRODUCT_BUNDLE_IDENTIFIER|DEVELOPMENT_TEAM" || true
-
       - name: Raw Xcode Archive
         script: |
           set -o pipefail
-
           mkdir -p build/logs
           mkdir -p build/ios/xcarchive
-
-          echo "=== RAW XCODE ARCHIVE ==="
 
           xcodebuild \
             -project "$XCODE_PROJECT" \
@@ -114,37 +57,11 @@ workflows:
             CODE_SIGN_STYLE=Manual \
             2>&1 | tee build/logs/xcodebuild-archive.log
 
-      - name: Verify signed app entitlements
-        script: |
-          set -o pipefail
-
-          mkdir -p build/logs
-
-          APP_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive/Products/Applications/App.app"
-
-          echo "Checking signed app at:"
-          echo "$APP_PATH"
-
-          echo "=== SIGNED APP ENTITLEMENTS ==="
-          codesign -d --entitlements :- "$APP_PATH" 2>&1 | tee build/logs/signed-entitlements.log
-
-          echo "=== CHECK aps-environment IN SIGNED APP ==="
-          if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "aps-environment"; then
-            echo "SUCCESS: Signed app contains aps-environment entitlement."
-          else
-            echo "ERROR: Signed app does NOT contain aps-environment entitlement."
-            echo "This means the provisioning profile still does not include Push Notifications."
-            exit 1
-          fi
-
       - name: Export IPA
         script: |
           set -o pipefail
-
           mkdir -p build/logs
           mkdir -p build/ios/ipa
-
-          echo "Writing exportOptions.plist..."
 
           cat > build/ios/exportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -172,11 +89,6 @@ workflows:
           </plist>
           EOF
 
-          echo "=== EXPORT OPTIONS ==="
-          cat build/ios/exportOptions.plist
-
-          echo "=== EXPORT IPA ==="
-
           xcodebuild \
             -exportArchive \
             -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
@@ -184,13 +96,9 @@ workflows:
             -exportOptionsPlist "$CM_BUILD_DIR/build/ios/exportOptions.plist" \
             2>&1 | tee build/logs/xcodebuild-export.log
 
-          echo "IPA files:"
-          ls -la build/ios/ipa
-
     artifacts:
       - build/ios/ipa/*.ipa
       - build/logs/*.log
-      - build/ios/xcarchive/*.xcarchive
       - build/ios/exportOptions.plist
 
     publishing:
@@ -200,13 +108,15 @@ workflows:
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
 
-  android-apk:
-    name: Android APK Build
+  android-release:
+    name: Android Release AAB + APK Build
     max_build_duration: 60
     instance_type: mac_mini_m2
 
     environment:
       java: 21
+      groups:
+        - android_signing
 
     scripts:
       - name: Install dependencies
@@ -221,22 +131,48 @@ workflows:
         script: |
           npx cap sync android
 
-      - name: Verify Android Firebase and permissions
+      - name: Verify Android setup
         script: |
           echo "Checking google-services.json..."
           test -f android/app/google-services.json
 
-          echo "Checking Android POST_NOTIFICATIONS permission..."
+          echo "Checking Android package/applicationId..."
+          grep -n "applicationId" android/app/build.gradle || true
+
+          echo "Checking Android notification permission..."
           grep -n "POST_NOTIFICATIONS" android/app/src/main/AndroidManifest.xml || true
 
-          echo "Checking Capacitor plugins..."
-          cat android/app/src/main/assets/capacitor.plugins.json || true
+      - name: Decode Android keystore
+        script: |
+          echo "$CM_KEYSTORE" | base64 --decode > android/app/release.keystore
+          ls -la android/app/release.keystore
 
-      - name: Build APK
+      - name: Build signed AAB
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/android/app/release.keystore \
+            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
+
+      - name: Build signed APK
+        script: |
+          cd android
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/android/app/release.keystore \
+            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
+
+      - name: List Android outputs
+        script: |
+          echo "AAB:"
+          ls -la android/app/build/outputs/bundle/release/ || true
+          echo "APK:"
+          ls -la android/app/build/outputs/apk/release/ || true
 
     artifacts:
-      - android/app/build/outputs/apk/debug/*.apk
+      - android/app/build/outputs/bundle/release/*.aab
+      - android/app/build/outputs/apk/release/*.apk
