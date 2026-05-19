@@ -1009,7 +1009,7 @@ export const MatchDetail: React.FC = () => {
 
   // Auto-trigger processing when voting window closes (for admins)
   useEffect(() => {
-    if (!isAdmin || !fixture || fixture.results_processed_at || fixture.status !== 'finished' || !fixture.voting_close_at) return;
+    if (!isMatchAdmin || !fixture || fixture.results_processed_at || fixture.status !== 'finished' || !fixture.voting_close_at) return;
 
     const checkWindow = () => {
       const now = new Date();
@@ -1023,7 +1023,7 @@ export const MatchDetail: React.FC = () => {
 
     const interval = setInterval(checkWindow, 5000);
     return () => clearInterval(interval);
-  }, [isAdmin, fixture, isProcessing]);
+  }, [isMatchAdmin, fixture, isProcessing]);
 
   // Polling for normal users
   useEffect(() => {
@@ -1050,7 +1050,7 @@ export const MatchDetail: React.FC = () => {
       }
     };
 
-    if (fixture?.status === 'finished' && fixture.voting_close_at && !fixture.results_processed_at && !isAdmin) {
+    if (fixture?.status === 'finished' && fixture.voting_close_at && !fixture.results_processed_at && !isMatchAdmin) {
       const closeAt = new Date(fixture.voting_close_at);
       if (new Date() >= closeAt && !pollTimeout) {
         setIsPollingResults(true);
@@ -1069,7 +1069,7 @@ export const MatchDetail: React.FC = () => {
         };
       }
     }
-  }, [fixture?.status, fixture?.voting_close_at, fixture?.results_processed_at, pollTimeout, isAdmin, id, navigate]);
+  }, [fixture?.status, fixture?.voting_close_at, fixture?.results_processed_at, pollTimeout, isMatchAdmin, id, navigate]);
 
   if (loading) {
     return (
@@ -1580,12 +1580,28 @@ export const MatchDetail: React.FC = () => {
                   {isProcessing ? 'Verarbeite...' : 'Resultate berechnen'}
                 </button>
 
-                {fixture.voting_close_at && new Date(fixture.voting_close_at) > new Date() && (
+                {isAdmin && fixture.voting_close_at && new Date(fixture.voting_close_at) > new Date() && (
                   <button 
                     onClick={async () => {
-                      const now = new Date().toISOString();
-                      await supabase.from('fixtures').update({ voting_close_at: now }).eq('id', id);
-                      setFixture(prev => prev ? { ...prev, voting_close_at: now } : null);
+                      if (!id) return;
+                      try {
+                        const nowIso = new Date().toISOString();
+                        const { error } = await supabase
+                          .from('fixtures')
+                          .update({ voting_close_at: nowIso })
+                          .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        setFixture(prev => prev ? { ...prev, voting_close_at: nowIso } : null);
+                        console.log("DEBUG: [LIFECYCLE] Voting closed manually by admin");
+                        
+                        // Explicitly trigger processing
+                        handleProcessResults();
+                      } catch (err) {
+                        console.error("DEBUG: [LIFECYCLE] Error closing voting:", err);
+                        alert(`Fehler beim Schließen des Votings: ${err instanceof Error ? err.message : String(err)}`);
+                      }
                     }}
                     className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-white/5 transition-all flex items-center justify-center gap-2"
                   >
