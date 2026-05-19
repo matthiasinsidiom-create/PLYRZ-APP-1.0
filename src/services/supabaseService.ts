@@ -105,6 +105,48 @@ export const supabaseService = {
     return this.isUserAdmin();
   },
 
+  async getUserVisibilityContext() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return { isMainAdmin: false, leagueIds: [], clubIds: [] };
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, selected_league_id, favorite_club_id')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    const isMainAdmin = profile?.role === 'admin' || session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
+
+    if (isMainAdmin) {
+      return { isMainAdmin: true, leagueIds: [], clubIds: [] };
+    }
+
+    const leagueIds = new Set<string>();
+    const clubIds = new Set<string>();
+
+    if (profile?.selected_league_id) leagueIds.add(profile.selected_league_id);
+    if (profile?.favorite_club_id) clubIds.add(profile.favorite_club_id);
+
+    const { data: clubAdmins } = await supabase
+      .from('club_admins')
+      .select('club_id, clubs(league_id)')
+      .eq('user_id', session.user.id)
+      .eq('is_active', true);
+
+    if (clubAdmins) {
+      clubAdmins.forEach(ca => {
+        if (ca.club_id) clubIds.add(ca.club_id);
+        if ((ca.clubs as any)?.league_id) leagueIds.add((ca.clubs as any).league_id);
+      });
+    }
+
+    return {
+      isMainAdmin: false,
+      leagueIds: Array.from(leagueIds),
+      clubIds: Array.from(clubIds)
+    };
+  },
+
   async getClubAdminAccess() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -1753,35 +1795,70 @@ export const supabaseService = {
 
   // Queries
   async getLeagues() {
-    const { data, error } = await supabase.from('leagues').select('*').order('name');
+    const visibility = await this.getUserVisibilityContext();
+    let query = supabase.from('leagues').select('*').order('name');
+    
+    if (!visibility.isMainAdmin) {
+      if (visibility.leagueIds.length > 0) {
+        query = query.in('id', visibility.leagueIds);
+      } else {
+        return [];
+      }
+    }
+    
+    const { data, error } = await query;
     if (error) throw error;
     return data as League[];
   },
 
   async getClubs(leagueId?: string) {
+    const visibility = await this.getUserVisibilityContext();
+
+    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+      console.warn(`DEBUG: [SECURITY] User attempted to fetch clubs for unauthorized league: ${leagueId}`);
+      return [];
+    }
+
     let query = supabase.from('clubs').select('*, leagues(name)').order('name');
-    if (leagueId) query = query.eq('league_id', leagueId);
+    
+    if (leagueId) {
+      query = query.eq('league_id', leagueId);
+    } else if (!visibility.isMainAdmin) {
+      if (visibility.leagueIds.length > 0) {
+        query = query.in('league_id', visibility.leagueIds);
+      } else {
+        return [];
+      }
+    }
+    
     const { data, error } = await query;
     if (error) throw error;
-    
-    // STRICT FILTERING:
-    const isAdmin = await this.isUserAdmin();
 
-    const filteredData = (data || []).filter(c => {
-      // If we had an is_active flag on clubs, we would use it here.
-      // For now, we allow all clubs that were loaded.
-      return true;
-    });
-
-    console.log(`DEBUG: [FILTER] getClubs: Total raw: ${data?.length || 0}, Filtered: ${filteredData.length}`);
-
-    return filteredData as Club[];
+    return data as Club[];
   },
 
   async getTeams(clubId?: string, leagueId?: string) {
+    const visibility = await this.getUserVisibilityContext();
+
+    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+      console.warn(`DEBUG: [SECURITY] User attempted to fetch teams for unauthorized league: ${leagueId}`);
+      return [];
+    }
+
     let query = supabase.from('teams').select('*, clubs!inner(name, logo_url, league_id)').order('name');
+    
     if (clubId) query = query.eq('club_id', clubId);
-    if (leagueId) query = query.eq('clubs.league_id', leagueId);
+    
+    if (leagueId) {
+      query = query.eq('clubs.league_id', leagueId);
+    } else if (!visibility.isMainAdmin) {
+      if (visibility.leagueIds.length > 0) {
+        query = query.in('clubs.league_id', visibility.leagueIds);
+      } else {
+        return [];
+      }
+    }
+    
     const { data, error } = await query;
     if (error) throw error;
     return data as Team[];
@@ -1789,7 +1866,14 @@ export const supabaseService = {
 
   async getPlayers(teamId?: string, leagueId?: string) {
     console.log('DEBUG: [SERVICE] getPlayers started', { teamId, leagueId });
+    const visibility = await this.getUserVisibilityContext();
     
+    // Security check: restrict explicitly requested league
+    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+      console.warn(`DEBUG: [SECURITY] User attempted to fetch players for unauthorized league: ${leagueId}`);
+      return []; // Early exit
+    }
+
     // 1. Fetch players
     let playersQuery = supabase
       .from('players')
@@ -1797,11 +1881,16 @@ export const supabaseService = {
       .order('full_name');
     
     if (teamId) playersQuery = playersQuery.eq('team_id', teamId);
-    if (leagueId) playersQuery = playersQuery.eq('teams.clubs.league_id', leagueId);
+    if (leagueId) {
+      playersQuery = playersQuery.eq('teams.clubs.league_id', leagueId);
+    } else if (!visibility.isMainAdmin) {
+      if (visibility.leagueIds.length > 0) {
+        playersQuery = playersQuery.in('teams.clubs.league_id', visibility.leagueIds);
+      } else {
+        return []; // Non-admin with no leagues sees no players
+      }
+    }
     
-    // Fetch session for filtering
-    const isAdmin = await this.isUserAdmin();
-
     const { data: rawPlayersData, error: playersError } = await playersQuery;
     
     if (playersError) {
@@ -1813,7 +1902,7 @@ export const supabaseService = {
 
     // Apply strict filters: active only AND exclude Gerersdorf (unless Admin)
     const playersData = rawPlayersData.filter(p => {
-      if (isAdmin) return true;
+      if (visibility.isMainAdmin) return true;
       const isActive = p.is_active === true;
       const isGerersdorf = p.teams?.clubs?.name?.includes('Gerersdorf');
       return isActive && !isGerersdorf;
@@ -1906,7 +1995,7 @@ export const supabaseService = {
     console.log('DEBUG: [SERVICE] getPlayerById started', { id });
     const { data: playerData, error: playerError } = await supabase
       .from('players')
-      .select('*, teams(name, club_id, clubs(name, logo_url))')
+      .select('*, teams(name, club_id, clubs(name, logo_url, league_id))')
       .eq('id', id)
       .single();
     
@@ -1939,12 +2028,26 @@ export const supabaseService = {
 
       const mapped = mapPlayerWithStats(playerWithStats);
       
-      // STRICT FILTERING: Check if active (unless admin)
-      const isAdmin = await this.isUserAdmin();
+      // STRICT FILTERING: Check if active and matches visibility logic
+      const visibility = await this.getUserVisibilityContext();
 
-      if (!isAdmin && !mapped.is_active) {
-        console.log(`DEBUG: [FILTER] getPlayerById: Player ${mapped.full_name} is INACTIVE. Excluding.`);
-        return null;
+      if (!visibility.isMainAdmin) {
+        if (!mapped.is_active) {
+          console.log(`DEBUG: [FILTER] getPlayerById: Player ${mapped.full_name} is INACTIVE. Excluding.`);
+          return null;
+        }
+
+        const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
+        if (involvesGerersdorf) {
+          return null;
+        }
+
+        // Check if player's league is in user's leagueIds
+        const playerLeagueId = (mapped.teams as any)?.clubs?.league_id;
+        if (playerLeagueId && !visibility.leagueIds.includes(playerLeagueId)) {
+          console.warn(`DEBUG: [SECURITY] Refusing to serve player outside allowed leagues`);
+          return null;
+        }
       }
 
       console.log(`DEBUG: [SERVICE] Player ${mapped.full_name} resolved stats:`, mapped.current_stats, `Rows: ${mapped.player_stats.length}`);
@@ -1956,7 +2059,12 @@ export const supabaseService = {
 
   async getFixtures(leagueId?: string) {
     // Fetch session for filtering
-    const isAdmin = await this.isUserAdmin();
+    const visibility = await this.getUserVisibilityContext();
+
+    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+      console.warn(`DEBUG: [SECURITY] User attempted to fetch fixtures for unauthorized league: ${leagueId}`);
+      return [];
+    }
 
     let query = supabase
       .from('fixtures')
@@ -1965,6 +2073,12 @@ export const supabaseService = {
       
     if (leagueId) {
       query = query.eq('league_id', leagueId);
+    } else if (!visibility.isMainAdmin) {
+      if (visibility.leagueIds.length > 0) {
+        query = query.in('league_id', visibility.leagueIds);
+      } else {
+        return [];
+      }
     }
 
     const { data, error } = await query;
@@ -1972,7 +2086,7 @@ export const supabaseService = {
     
     // Filter out Gerersdorf fixtures for normal users
     const filteredData = (data || []).filter(f => {
-      if (isAdmin) return true;
+      if (visibility.isMainAdmin) return true;
       const homeClub = f.home_team?.clubs?.name;
       const awayClub = f.away_team?.clubs?.name;
       const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
@@ -1984,7 +2098,7 @@ export const supabaseService = {
     // Map the count from fixture_lineups
     const mappedData = filteredData.map(f => {
       let lineup_count = f.fixture_lineups?.[0]?.count || 0;
-      if (!isAdmin) {
+      if (!visibility.isMainAdmin) {
          const isStarted = f.status === 'live' || (f.kickoff_at && new Date(f.kickoff_at) <= new Date());
          if (!isStarted) {
              lineup_count = 0;
@@ -2000,8 +2114,14 @@ export const supabaseService = {
   },
 
   async getOpenVotingFixtures(leagueId?: string) {
+    const visibility = await this.getUserVisibilityContext();
     const now = new Date().toISOString();
     console.log(`DEBUG: [SERVICE] getOpenVotingFixtures started at ${now}`);
+
+    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+      console.warn(`DEBUG: [SECURITY] User attempted to fetch open voting fixtures for unauthorized league: ${leagueId}`);
+      return [];
+    }
 
     // 1. Fetch candidate fixtures
     let query = supabase
@@ -2015,6 +2135,12 @@ export const supabaseService = {
 
     if (leagueId) {
       query = query.eq('league_id', leagueId);
+    } else if (!visibility.isMainAdmin) {
+      if (visibility.leagueIds.length > 0) {
+        query = query.in('league_id', visibility.leagueIds);
+      } else {
+        return [];
+      }
     }
     
     const { data: fixtures, error: fixturesError } = await query;

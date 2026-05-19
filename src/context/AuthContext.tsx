@@ -10,6 +10,8 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   hasAdminAccess: boolean;
+  clubAdminLeagueIds: string[];
+  clubAdminClubIds: string[];
   profileError: any | null;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -23,6 +25,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<any | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [clubAdminLeagueIds, setClubAdminLeagueIds] = useState<string[]>([]);
+  const [clubAdminClubIds, setClubAdminClubIds] = useState<string[]>([]);
 
   useEffect(() => {
     console.log('AuthContext: Fetching initial session...');
@@ -224,8 +228,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfileError(null);
           
           // Check for club admin access
-          const { data: clubAdmins } = await supabase.from('club_admins').select('id').eq('user_id', userId).eq('is_active', true).limit(1);
+          const { data: clubAdmins } = await supabase.from('club_admins').select('id, club_id, clubs(league_id)').eq('user_id', userId).eq('is_active', true);
           setHasAdminAccess(isSuper || (clubAdmins && clubAdmins.length > 0) || false);
+          
+          if (clubAdmins) {
+            setClubAdminClubIds(clubAdmins.map(ca => ca.club_id));
+            setClubAdminLeagueIds(Array.from(new Set(clubAdmins.map(ca => (ca.clubs as any)?.league_id).filter(Boolean))));
+          }
         }
       } else {
         // Heal profile if role is missing or invalid
@@ -258,8 +267,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfileError(null);
         
         // Check for club admin access
-        const { data: clubAdmins } = await supabase.from('club_admins').select('id').eq('user_id', userId).eq('is_active', true).limit(1);
+        const { data: clubAdmins } = await supabase.from('club_admins').select('id, club_id, clubs(league_id)').eq('user_id', userId).eq('is_active', true);
         setHasAdminAccess(isSuper || (clubAdmins && clubAdmins.length > 0) || data.role === 'admin' || false);
+        
+        if (clubAdmins) {
+          setClubAdminClubIds(clubAdmins.map(ca => ca.club_id));
+          setClubAdminLeagueIds(Array.from(new Set(clubAdmins.map(ca => (ca.clubs as any)?.league_id).filter(Boolean))));
+        }
       }
     } catch (error) {
       console.error('AuthContext: Unexpected error fetching profile:', error);
@@ -288,6 +302,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       isAdmin: (profile?.role === 'admin') || (session?.user?.email?.toLowerCase() === "matthias.insidiom@gmail.com"),
       hasAdminAccess,
+      clubAdminLeagueIds,
+      clubAdminClubIds,
       profileError,
       signOut,
       refreshProfile
