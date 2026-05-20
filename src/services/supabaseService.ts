@@ -107,18 +107,18 @@ export const supabaseService = {
 
   async getUserVisibilityContext() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return { isMainAdmin: false, leagueIds: [], clubIds: [] };
+    if (!session) return { isMainAdmin: false, leagueIds: [], clubIds: [], onboarding_completed: false };
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, selected_league_id, favorite_club_id')
+      .select('role, selected_league_id, favorite_club_id, onboarding_completed')
       .eq('id', session.user.id)
       .maybeSingle();
 
     const isMainAdmin = profile?.role === 'admin' || session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
 
     if (isMainAdmin) {
-      return { isMainAdmin: true, leagueIds: [], clubIds: [] };
+      return { isMainAdmin: true, leagueIds: [], clubIds: [], onboarding_completed: true };
     }
 
     const leagueIds = new Set<string>();
@@ -143,7 +143,8 @@ export const supabaseService = {
     return {
       isMainAdmin: false,
       leagueIds: Array.from(leagueIds),
-      clubIds: Array.from(clubIds)
+      clubIds: Array.from(clubIds),
+      onboarding_completed: profile?.onboarding_completed || false
     };
   },
 
@@ -1798,7 +1799,7 @@ export const supabaseService = {
     const visibility = await this.getUserVisibilityContext();
     let query = supabase.from('leagues').select('*').order('name');
     
-    if (!visibility.isMainAdmin) {
+    if (!visibility.isMainAdmin && visibility.onboarding_completed) {
       if (visibility.leagueIds.length > 0) {
         query = query.in('id', visibility.leagueIds);
       } else {
@@ -1814,7 +1815,7 @@ export const supabaseService = {
   async getClubs(leagueId?: string) {
     const visibility = await this.getUserVisibilityContext();
 
-    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch clubs for unauthorized league: ${leagueId}`);
       return [];
     }
@@ -1823,7 +1824,7 @@ export const supabaseService = {
     
     if (leagueId) {
       query = query.eq('league_id', leagueId);
-    } else if (!visibility.isMainAdmin) {
+    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
       if (visibility.leagueIds.length > 0) {
         query = query.in('league_id', visibility.leagueIds);
       } else {
@@ -1840,7 +1841,7 @@ export const supabaseService = {
   async getTeams(clubId?: string, leagueId?: string) {
     const visibility = await this.getUserVisibilityContext();
 
-    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch teams for unauthorized league: ${leagueId}`);
       return [];
     }
@@ -1851,7 +1852,7 @@ export const supabaseService = {
     
     if (leagueId) {
       query = query.eq('clubs.league_id', leagueId);
-    } else if (!visibility.isMainAdmin) {
+    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
       if (visibility.leagueIds.length > 0) {
         query = query.in('clubs.league_id', visibility.leagueIds);
       } else {
@@ -1869,7 +1870,7 @@ export const supabaseService = {
     const visibility = await this.getUserVisibilityContext();
     
     // Security check: restrict explicitly requested league
-    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch players for unauthorized league: ${leagueId}`);
       return []; // Early exit
     }
@@ -1883,7 +1884,7 @@ export const supabaseService = {
     if (teamId) playersQuery = playersQuery.eq('team_id', teamId);
     if (leagueId) {
       playersQuery = playersQuery.eq('teams.clubs.league_id', leagueId);
-    } else if (!visibility.isMainAdmin) {
+    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
       if (visibility.leagueIds.length > 0) {
         playersQuery = playersQuery.in('teams.clubs.league_id', visibility.leagueIds);
       } else {
@@ -2044,7 +2045,7 @@ export const supabaseService = {
 
         // Check if player's league is in user's leagueIds
         const playerLeagueId = (mapped.teams as any)?.clubs?.league_id;
-        if (playerLeagueId && !visibility.leagueIds.includes(playerLeagueId)) {
+        if (playerLeagueId && visibility.onboarding_completed && !visibility.leagueIds.includes(playerLeagueId)) {
           console.warn(`DEBUG: [SECURITY] Refusing to serve player outside allowed leagues`);
           return null;
         }
@@ -2061,7 +2062,7 @@ export const supabaseService = {
     // Fetch session for filtering
     const visibility = await this.getUserVisibilityContext();
 
-    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch fixtures for unauthorized league: ${leagueId}`);
       return [];
     }
@@ -2073,7 +2074,7 @@ export const supabaseService = {
       
     if (leagueId) {
       query = query.eq('league_id', leagueId);
-    } else if (!visibility.isMainAdmin) {
+    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
       if (visibility.leagueIds.length > 0) {
         query = query.in('league_id', visibility.leagueIds);
       } else {
@@ -2118,7 +2119,7 @@ export const supabaseService = {
     const now = new Date().toISOString();
     console.log(`DEBUG: [SERVICE] getOpenVotingFixtures started at ${now}`);
 
-    if (leagueId && !visibility.isMainAdmin && !visibility.leagueIds.includes(leagueId)) {
+    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch open voting fixtures for unauthorized league: ${leagueId}`);
       return [];
     }
@@ -2135,7 +2136,7 @@ export const supabaseService = {
 
     if (leagueId) {
       query = query.eq('league_id', leagueId);
-    } else if (!visibility.isMainAdmin) {
+    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
       if (visibility.leagueIds.length > 0) {
         query = query.in('league_id', visibility.leagueIds);
       } else {
