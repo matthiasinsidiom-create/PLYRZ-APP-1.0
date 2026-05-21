@@ -108,15 +108,13 @@ workflows:
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
 
-  android-release:
-    name: Android Release AAB + APK Build
+  android-apk:
+    name: Android APK Build
     max_build_duration: 60
     instance_type: mac_mini_m2
 
     environment:
       java: 21
-      groups:
-        - android_signing
 
     scripts:
       - name: Install dependencies
@@ -131,48 +129,22 @@ workflows:
         script: |
           npx cap sync android
 
-      - name: Verify Android setup
+      - name: Verify Android Firebase and permissions
         script: |
           echo "Checking google-services.json..."
           test -f android/app/google-services.json
 
-          echo "Checking Android package/applicationId..."
-          grep -n "applicationId" android/app/build.gradle || true
-
-          echo "Checking Android notification permission..."
+          echo "Checking Android POST_NOTIFICATIONS permission..."
           grep -n "POST_NOTIFICATIONS" android/app/src/main/AndroidManifest.xml || true
 
-      - name: Decode Android keystore
-        script: |
-          echo "$CM_KEYSTORE" | base64 --decode > android/app/release.keystore
-          ls -la android/app/release.keystore
+          echo "Checking Capacitor plugins..."
+          cat android/app/src/main/assets/capacitor.plugins.json || true
 
-      - name: Build signed AAB
+      - name: Build APK
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/android/app/release.keystore \
-            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
-
-      - name: Build signed APK
-        script: |
-          cd android
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/android/app/release.keystore \
-            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
-
-      - name: List Android outputs
-        script: |
-          echo "AAB:"
-          ls -la android/app/build/outputs/bundle/release/ || true
-          echo "APK:"
-          ls -la android/app/build/outputs/apk/release/ || true
+          ./gradlew assembleDebug
 
     artifacts:
-      - android/app/build/outputs/bundle/release/*.aab
-      - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/apk/debug/*.apk
