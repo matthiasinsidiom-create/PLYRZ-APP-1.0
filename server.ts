@@ -135,14 +135,39 @@ async function startServer() {
       if (profile.role === 'player') {
         const { data: claimedPlayer, error: claimedError } = await supabaseAdmin
           .from('players')
-          .select('id, team_id, teams(club_id, clubs(league_id))')
+          .select('id, club_id, team_id, teams(club_id, clubs(league_id))')
           .eq('claimed_by_user_id', userId)
           .maybeSingle();
 
-        if (!claimedError && claimedPlayer?.teams) {
-          const teamsData: any = claimedPlayer.teams;
-          if (teamsData.club_id) clubIds.add(teamsData.club_id);
-          if (teamsData.clubs?.league_id) leagueIds.add(teamsData.clubs.league_id);
+        if (!claimedError && claimedPlayer) {
+          let playerClubId = claimedPlayer.club_id;
+          let playerLeagueId = null;
+
+          if (!playerClubId && claimedPlayer.teams) {
+            const teamsData: any = claimedPlayer.teams;
+            playerClubId = teamsData.club_id;
+            playerLeagueId = teamsData.clubs?.league_id;
+          }
+
+          if (playerClubId) clubIds.add(playerClubId);
+
+          if (playerLeagueId) {
+            leagueIds.add(playerLeagueId);
+          } else if (playerClubId) {
+            // Manual lookup for league if we only have club_id
+            const { data: clubData } = await supabaseAdmin
+              .from('clubs')
+              .select('league_id')
+              .eq('id', playerClubId)
+              .maybeSingle();
+            if (clubData?.league_id) {
+              leagueIds.add(clubData.league_id);
+            }
+          }
+
+          if (leagueIds.size === 0) {
+            console.log(`[LEAGUE FILTER] No league found for claimed player ${userId}`);
+          }
         }
       }
 
