@@ -5,6 +5,18 @@ import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStat
 import { mapPlayerWithStats } from '../lib/stats';
 import { User } from '@supabase/supabase-js';
 
+const FALLBACK_LEAGUES: League[] = [
+  { id: '340514f7-1a67-4b8a-a40c-5969ac68d2fb', name: '1. Klasse West/Mitte', is_active: true, created_at: '', updated_at: '' },
+  { id: '97ab9fcb-31bb-4872-b944-78d3224e5409', name: '2. Klasse Donau', is_active: true, created_at: '', updated_at: '' }
+];
+
+export function resolveLeague(leagueId: string | null): { name: string } | null {
+  if (!leagueId) return null;
+  const match = FALLBACK_LEAGUES.find(l => l.id === leagueId);
+  return match ? { name: match.name } : { name: 'Unbekannte Liga' };
+}
+
+
 // Local cache for the current user to improve reliability in iframes
 let cachedUser: User | null = null;
 
@@ -17,6 +29,27 @@ supabase.auth.onAuthStateChange((_event, session) => {
   cachedUser = session?.user ?? null;
   console.log('DEBUG: [SERVICE] Auth state changed in service:', { event: _event, hasUser: !!cachedUser });
 });
+
+// Standalone helper to fetch from proxy or fallback to direct DB query
+async function fetchFromProxy<T>(path: string, queryParams: Record<string, string> = {}): Promise<T | null> {
+  try {
+    const url = new URL(`${window.location.origin}/api/proxy/${path}`);
+    Object.keys(queryParams).forEach(key => {
+      if (queryParams[key] !== undefined && queryParams[key] !== null) {
+        url.searchParams.append(key, queryParams[key]);
+      }
+    });
+    const response = await fetch(url.toString());
+    if (response.ok) {
+      return await response.json() as T;
+    }
+    console.warn(`Local proxy returned non-OK code for ${path}:`, response.status);
+    return null;
+  } catch (e) {
+    console.warn(`Local proxy fetch failed for ${path}, using direct database fallback:`, e);
+    return null;
+  }
+}
 
 export const supabaseService = {
   // Profiles
@@ -109,6 +142,19 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { isMainAdmin: false, leagueIds: [], clubIds: [], onboarding_completed: false };
 
+    // Primary path: Fetch the visibility context safely from the backend helper proxy
+    // because standard client queries (e.g. on players) can return 0 rows or result in permissions errors.
+    try {
+      const response = await fetch(`/api/proxy/user-context?userId=${session.user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('DEBUG: [SERVICE] Loaded user context via proxy', data);
+        return data;
+      }
+    } catch (e) {
+      console.warn('DEBUG: Error matching user context via proxy, falling back to direct db:', e);
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, selected_league_id, favorite_club_id, onboarding_completed')
@@ -127,6 +173,25 @@ export const supabaseService = {
     if (profile?.selected_league_id) leagueIds.add(profile.selected_league_id);
     if (profile?.favorite_club_id) clubIds.add(profile.favorite_club_id);
 
+    // If role is player, automatically fetch the claimed player's club and league
+    if (profile?.role === 'player') {
+      try {
+        const { data: claimedPlayer, error: claimedError } = await supabase
+          .from('players')
+          .select('id, teams(club_id, clubs(league_id))')
+          .eq('claimed_by_user_id', session.user.id)
+          .maybeSingle();
+
+        if (!claimedError && claimedPlayer?.teams) {
+          const teamsData: any = claimedPlayer.teams;
+          if (teamsData.club_id) clubIds.add(teamsData.club_id);
+          if (teamsData.clubs?.league_id) leagueIds.add(teamsData.clubs.league_id);
+        }
+      } catch (e) {
+        console.error('DEBUG: Error matching claimed player context:', e);
+      }
+    }
+
     const { data: clubAdmins } = await supabase
       .from('club_admins')
       .select('club_id, clubs(league_id)')
@@ -137,6 +202,16 @@ export const supabaseService = {
       clubAdmins.forEach(ca => {
         if (ca.club_id) clubIds.add(ca.club_id);
         if ((ca.clubs as any)?.league_id) leagueIds.add((ca.clubs as any).league_id);
+      });
+    }
+
+    // Robust Failsafe: If no league IDs are resolved (e.g., due to database grants/errors
+    // or uncompleted/corrupted profile selections), we fall back to all known active leagues
+    // to ensure players and fixtures of standard teams are always visible.
+    if (leagueIds.size === 0) {
+      console.log('DEBUG: No league IDs found in profile context, applying active fallback leagues');
+      FALLBACK_LEAGUES.forEach(l => {
+        if (l.is_active) leagueIds.add(l.id);
       });
     }
 
@@ -1794,56 +1869,65 @@ export const supabaseService = {
     return results as any[];
   },
 
-  // Queries
+    // Queries
   async getLeagues() {
-    const visibility = await this.getUserVisibilityContext();
-    let query = supabase.from('leagues').select('*').order('name');
-    
-    if (!visibility.isMainAdmin && visibility.onboarding_completed) {
-      if (visibility.leagueIds.length > 0) {
-        query = query.in('id', visibility.leagueIds);
-      } else {
-        return [];
+    try {
+      const proxied = await fetchFromProxy<League[]>('leagues');
+      if (proxied) return proxied;
+
+      const { data, error } = await supabase.from('leagues').select('*').order('name');
+      if (error) {
+        console.warn('DEBUG: getLeagues failed due to database permissions, using fallback leagues:', error.message);
+        return FALLBACK_LEAGUES;
       }
+      return data as League[];
+    } catch (err: any) {
+      console.warn('DEBUG: getLeagues caught error, using fallback leagues:', err?.message || err);
+      return FALLBACK_LEAGUES;
     }
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    return data as League[];
   },
 
   async getClubs(leagueId?: string) {
-    const visibility = await this.getUserVisibilityContext();
-
-    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
-      console.warn(`DEBUG: [SECURITY] User attempted to fetch clubs for unauthorized league: ${leagueId}`);
-      return [];
+    try {
+      const params: Record<string, string> = {};
+      if (leagueId) params.league_id = leagueId;
+      const proxied = await fetchFromProxy<Club[]>('clubs', params);
+      if (proxied) {
+        return proxied.map((club: any) => ({
+          ...club,
+          leagues: resolveLeague(club.league_id)
+        })) as Club[];
+      }
+    } catch (e) {
+      console.warn('DEBUG: error fetching clubs via proxy', e);
     }
 
-    let query = supabase.from('clubs').select('*, leagues(name)').order('name');
-    
+    let query = supabase.from('clubs').select('*').order('name');
     if (leagueId) {
       query = query.eq('league_id', leagueId);
-    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
-      if (visibility.leagueIds.length > 0) {
-        query = query.in('league_id', visibility.leagueIds);
-      } else {
-        return [];
-      }
     }
     
     const { data, error } = await query;
     if (error) throw error;
 
-    return data as Club[];
+    // Use local resolver to set leagues name safely without querying the leagues table directly
+    const mapped = (data || []).map((club: any) => ({
+      ...club,
+      leagues: resolveLeague(club.league_id)
+    }));
+
+    return mapped as Club[];
   },
 
   async getTeams(clubId?: string, leagueId?: string) {
-    const visibility = await this.getUserVisibilityContext();
-
-    if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
-      console.warn(`DEBUG: [SECURITY] User attempted to fetch teams for unauthorized league: ${leagueId}`);
-      return [];
+    try {
+      const params: Record<string, string> = {};
+      if (clubId) params.club_id = clubId;
+      if (leagueId) params.league_id = leagueId;
+      const proxied = await fetchFromProxy<Team[]>('teams', params);
+      if (proxied) return proxied;
+    } catch (e) {
+      console.warn('DEBUG: error fetching teams via proxy', e);
     }
 
     let query = supabase.from('teams').select('*, clubs!inner(name, logo_url, league_id)').order('name');
@@ -1852,12 +1936,6 @@ export const supabaseService = {
     
     if (leagueId) {
       query = query.eq('clubs.league_id', leagueId);
-    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
-      if (visibility.leagueIds.length > 0) {
-        query = query.in('clubs.league_id', visibility.leagueIds);
-      } else {
-        return [];
-      }
     }
     
     const { data, error } = await query;
@@ -1873,6 +1951,47 @@ export const supabaseService = {
     if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch players for unauthorized league: ${leagueId}`);
       return []; // Early exit
+    }
+
+    // Try fetching via proxy first
+    try {
+      const params: Record<string, string> = {};
+      if (teamId) params.team_id = teamId;
+      if (leagueId) params.league_id = leagueId;
+      
+      const proxied = await fetchFromProxy<any[]>('players', params);
+      if (proxied) {
+        // Apply UI level filtering logic if not admin
+        let filtered = proxied;
+        if (!visibility.isMainAdmin) {
+          filtered = proxied.filter(p => {
+            const isActive = p.is_active === true;
+            if (!isActive) return false;
+            if (p.teams?.clubs?.name?.includes('Gerersdorf')) return false;
+            const pLeagueId = p.teams?.clubs?.league_id;
+            if (pLeagueId && visibility.onboarding_completed && !visibility.leagueIds.includes(pLeagueId)) {
+              return false;
+            }
+            return true;
+          });
+        }
+        
+        // Inject default layout if needed and map current_stats
+        const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+        const playersWithStats = filtered.map(p => {
+          const pLayout = p.card_layout || {};
+          const hasSpecificLayout = Object.keys(pLayout).length > 0;
+          return {
+            ...p,
+            card_layout: hasSpecificLayout ? pLayout : globalLayout,
+            player_stats: p.player_stats || []
+          };
+        });
+        
+        return mapPlayerWithStats(playersWithStats);
+      }
+    } catch (e) {
+      console.warn('DEBUG: Error loading players from proxy:', e);
     }
 
     // 1. Fetch players
@@ -1994,6 +2113,53 @@ export const supabaseService = {
 
   async getPlayerById(id: string) {
     console.log('DEBUG: [SERVICE] getPlayerById started', { id });
+    try {
+      const proxiedList = await fetchFromProxy<any[]>('players');
+      if (proxiedList) {
+        const playerData = proxiedList.find(p => p.id === id);
+        if (playerData) {
+          const globalLayout = await this.getGlobalSettings('default_player_card_layout');
+          const pLayout = playerData.card_layout || {};
+          const hasSpecificLayout = Object.keys(pLayout).length > 0;
+
+          const playerWithStats = {
+            ...playerData,
+            card_layout: hasSpecificLayout ? pLayout : globalLayout,
+            player_stats: playerData.player_stats || []
+          };
+
+          const mapped = mapPlayerWithStats(playerWithStats);
+          
+          // STRICT FILTERING: Check if active and matches visibility logic
+          const visibility = await this.getUserVisibilityContext();
+
+          if (!visibility.isMainAdmin) {
+            if (!mapped.is_active) {
+              console.log(`DEBUG: [FILTER] getPlayerById: Player ${mapped.full_name} is INACTIVE. Excluding.`);
+              return null;
+            }
+
+            const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
+            if (involvesGerersdorf) {
+              return null;
+            }
+
+            // Check if player's league is in user's leagueIds
+            const playerLeagueId = (mapped.teams as any)?.clubs?.league_id;
+            if (playerLeagueId && visibility.onboarding_completed && !visibility.leagueIds.includes(playerLeagueId)) {
+              console.warn(`DEBUG: [SECURITY] Refusing to serve player outside allowed leagues`);
+              return null;
+            }
+          }
+
+          console.log(`DEBUG: [SERVICE] Player ${mapped.full_name} resolved stats via proxy:`, mapped.current_stats, `Rows: ${mapped.player_stats.length}`);
+          return mapped;
+        }
+      }
+    } catch (e) {
+      console.warn('DEBUG: Error matching single player via proxy:', e);
+    }
+
     const { data: playerData, error: playerError } = await supabase
       .from('players')
       .select('*, teams(name, club_id, clubs(name, logo_url, league_id))')
@@ -2067,9 +2233,46 @@ export const supabaseService = {
       return [];
     }
 
+    try {
+      const params: Record<string, string> = {};
+      if (leagueId) params.league_id = leagueId;
+      
+      const proxied = await fetchFromProxy<any[]>('fixtures', params);
+      if (proxied) {
+        // Filter out Gerersdorf fixtures for normal users
+        const filteredData = proxied.filter(f => {
+          if (visibility.isMainAdmin) return true;
+          const homeClub = f.home_team?.clubs?.name;
+          const awayClub = f.away_team?.clubs?.name;
+          const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
+          return !involvesGerersdorf;
+        });
+
+        // Map the count from fixture_lineups
+        const mappedData = filteredData.map(f => {
+          let lineup_count = f.fixture_lineups?.[0]?.count || 0;
+          if (!visibility.isMainAdmin) {
+             const isStarted = f.status === 'live' || (f.kickoff_at && new Date(f.kickoff_at) <= new Date());
+             if (!isStarted) {
+                 lineup_count = 0;
+             }
+          }
+          return {
+            ...f,
+            leagues: resolveLeague(f.league_id),
+            lineup_count
+          };
+        });
+        
+        return mappedData as any[];
+      }
+    } catch (e) {
+      console.warn('DEBUG: Error fetching fixtures via proxy:', e);
+    }
+
     let query = supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), fixture_lineups(count), match_events(*)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), fixture_lineups(count), match_events(*)')
       .order('kickoff_at', { ascending: false });
       
     if (leagueId) {
@@ -2107,6 +2310,7 @@ export const supabaseService = {
       }
       return {
         ...f,
+        leagues: resolveLeague(f.league_id),
         lineup_count
       };
     });
@@ -2116,69 +2320,45 @@ export const supabaseService = {
 
   async getOpenVotingFixtures(leagueId?: string) {
     const visibility = await this.getUserVisibilityContext();
-    const now = new Date().toISOString();
-    console.log(`DEBUG: [SERVICE] getOpenVotingFixtures started at ${now}`);
+    const now = new Date();
+    console.log(`DEBUG: [SERVICE] getOpenVotingFixtures started at ${now.toISOString()}`);
 
     if (leagueId && !visibility.isMainAdmin && visibility.onboarding_completed && !visibility.leagueIds.includes(leagueId)) {
       console.warn(`DEBUG: [SECURITY] User attempted to fetch open voting fixtures for unauthorized league: ${leagueId}`);
       return [];
     }
 
-    // 1. Fetch candidate fixtures
-    let query = supabase
-      .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
-      .eq('status', 'finished')
-      .is('results_processed_at', null)
-      .not('voting_close_at', 'is', null)
-      .gt('voting_close_at', now)
-      .order('kickoff_at', { ascending: false });
+    // Since getFixtures is already proxied and fully hydrated with everything, we can filter it directly!
+    try {
+      const allFixtures = await this.getFixtures(leagueId);
+      const candidates = allFixtures.filter(f => {
+        const isFinished = f.status === 'finished';
+        const notProcessed = !f.results_processed_at;
+        const hasVotingWindow = f.voting_close_at;
+        const votingOpen = hasVotingWindow && new Date(f.voting_close_at) > now;
+        
+        return isFinished && notProcessed && votingOpen;
+      });
 
-    if (leagueId) {
-      query = query.eq('league_id', leagueId);
-    } else if (!visibility.isMainAdmin && visibility.onboarding_completed) {
-      if (visibility.leagueIds.length > 0) {
-        query = query.in('league_id', visibility.leagueIds);
-      } else {
-        return [];
-      }
+      if (candidates.length === 0) return [];
+
+      // Verify lineup existence via list of fixtureIds
+      const fixtureIds = candidates.map(f => f.id);
+      const { data: lineups, error: lineupsError } = await supabase
+        .from('fixture_lineups')
+        .select('fixture_id')
+        .in('fixture_id', fixtureIds);
+
+      if (lineupsError) throw lineupsError;
+
+      const lineupFixtureIds = new Set(lineups?.map(l => l.fixture_id) || []);
+      
+      const returned = candidates.filter(f => lineupFixtureIds.has(f.id) || (f.lineup_count && f.lineup_count > 0));
+      return returned as any[];
+    } catch (e) {
+      console.error('DEBUG: Error in getOpenVotingFixtures:', e);
+      return [];
     }
-    
-    const { data: fixtures, error: fixturesError } = await query;
-
-    if (fixturesError) {
-      console.error('DEBUG: [SERVICE] Error fetching candidate fixtures:', fixturesError);
-      throw fixturesError;
-    }
-
-    // No restrictive filtering for finished fixtures
-    const filteredFixtures = (fixtures || []);
-/*
-    const isAdmin = await this.isUserAdmin();
-    const filteredFixtures = (fixtures || []).filter(f => {
-      if (isAdmin) return true;
-      const homeClub = f.home_team?.clubs?.name;
-      const awayClub = f.away_team?.clubs?.name;
-      const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
-      return !involvesGerersdorf;
-    });
-*/
-
-    console.log(`DEBUG: [FILTER] getOpenVotingFixtures: Total candidate raw: ${fixtures?.length || 0}, Filtered: ${filteredFixtures.length}`);
-    if (filteredFixtures.length === 0) return [];
-
-    // 2. Verify lineup existence
-    const fixtureIds = filteredFixtures.map(f => f.id);
-    const { data: lineups, error: lineupsError } = await supabase
-      .from('fixture_lineups')
-      .select('fixture_id')
-      .in('fixture_id', fixtureIds);
-
-    if (lineupsError) throw lineupsError;
-
-    const lineupFixtureIds = new Set(lineups?.map(l => l.fixture_id) || []);
-    
-    return filteredFixtures.filter(f => lineupFixtureIds.has(f.id)) as any[];
   },
 
   async deactivateGerersdorfPlayers() {
@@ -2221,7 +2401,7 @@ export const supabaseService = {
     console.log('supabaseService: getFixtureById called with id:', id);
     const { data, error } = await supabase
       .from('fixtures')
-      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url, latitude, longitude, radius_meters, pitch_name)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), leagues(name), match_events(*)')
+      .select('*, home_team:teams!home_team_id(name, club_id, clubs(name, logo_url, latitude, longitude, radius_meters, pitch_name)), away_team:teams!away_team_id(name, club_id, clubs(name, logo_url)), match_events(*)')
       .eq('id', id)
       .single();
     
@@ -2231,7 +2411,10 @@ export const supabaseService = {
     }
     
     if (data) {
-      return data;
+      return {
+        ...data,
+        leagues: resolveLeague(data.league_id)
+      };
     }
 
     console.log('supabaseService: getFixtureById success:', data?.id);

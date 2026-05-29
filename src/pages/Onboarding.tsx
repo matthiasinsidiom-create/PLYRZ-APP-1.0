@@ -738,10 +738,10 @@ export const Onboarding: React.FC = () => {
 
       {/* Progress Indicator */}
       <div className="flex justify-center gap-2 mt-8">
-        {['role-selection', 'club-selection', 'player-search', 'card-preview', 'rating-logic', 'complete'].map((s, i) => {
+        {['role-selection', 'league-selection', 'club-selection', 'player-search', 'card-preview', 'rating-logic', 'complete'].map((s, i) => {
           const steps = role === 'player' 
-            ? ['role-selection', 'club-selection', 'player-search', 'card-preview', 'rating-logic', 'complete']
-            : ['role-selection', 'club-selection', 'rating-logic', 'complete'];
+            ? ['role-selection', 'league-selection', 'club-selection', 'player-search', 'card-preview', 'rating-logic', 'complete']
+            : ['role-selection', 'league-selection', 'club-selection', 'rating-logic', 'complete'];
           
           if (!steps.includes(s)) return null;
           
