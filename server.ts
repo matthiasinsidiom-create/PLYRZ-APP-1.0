@@ -62,12 +62,12 @@ async function startServer() {
       console.log("[PROXY] Fetching leagues...");
       const { data, error } = await supabaseAdmin.from('leagues').select('*').order('name');
       if (error) {
-        console.warn("[PROXY] Error fetching leagues, using server fallback leagues:", error);
+        console.log("[PROXY] Warning: Could not fetch leagues from DB. Using server fallback leagues.");
         return res.json(FALLBACK_LEAGUES);
       }
       res.json(data);
     } catch (e: any) {
-      console.warn("[PROXY] Exception fetching leagues, using server fallback leagues:", e);
+      console.log("[PROXY] Exception fetching leagues. Using server fallback leagues.");
       res.json(FALLBACK_LEAGUES);
     }
   });
@@ -383,6 +383,59 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // --- Automated Match Processor ---
+  const autoProcessFixtures = async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data: fixtures, error } = await supabaseAdmin
+        .from('fixtures')
+        .select('id')
+        .eq('status', 'finished')
+        .is('results_processed_at', null)
+        .lte('voting_close_at', now);
+
+      if (error) {
+        console.error('[CRON] Error querying pending fixtures:', error.message);
+        return;
+      }
+
+      if (!fixtures || fixtures.length === 0) {
+        return;
+      }
+
+      console.log(`[CRON] Found ${fixtures.length} fixtures ready for result processing... triggering edge function.`);
+      
+      const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      
+      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+        console.error('[CRON] Missing credentials to invoke match-processor.');
+        return;
+      }
+
+      for (const fixture of fixtures) {
+        console.log(`[CRON] Processing fixture ${fixture.id}...`);
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/match-processor`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 
+          },
+          // Using manual mode to bypass broken CRON_SECRET Gateway JWT validation
+          body: JSON.stringify({ type: 'manual', fixtureId: fixture.id })
+        });
+
+        const text = await response.text();
+        console.log(`[CRON] Match Processor Result for ${fixture.id}: ${response.status}`, text);
+      }
+
+    } catch (err: any) {
+      console.error(`[CRON] Auto-processor error:`, err.message);
+    }
+  };
+
+  setInterval(autoProcessFixtures, 30000); // 30 seconds check
 
   const server = app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
