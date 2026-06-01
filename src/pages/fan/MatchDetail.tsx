@@ -1683,7 +1683,7 @@ export const MatchDetail: React.FC = () => {
 
       {/* Lineup Sections (Standard View) */}
       <div className="p-6 space-y-10">
-        {!isMatchAdmin && ((kickoffDate && now < kickoffDate) || (!kickoffDate && !isActuallyLive)) ? (
+        {!isMatchAdmin && fixture?.status === 'upcoming' ? (
           <div className="flex flex-col items-center justify-center p-12 bg-zinc-900/30 rounded-[2.5rem] border border-dashed border-zinc-800 w-full text-center space-y-4">
             <Users className="w-12 h-12 text-zinc-800" />
             <div className="space-y-1">

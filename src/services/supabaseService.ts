@@ -1592,6 +1592,34 @@ export const supabaseService = {
 
   async getFixtureLineupWithPlayers(fixtureId: string) {
     console.log('DEBUG: [SERVICE] getFixtureLineupWithPlayers started', { fixtureId });
+    
+    // STRICT FILTERING: Hide lineup before match start for normal users
+    let isAuthorizedToSeeEarly = false;
+    try {
+      const visibility = await this.getUserVisibilityContext();
+      if (visibility.isMainAdmin) {
+        isAuthorizedToSeeEarly = true;
+      } else {
+        const canManage = await this.canManageFixture(fixtureId);
+        if (canManage) {
+          isAuthorizedToSeeEarly = true;
+        }
+      }
+    } catch(e) {
+      console.warn('DEBUG: could not check auth for lineup, defaulting to strictly controlled');
+    }
+
+    if (!isAuthorizedToSeeEarly) {
+      const { data: fixtureCheck } = await supabase.from('fixtures').select('status, kickoff_at').eq('id', fixtureId).single();
+      if (fixtureCheck && fixtureCheck.status === 'upcoming') {
+         const kickoff = new Date(fixtureCheck.kickoff_at);
+         if (kickoff > new Date()) {
+            console.log('DEBUG: [SERVICE] Lineup protected before match start for normal user.');
+            return [];
+         }
+      }
+    }
+
     const { data: lineupData, error: lineupError } = await supabase
       .from('fixture_lineups')
       .select(`

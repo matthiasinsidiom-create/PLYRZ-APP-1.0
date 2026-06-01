@@ -354,6 +354,16 @@ async function startServer() {
     }
   });
 
+  app.get('/api/download-zip', (req, res) => {
+    const backupPath = path.join(process.cwd(), 'public', 'update-backup.zip');
+    res.download(backupPath, 'update-backup.zip', (err) => {
+      if (err) {
+        console.error("Error downloading file:", err);
+        res.status(500).json({ error: "File not found or could not be downloaded." });
+      }
+    });
+  });
+
   // API 404 handler - Ensure all /api/* routes return JSON
   app.all("/api/*", (req, res) => {
     console.log(`[SERVER] API 404: ${req.method} ${req.url}`);
