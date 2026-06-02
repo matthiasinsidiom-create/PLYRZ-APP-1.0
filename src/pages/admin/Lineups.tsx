@@ -425,10 +425,10 @@ const AdminLineups: React.FC = () => {
 
   if (selectedFixture) {
     return (
-      <div className="min-h-screen bg-transparent p-6 text-white font-sans">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+      <div className="min-h-screen bg-transparent p-4 sm:p-6 pb-32 text-white font-sans">
+        <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 w-full">
                   <button 
                     onClick={() => {
                       if (fixtureId) {
@@ -437,21 +437,19 @@ const AdminLineups: React.FC = () => {
                         setSelectedFixture(null);
                       }
                     }}
-                    className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
+                    className="p-3 shrink-0 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
                   >
                     <ArrowLeft className="w-5 h-5 text-zinc-400" />
                   </button>
-              <div>
-                <h1 className="text-2xl font-black italic tracking-tighter uppercase">AUFSTELLUNGEN</h1>
-                <div className="flex items-center gap-2 text-zinc-500 font-medium text-sm">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">{selectedFixture.home_team?.clubs?.name}</span>
-                    <span className="font-bold text-white">{selectedFixture.home_team?.name}</span>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-xl sm:text-2xl font-black italic tracking-tighter uppercase whitespace-normal leading-tight">AUFSTELLUNGEN</h1>
+                <div className="flex items-center gap-2 text-zinc-500 font-medium text-sm mt-1">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest text-zinc-600 font-bold truncate">{selectedFixture.home_team?.clubs?.name}</span>
                   </div>
-                  <span className="mx-2 text-zinc-700">VS</span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">{selectedFixture.away_team?.clubs?.name}</span>
-                    <span className="font-bold text-white">{selectedFixture.away_team?.name}</span>
+                  <span className="text-[10px] sm:text-xs text-zinc-700 font-black italic">VS</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest text-zinc-600 font-bold truncate">{selectedFixture.away_team?.clubs?.name}</span>
                   </div>
                 </div>
               </div>
@@ -459,7 +457,7 @@ const AdminLineups: React.FC = () => {
               <button
                 disabled={saving}
                 onClick={handleSaveLineup}
-                className="bg-emerald-500 hover:bg-emerald-600 text-black font-black py-3 px-8 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                className="hidden md:flex bg-emerald-500 hover:bg-emerald-600 text-black font-black py-3 px-8 rounded-xl transition-all disabled:opacity-50 items-center gap-2 whitespace-nowrap"
               >
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 AUFSTELLUNG SPEICHERN
@@ -644,6 +642,18 @@ const AdminLineups: React.FC = () => {
               </>
             )}
           </div>
+        </div>
+
+        {/* Mobile Sticky Save Bar */}
+        <div className="md:hidden fixed bottom-24 sm:bottom-0 left-0 right-0 p-4 bg-black/80 backdrop-blur-xl border-t border-white/10 z-50">
+          <button
+            disabled={saving}
+            onClick={handleSaveLineup}
+            className="w-full justify-center bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-black font-black py-4 px-8 rounded-2xl transition-all disabled:opacity-50 flex items-center gap-2 text-sm uppercase tracking-widest shadow-[0_0_40px_rgba(16,185,129,0.3)]"
+          >
+            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+            AUFSTELLUNG SPEICHERN
+          </button>
         </div>
       </div>
     );

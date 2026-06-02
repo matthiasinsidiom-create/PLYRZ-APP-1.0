@@ -1225,8 +1225,22 @@ export const supabaseService = {
 
   // Lineups
   async getFixtureLineup(fixtureId: string) {
-    const isAdmin = await this.isUserAdmin();
-    if (!isAdmin) {
+    let isAuthorizedToSeeEarly = false;
+    try {
+      const visibility = await this.getUserVisibilityContext();
+      if (visibility.isMainAdmin) {
+        isAuthorizedToSeeEarly = true;
+      } else {
+        const canManage = await this.canManageFixture(fixtureId);
+        if (canManage) {
+          isAuthorizedToSeeEarly = true;
+        }
+      }
+    } catch(e) {
+      console.warn('DEBUG: could not check auth for lineup, defaulting to strictly controlled');
+    }
+
+    if (!isAuthorizedToSeeEarly) {
       const { data: fixture } = await supabase.from('fixtures').select('kickoff_at, status').eq('id', fixtureId).single();
       if (fixture) {
         if (!fixture.kickoff_at && fixture.status !== 'live') {
