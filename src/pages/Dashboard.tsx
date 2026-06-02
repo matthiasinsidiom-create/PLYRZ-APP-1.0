@@ -144,12 +144,14 @@ export const Dashboard: React.FC = () => {
       let status: 'live' | 'voting' | 'result' | 'none' = 'none';
 
       // Load MVPs - Get all processed matches within the last 24 hours to find the absolute latest for KM/Reserve
-      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const processedMatches = f.filter(fixture => 
-        fixture.status === 'finished' &&
-        fixture.results_processed_at && 
-        new Date(fixture.results_processed_at) >= twentyFourHoursAgo
-      );
+      const cutoffTime = Date.now() - (24 * 60 * 60 * 1000);
+      const processedMatches = f.filter(fixture => {
+        if (fixture.status !== 'finished' || !fixture.results_processed_at) return false;
+        
+        // Strict rule: NOW() > results_processed_at + 24 Stunden -> hide
+        const processedTime = new Date(fixture.results_processed_at).getTime();
+        return processedTime > cutoffTime;
+      });
 
       // Try to identify "OUR" club to be more precise
       const ourClubId = profile.favorite_club_id;
