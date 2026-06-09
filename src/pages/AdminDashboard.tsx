@@ -9,6 +9,7 @@ import {
   ChevronRight,
   LayoutGrid,
   ListOrdered,
+  Image as ImageIcon,
   ArrowLeft
 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
@@ -132,6 +133,13 @@ const AdminDashboard: React.FC = () => {
               count="Aktiv" 
               color="bg-yellow-500" 
               onClick={() => navigate('/admin/lineups')} 
+            />
+            <AdminCard 
+              title="Karten Export" 
+              icon={ImageIcon} 
+              count="Export" 
+              color="bg-sky-500" 
+              onClick={() => navigate('/admin/export-cards')} 
             />
           </div>
         )}

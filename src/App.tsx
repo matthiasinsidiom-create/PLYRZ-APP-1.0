@@ -11,6 +11,7 @@ import AdminPlayers from './pages/admin/Players';
 import AdminFixtures from './pages/admin/Fixtures';
 import AdminMatchControl from './pages/admin/MatchControl';
 import AdminLineups from './pages/admin/Lineups';
+import AdminCardExport from './pages/admin/CardExport';
 import { Onboarding } from './pages/Onboarding';
 import { PlayerClaim } from './pages/PlayerClaim';
 import { MatchList } from './pages/fan/MatchList';
@@ -187,6 +188,7 @@ const AppContent: React.FC = () => {
               <Route path="/admin/fixtures" element={<AdminFixtures />} />
               <Route path="/admin/fixtures/:id" element={<AdminMatchControl />} />
               <Route path="/admin/lineups" element={<AdminLineups />} />
+              <Route path="/admin/export-cards" element={<AdminCardExport />} />
             </>
           )}
 
