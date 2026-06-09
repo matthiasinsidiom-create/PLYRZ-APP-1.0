@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { supabaseService } from '../../services/supabaseService';
+import { supabase } from '../../lib/supabase';
 import { Player, Club, Team } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
-import { PlayerCardBack } from '../../components/PlayerCardBack';
+import { PlayerStatsSheet } from '../../components/PlayerStatsSheet';
 import { ArrowLeft, Download, Loader2, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as htmlToImage from 'html-to-image';
@@ -72,6 +73,54 @@ const CardExport: React.FC = () => {
     try {
       // Use the service to fetch players including their stats
       const teamPlayers = await supabaseService.getPlayers(teamId);
+      
+      const playerIds = teamPlayers.map(p => p.id);
+      
+      if (playerIds.length > 0) {
+        // Fetch processed matches history for all fixtures
+        const { data: historyDataRaw } = await supabase
+          .from('player_rating_history')
+          .select('player_id, is_mvp')
+          .in('player_id', playerIds);
+        const historyData = historyDataRaw || [];
+
+        // Fetch match events for all fixtures
+        const { data: eData } = await supabase
+          .from('match_events')
+          .select('*')
+          .in('player_id', playerIds);
+        const eventsData = eData || [];
+        
+        const { data: aData } = await supabase
+          .from('match_events')
+          .select('*')
+          .in('assist_player_id', playerIds);
+        const assistsData = aData || [];
+
+        teamPlayers.forEach(p => {
+          const pHistory = historyData.filter(h => h.player_id === p.id);
+          const pEvents = eventsData.filter(e => e.player_id === p.id);
+          const pAssistsEvent = assistsData.filter(e => e.assist_player_id === p.id);
+          
+          const games = pHistory.length;
+          const mvps = pHistory.filter(h => h.is_mvp).length;
+
+          const goals = pEvents.filter(e => e.event_type === 'goal').length;
+          const assists = pAssistsEvent.length;
+          const yellowCards = pEvents.filter(e => e.event_type === 'yellow_card').length;
+          const redCards = pEvents.filter(e => e.event_type === 'red_card').length;
+
+          (p as any).seasonStats = {
+            games,
+            goals,
+            assists,
+            mvps,
+            yellowCards,
+            redCards
+          };
+        });
+      }
+
       setPlayers(teamPlayers);
     } catch (err) {
       console.error(err);
@@ -99,13 +148,13 @@ const CardExport: React.FC = () => {
       const sanitizedName = (player.last_name || player.full_name || 'player').replace(/[^a-z0-9ßäöüÄÖÜ]/gi, '_').toLowerCase();
       
       const frontDataUrl = await htmlToImage.toPng(frontNode, getExportOptions());
-      saveAs(frontDataUrl, `${sanitizedName}_front.png`);
+      saveAs(frontDataUrl, `${sanitizedName}_card.png`);
       
       // Add slight delay to prevent browser locking up
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const backDataUrl = await htmlToImage.toPng(backNode, getExportOptions());
-      saveAs(backDataUrl, `${sanitizedName}_back.png`);
+      saveAs(backDataUrl, `${sanitizedName}_stats.png`);
       
     } catch (err) {
       console.error('Export failed:', err);
@@ -145,8 +194,8 @@ const CardExport: React.FC = () => {
             
             const sanitizedName = (player.full_name || 'player').replace(/[^a-z0-9ßäöüÄÖÜ]/gi, '_').toLowerCase();
             
-            folder.file(`${sanitizedName}_${player.id.substring(0,6)}_front.png`, frontBase64, { base64: true });
-            folder.file(`${sanitizedName}_${player.id.substring(0,6)}_back.png`, backBase64, { base64: true });
+            folder.file(`${sanitizedName}_${player.id.substring(0,6)}_card.png`, frontBase64, { base64: true });
+            folder.file(`${sanitizedName}_${player.id.substring(0,6)}_stats.png`, backBase64, { base64: true });
             
             successCount += 2;
           } catch (e) {
@@ -188,7 +237,7 @@ const CardExport: React.FC = () => {
           </button>
           <div>
             <h1 className="text-3xl font-black italic tracking-tighter uppercase">KARTEN EXPORT</h1>
-            <p className="text-zinc-500 font-medium text-sm">Druckfertige Karten (Front & Back, {`>300`} DPI) inkl. ZIP-Export</p>
+            <p className="text-zinc-500 font-medium text-sm">Druckfertige Karten (Card & Stats, {`>300`} DPI) inkl. ZIP-Export</p>
           </div>
         </div>
 
@@ -255,33 +304,48 @@ const CardExport: React.FC = () => {
                 <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
               </div>
             ) : players.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              <div className="flex flex-col gap-8">
                 {players.map(player => (
-                  <div key={player.id} className="flex flex-col items-center gap-4 bg-black/20 p-4 rounded-2xl border border-white/5">
-                    {/* Render target for Front */}
-                    <div className="flex flex-col gap-2 items-center">
-                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Vorderseite</span>
-                      <div ref={el => cardFrontRefs.current[player.id] = el} className="bg-transparent inline-block">
-                        <PlayerCard player={player} clubLogo={activeClub?.logo_url} />
+                  <div key={player.id} className="flex flex-col gap-6 bg-black/20 p-6 rounded-2xl border border-white/5">
+                    <div className="flex items-center gap-4 border-b border-white/5 pb-4">
+                      <span className="text-xl font-black italic tracking-tighter uppercase">{player.full_name}</span>
+                      <span className="text-sm font-bold text-zinc-500 uppercase">{player.teams?.clubs?.name}</span>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row justify-center gap-8 items-center">
+                      {/* Render target for Front */}
+                      <div className="flex flex-col gap-3 items-center">
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Karte</span>
+                        {/* Wrapper for Export - Must be strictly 350x490 */}
+                        <div className="shadow-2xl shadow-black/50 overflow-hidden rounded-xl">
+                          <div ref={el => cardFrontRefs.current[player.id] = el} className="bg-transparent block" style={{ width: 350, height: 490 }}>
+                            <PlayerCard player={{...player, claimed_by_user_id: null}} clubLogo={activeClub?.logo_url} />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Render target for Back/Stats */}
+                      <div className="flex flex-col gap-3 items-center">
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Statistikblatt</span>
+                        {/* Wrapper for Export - Stats Sheet is A4 proportion */}
+                        <div className="shadow-2xl shadow-black/50 overflow-hidden rounded-xl">
+                          <div ref={el => cardBackRefs.current[player.id] = el} className="bg-transparent block" style={{ width: 595, height: 842 }}>
+                            <PlayerStatsSheet player={player} clubLogo={activeClub?.logo_url} />
+                          </div>
+                        </div>
                       </div>
                     </div>
                     
-                    {/* Render target for Back */}
-                    <div className="flex flex-col gap-2 items-center mt-4">
-                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Rückseite</span>
-                      <div ref={el => cardBackRefs.current[player.id] = el} className="bg-transparent inline-block">
-                        <PlayerCardBack player={player} clubLogo={activeClub?.logo_url} />
-                      </div>
+                    <div className="flex justify-center mt-2 border-t border-white/5 pt-6">
+                      <button
+                        onClick={() => exportSingleCard(player)}
+                        disabled={exporting}
+                        className="flex items-center gap-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-8 rounded-xl transition-colors disabled:opacity-50 text-sm max-w-sm w-full justify-center border border-white/10"
+                      >
+                        <ImageIcon className="w-5 h-5" />
+                        KARTEN & STATS EXPORTIEREN
+                      </button>
                     </div>
-                    
-                    <button
-                      onClick={() => exportSingleCard(player)}
-                      disabled={exporting}
-                      className="mt-4 flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 text-sm w-full justify-center border border-white/10"
-                    >
-                      <ImageIcon className="w-4 h-4" />
-                      EINZEL-EXPORT
-                    </button>
                   </div>
                 ))}
               </div>
