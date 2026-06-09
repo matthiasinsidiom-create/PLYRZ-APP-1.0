@@ -117,7 +117,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             sessionError.status === 401
           ) {
             console.warn('AuthContext: Stale refresh token detected. Cleaning up...');
-            await supabase.auth.signOut();
+            localStorage.removeItem('sb-auth-token');
+            await supabase.auth.signOut().catch(() => {});
             setSession(null);
             setProfile(null);
             if (isMounted) setLoading(false);
@@ -195,6 +196,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('AuthContext: Supabase error fetching profile:', error);
+        
+        // Handle stale refresh token error being bubbled up through data fetch
+        if (
+          error.message?.includes('refresh_token') || 
+          error.message?.includes('Refresh Token') ||
+          error.code === '400' ||
+          error.code === '401'
+        ) {
+          console.warn('AuthContext: Stale refresh token detected during data fetch. Clearing session...');
+          // manually clear storage since signout might fail
+          localStorage.removeItem('sb-auth-token');
+          await supabase.auth.signOut().catch(() => {});
+          setSession(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
         setProfileError(error);
         setLoading(false);
         return;
@@ -275,8 +294,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setClubAdminLeagueIds(Array.from(new Set(clubAdmins.map(ca => (ca.clubs as any)?.league_id).filter(Boolean))));
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('AuthContext: Unexpected error fetching profile:', error);
+      
+      if (
+        error?.message?.includes('refresh_token') || 
+        error?.message?.includes('Refresh Token') ||
+        error?.code === '400' ||
+        error?.code === '401'
+      ) {
+        console.warn('AuthContext: Stale refresh token detected in catch block. Clearing session...');
+        localStorage.removeItem('sb-auth-token');
+        await supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
       setProfileError(error);
     } finally {
       setLoading(false);
@@ -291,7 +326,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('sb-auth-token');
+    await supabase.auth.signOut().catch(() => {});
+    setSession(null);
+    setProfile(null);
   };
 
   return (

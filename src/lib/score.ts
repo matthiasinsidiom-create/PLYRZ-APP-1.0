@@ -42,26 +42,22 @@ export function calculateMatchScore(fixture: Fixture | null, events: MatchEvent[
     }
   }
 
-  // 2. Count Goals globally for the fixture
-  const goalCount = matchEvents.filter(e => e.event_type === 'goal').length;
-  const opponentGoalCount = matchEvents.filter(e => e.event_type === 'opponent_goal').length;
+  // 2. Count Goals directly and precisely by team
+  const homeGoals = matchEvents.filter(e => 
+    (e.event_type === 'goal' && e.team_id === fixture.home_team_id) ||
+    (e.event_type === 'opponent_goal' && e.team_id === fixture.away_team_id)
+  ).length;
 
-  let homeScore = 0;
-  let awayScore = 0;
+  const awayGoals = matchEvents.filter(e => 
+    (e.event_type === 'goal' && e.team_id === fixture.away_team_id) ||
+    (e.event_type === 'opponent_goal' && e.team_id === fixture.home_team_id)
+  ).length;
 
-  // 3. Score Mapping:
-  // Wenn eigenes/verwaltetes Team zuhause ist: goal = Heimteam, opponent_goal = Auswärtsteam
-  // Wenn eigenes/verwaltetes Team auswärts ist: goal = Auswärtsteam, opponent_goal = Heimteam
-  if (isOwnTeamHome) {
-    homeScore = goalCount;
-    awayScore = opponentGoalCount;
-  } else {
-    awayScore = goalCount;
-    homeScore = opponentGoalCount;
-  }
+  let homeScore = homeGoals;
+  let awayScore = awayGoals;
 
   // Fallback if no goal events but scores are set in fixture
-  if (goalCount === 0 && opponentGoalCount === 0 && (fixture.home_score || fixture.away_score)) {
+  if (homeGoals === 0 && awayGoals === 0 && (fixture.home_score != null || fixture.away_score != null)) {
     homeScore = fixture.home_score ?? 0;
     awayScore = fixture.away_score ?? 0;
   }
@@ -75,7 +71,7 @@ export function calculateMatchScore(fixture: Fixture | null, events: MatchEvent[
   const scoreString = `${homeScore} : ${awayScore}`;
   
   // Debug log explicitly
-  console.log(`DEBUG: [SCORE] Fixture: ${fixture.id}, Status: ${fixture.status}, Events: ${matchEvents.length}, isOwnTeamHome: ${isOwnTeamHome}, goalCount: ${goalCount}, opponentGoalCount: ${opponentGoalCount}, Calculated: ${scoreString}`);
+  console.log(`DEBUG: [SCORE] Fixture: ${fixture.id}, Status: ${fixture.status}, Events: ${matchEvents.length}, isOwnTeamHome: ${isOwnTeamHome}, homeGoals: ${homeGoals}, awayGoals: ${awayGoals}, Calculated: ${scoreString}`);
 
   return { homeScore, awayScore, scoreString, isOwnTeamHome };
 }
