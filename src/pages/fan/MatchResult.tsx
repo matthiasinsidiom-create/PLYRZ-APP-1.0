@@ -752,6 +752,17 @@ const MatchResult: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* MVP Sponsor */}
+                {(fixture as any).mvp_sponsor_name && (
+                  <div className="mt-8 flex flex-col items-center justify-center space-y-3">
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-500/70">präsentiert von</span>
+                    {(fixture as any).mvp_sponsor_logo_url && (
+                      <img src={(fixture as any).mvp_sponsor_logo_url} alt={(fixture as any).mvp_sponsor_name} className="h-10 object-contain drop-shadow-xl" />
+                    )}
+                    <span className="text-sm font-black text-white italic uppercase tracking-wider">{(fixture as any).mvp_sponsor_name}</span>
+                  </div>
+                )}
               </div>
             </div>
           </motion.section>

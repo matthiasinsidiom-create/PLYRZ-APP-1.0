@@ -97,6 +97,10 @@ export interface Fixture {
   voting_close_at?: string;
   results_processed_at?: string;
   match_type?: 'reserve' | 'kampfmannschaft';
+  match_sponsor_name?: string | null;
+  match_sponsor_logo_url?: string | null;
+  mvp_sponsor_name?: string | null;
+  mvp_sponsor_logo_url?: string | null;
   match_phase?: 'first_half' | 'halftime' | 'second_half' | 'full_time';
   first_half_started_at?: string;
   halftime_started_at?: string;

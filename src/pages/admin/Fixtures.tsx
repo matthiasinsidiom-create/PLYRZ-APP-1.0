@@ -48,7 +48,11 @@ const AdminFixtures: React.FC = () => {
     away_score: '',
     checkin_code: '',
     checkin_opens_at: '',
-    checkin_closes_at: ''
+    checkin_closes_at: '',
+    match_sponsor_name: '',
+    match_sponsor_logo_url: '',
+    mvp_sponsor_name: '',
+    mvp_sponsor_logo_url: ''
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -71,6 +75,36 @@ const AdminFixtures: React.FC = () => {
   const [lineupForEvents, setLineupForEvents] = useState<any[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [savingEvents, setSavingEvents] = useState(false);
+  const [uploadingMatchSponsor, setUploadingMatchSponsor] = useState(false);
+  const [uploadingMvpSponsor, setUploadingMvpSponsor] = useState(false);
+
+  const handleMatchSponsorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setUploadingMatchSponsor(true);
+    try {
+      const publicUrl = await supabaseService.uploadSponsorLogo(file);
+      setFormData(prev => ({ ...prev, match_sponsor_logo_url: publicUrl }));
+    } catch (err: any) {
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploadingMatchSponsor(false);
+    }
+  };
+
+  const handleMvpSponsorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setUploadingMvpSponsor(true);
+    try {
+      const publicUrl = await supabaseService.uploadSponsorLogo(file);
+      setFormData(prev => ({ ...prev, mvp_sponsor_logo_url: publicUrl }));
+    } catch (err: any) {
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploadingMvpSponsor(false);
+    }
+  };
 
   const [statusModal, setStatusModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' }>({
     isOpen: false,
@@ -214,7 +248,11 @@ const AdminFixtures: React.FC = () => {
         away_score: fixture.away_score?.toString() || '',
         checkin_code: fixture.checkin_code || '',
         checkin_opens_at: fixture.checkin_opens_at ? new Date(fixture.checkin_opens_at).toISOString().slice(0, 16) : '',
-        checkin_closes_at: fixture.checkin_closes_at ? new Date(fixture.checkin_closes_at).toISOString().slice(0, 16) : ''
+        checkin_closes_at: fixture.checkin_closes_at ? new Date(fixture.checkin_closes_at).toISOString().slice(0, 16) : '',
+        match_sponsor_name: fixture.match_sponsor_name || '',
+        match_sponsor_logo_url: fixture.match_sponsor_logo_url || '',
+        mvp_sponsor_name: fixture.mvp_sponsor_name || '',
+        mvp_sponsor_logo_url: fixture.mvp_sponsor_logo_url || ''
       });
     } else {
       setEditingFixture(null);
@@ -230,7 +268,11 @@ const AdminFixtures: React.FC = () => {
         away_score: '',
         checkin_code: Math.random().toString(36).substring(2, 8).toUpperCase(),
         checkin_opens_at: '',
-        checkin_closes_at: ''
+        checkin_closes_at: '',
+        match_sponsor_name: '',
+        match_sponsor_logo_url: '',
+        mvp_sponsor_name: '',
+        mvp_sponsor_logo_url: ''
       });
     }
     setIsModalOpen(true);
@@ -282,7 +324,11 @@ const AdminFixtures: React.FC = () => {
         away_score: formData.away_score !== '' ? parseInt(formData.away_score) : null,
         checkin_code: formData.checkin_code || null,
         checkin_opens_at: formData.checkin_opens_at ? new Date(formData.checkin_opens_at).toISOString() : null,
-        checkin_closes_at: formData.checkin_closes_at ? new Date(formData.checkin_closes_at).toISOString() : null
+        checkin_closes_at: formData.checkin_closes_at ? new Date(formData.checkin_closes_at).toISOString() : null,
+        match_sponsor_name: formData.match_sponsor_name || null,
+        match_sponsor_logo_url: formData.match_sponsor_logo_url || null,
+        mvp_sponsor_name: formData.mvp_sponsor_name || null,
+        mvp_sponsor_logo_url: formData.mvp_sponsor_logo_url || null
       };
 
       if (editingFixture) {
@@ -680,6 +726,84 @@ const AdminFixtures: React.FC = () => {
                       onChange={(e) => setFormData({ ...formData, kickoff_at: e.target.value })}
                       className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
                     />
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t border-zinc-800">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">Sponsoren (Optional)</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Match Sponsor Name</label>
+                        <input 
+                          type="text"
+                          value={formData.match_sponsor_name}
+                          onChange={(e) => setFormData({ ...formData, match_sponsor_name: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+                          placeholder="e.g. Intersport"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Match Sponsor Logo URL</label>
+                        <div className="flex flex-col gap-2">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleMatchSponsorUpload}
+                            className="hidden"
+                            id="match-logo-upload"
+                          />
+                          <label 
+                            htmlFor="match-logo-upload"
+                            className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
+                          >
+                            {uploadingMatchSponsor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {formData.match_sponsor_logo_url ? 'LOGO ÄNDERN' : 'LOGO HOCHLADEN'}
+                          </label>
+                          <input 
+                            type="url"
+                            value={formData.match_sponsor_logo_url}
+                            onChange={(e) => setFormData({ ...formData, match_sponsor_logo_url: e.target.value })}
+                            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-red-500/50 transition-colors"
+                            placeholder="Oder URL eingegeben..."
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">MVP Sponsor Name</label>
+                        <input 
+                          type="text"
+                          value={formData.mvp_sponsor_name}
+                          onChange={(e) => setFormData({ ...formData, mvp_sponsor_name: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+                          placeholder="e.g. Raiffeisen"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">MVP Sponsor Logo URL</label>
+                        <div className="flex flex-col gap-2">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleMvpSponsorUpload}
+                            className="hidden"
+                            id="mvp-logo-upload"
+                          />
+                          <label 
+                            htmlFor="mvp-logo-upload"
+                            className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
+                          >
+                            {uploadingMvpSponsor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {formData.mvp_sponsor_logo_url ? 'LOGO ÄNDERN' : 'LOGO HOCHLADEN'}
+                          </label>
+                          <input 
+                            type="url"
+                            value={formData.mvp_sponsor_logo_url}
+                            onChange={(e) => setFormData({ ...formData, mvp_sponsor_logo_url: e.target.value })}
+                            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-red-500/50 transition-colors"
+                            placeholder="Oder URL eingegeben..."
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="pt-6">

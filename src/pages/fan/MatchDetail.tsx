@@ -1319,6 +1319,17 @@ export const MatchDetail: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Match Sponsor */}
+        {(fixture as any).match_sponsor_name && (
+          <div className="mt-6 flex flex-col items-center justify-center space-y-3">
+            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Match präsentiert von</span>
+            {(fixture as any).match_sponsor_logo_url && (
+              <img src={(fixture as any).match_sponsor_logo_url} alt={(fixture as any).match_sponsor_name} className="h-10 object-contain" />
+            )}
+            <span className="text-sm font-black text-white italic uppercase tracking-wider">{(fixture as any).match_sponsor_name}</span>
+          </div>
+        )}
       </div>
 
       {/* Timeline Section */}

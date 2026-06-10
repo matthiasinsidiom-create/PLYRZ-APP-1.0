@@ -967,6 +967,31 @@ export const supabaseService = {
     return data.publicUrl;
   },
 
+  async uploadSponsorLogo(file: File) {
+    await this.checkAdmin();
+    console.log('DEBUG: [SERVICE] uploadSponsorLogo started for file:', file.name);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `sponsors/${fileName}`;
+
+    console.log('DEBUG: [SERVICE] uploadSponsorLogo uploading to path:', filePath);
+    const { error: uploadError } = await supabase.storage
+      .from('assets')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('DEBUG: [SERVICE] uploadSponsorLogo upload error:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage
+      .from('assets')
+      .getPublicUrl(filePath);
+
+    console.log('DEBUG: [SERVICE] uploadSponsorLogo success. Public URL:', data.publicUrl);
+    return data.publicUrl;
+  },
+
   // Match Events
   async getMatchEvents(fixtureId: string) {
     const { data, error } = await supabase
