@@ -83,34 +83,59 @@ serve(async (req) => {
     const awayName = awayTeam?.name || "Away";
 
     // 2. Fetch Relevant Users
+    const validClubs = [homeClubId, awayClubId].filter(id => id != null);
+    let relevantUserIdsInfo = new Set<string>();
+    
+    // a) Admins and Fans
     const { data: profiles, error: profError } = await supabase
       .from('profiles')
       .select('id, favorite_club_id, role');
 
-    let relevantUserIds: string[] = [];
-    let recipientsMode = "target_fans_and_admins";
-
-    if (profError || !profiles || profiles.length === 0) {
-       console.log("Could not load profiles or no profiles. Fallback to admins.");
-       recipientsMode = "admins_only_fallback";
-    } else {
-      const isClubValid = (clubId: string) => clubId && (clubId === homeClubId || clubId === awayClubId);
-      
-      const filteredProfiles = profiles.filter(p => 
-         p.role === 'admin' || isClubValid(p.favorite_club_id)
-      );
-
-      relevantUserIds = filteredProfiles.map(p => p.id);
-
-      if (relevantUserIds.length === 0) {
-        // Fallback: just send to admins if no fans
-        const admins = profiles.filter(p => p.role === 'admin');
-        relevantUserIds = admins.map(p => p.id);
-        if (relevantUserIds.length > 0) {
-          recipientsMode = "admins_only_fallback";
+    if (profiles) {
+      profiles.forEach(p => {
+        if (p.role === 'admin' || validClubs.includes(p.favorite_club_id)) {
+          relevantUserIdsInfo.add(p.id);
         }
+      });
+    }
+
+    // b) Club Admins
+    if (validClubs.length > 0) {
+      const { data: clubAdmins } = await supabase
+        .from('club_admins')
+        .select('user_id, club_id')
+        .in('club_id', validClubs);
+        
+      if (clubAdmins) {
+        clubAdmins.forEach(ca => {
+          if (ca.user_id) relevantUserIdsInfo.add(ca.user_id);
+        });
+      }
+      
+      // c) Claimed Players
+      const { data: players } = await supabase
+        .from('players')
+        .select('claimed_by_user_id, team_id, club_id')
+        .not('claimed_by_user_id', 'is', null);
+        
+      if (players) {
+        const { data: relevantTeams } = await supabase
+          .from('teams')
+          .select('id')
+          .in('club_id', validClubs);
+          
+        const relevantTeamIds = new Set(relevantTeams?.map(t => t.id) || []);
+        
+        players.forEach(p => {
+          if (validClubs.includes(p.club_id) || relevantTeamIds.has(p.team_id)) {
+             relevantUserIdsInfo.add(p.claimed_by_user_id);
+          }
+        });
       }
     }
+
+    let relevantUserIds = Array.from(relevantUserIdsInfo);
+    let recipientsMode = "target_fans_admins_and_players";
 
     if (relevantUserIds.length === 0) {
       return new Response(JSON.stringify({ 
@@ -119,8 +144,10 @@ serve(async (req) => {
         fixtureId,
         recipientsMode,
         recipientsFound: 0,
-        tokensFound: 0,
-        sent: 0,
+        iosTokensFound: 0,
+        androidTokensFound: 0,
+        iosSent: 0,
+        androidSent: 0,
         skippedDuplicates: 0,
         failed: 0,
         results: []
@@ -130,12 +157,11 @@ serve(async (req) => {
       });
     }
 
-    // 3. Load Push Tokens
+    // 3. Load Push Tokens (Both iOS and Android)
     const { data: pushTokens, error: tokenErr } = await supabase
       .from('push_tokens')
       .select('user_id, token, platform')
-      .in('user_id', relevantUserIds)
-      .eq('platform', 'ios');
+      .in('user_id', relevantUserIds);
 
     if (tokenErr || !pushTokens || pushTokens.length === 0) {
       return new Response(JSON.stringify({ 
@@ -144,8 +170,10 @@ serve(async (req) => {
         fixtureId,
         recipientsMode,
         recipientsFound: relevantUserIds.length,
-        tokensFound: 0,
-        sent: 0,
+        iosTokensFound: 0,
+        androidTokensFound: 0,
+        iosSent: 0,
+        androidSent: 0,
         skippedDuplicates: 0,
         failed: 0,
         results: []
@@ -154,6 +182,9 @@ serve(async (req) => {
         status: 200,
       });
     }
+
+    const iosTokens = pushTokens.filter(t => t.platform === 'ios');
+    const androidTokens = pushTokens.filter(t => t.platform === 'android');
 
     // Prepare Messages
     let title = "";
@@ -194,107 +225,200 @@ serve(async (req) => {
 
     const host = apnsEnv === 'production' ? 'api.push.apple.com' : 'api.sandbox.push.apple.com';
 
-    let sentCount = 0;
+    // Setup FCM
+    const fcmServerKey = Deno.env.get('FCM_SERVER_KEY');
+    const canSendFCM = !!fcmServerKey;
+
+    let iosSent = 0;
+    let androidSent = 0;
     let skippedCount = 0;
     let failedCount = 0;
     const results = [];
 
     // Send push to each token individually
     for (const pt of pushTokens) {
-      // Check Duplicate
+      // Check Duplicate (includes platform)
       const { data: existingLog } = await supabase
         .from('push_notification_log')
         .select('id')
         .eq('user_id', pt.user_id)
         .eq('fixture_id', fixtureId)
         .eq('notification_type', type)
+        .eq('platform', pt.platform)
         .maybeSingle();
 
       if (existingLog) {
         skippedCount++;
-        results.push({ user_id: pt.user_id, token_start: pt.token.substring(0, 25), status: 'skipped_duplicate' });
+        results.push({ user_id: pt.user_id, platform: pt.platform, token_start: pt.token.substring(0, 25), status: 'skipped_duplicate' });
         continue;
       }
 
-      if (!canSendAPNs) {
-        failedCount++;
-        results.push({ user_id: pt.user_id, status: 'failed', reason: 'Missing APNS credentials' });
-        continue;
-      }
+      if (pt.platform === 'ios') {
+        if (!canSendAPNs) {
+          failedCount++;
+          results.push({ user_id: pt.user_id, platform: 'ios', status: 'failed', reason: 'Missing APNS credentials' });
+          continue;
+        }
 
-      const payload = {
-        aps: {
-          alert: {
+        const payload = {
+          aps: {
+            alert: {
+              title: title,
+              body: body,
+            },
+            sound: "default"
+          },
+          type,
+          fixtureId
+        };
+
+        try {
+          const response = await fetch(`https://${host}/3/device/${pt.token}`, {
+            method: "POST",
+            headers: {
+              "authorization": `bearer ${jwtToken}`,
+              "apns-topic": apnsBundleId!,
+              "apns-push-type": "alert"
+            },
+            body: JSON.stringify(payload)
+          });
+
+          const status = response.status;
+          const text = await response.text();
+          let isSuccess = status === 200;
+          
+          let providerResp = null;
+          if (text) {
+            try { providerResp = JSON.parse(text); } catch(e) { providerResp = { raw: text }; }
+          }
+
+          try {
+            await supabase.from('push_notification_log').insert({
+              user_id: pt.user_id,
+              fixture_id: fixtureId,
+              notification_type: type,
+              title,
+              body,
+              platform: 'ios',
+              token_start: pt.token.substring(0, 25),
+              success: isSuccess,
+              provider_status: status.toString(),
+              provider_response: providerResp
+            });
+          } catch(e) { console.error('Log insert duplicate error ignored'); }
+
+          if (isSuccess) {
+            iosSent++;
+            results.push({ user_id: pt.user_id, platform: 'ios', token_start: pt.token.substring(0, 25), status: 'sent' });
+          } else {
+            failedCount++;
+            results.push({ user_id: pt.user_id, platform: 'ios', token_start: pt.token.substring(0, 25), status: 'failed', provider_status: status, response: providerResp });
+          }
+        } catch (err: any) {
+          failedCount++;
+          results.push({ user_id: pt.user_id, platform: 'ios', token_start: pt.token.substring(0, 25), status: 'error', error: err.message });
+          
+          try {
+            await supabase.from('push_notification_log').insert({
+              user_id: pt.user_id,
+              fixture_id: fixtureId,
+              notification_type: type,
+              title,
+              body,
+              platform: 'ios',
+              token_start: pt.token.substring(0, 25),
+              success: false,
+              provider_status: 'error',
+              provider_response: { error: err.message }
+            });
+          } catch(e) { /* ignore uniqueness issues */ }
+        }
+      } else if (pt.platform === 'android') {
+        if (!canSendFCM) {
+          failedCount++;
+          results.push({ user_id: pt.user_id, platform: 'android', status: 'skipped', reason: 'Missing FCM credentials' });
+          // Note: we do not log missing config to DB to avoid DB bloat when FCM isn't setup.
+          continue;
+        }
+
+        const payload = {
+          to: pt.token,
+          notification: {
             title: title,
             body: body,
+            sound: "default"
           },
-          sound: "default"
-        },
-        type,
-        fixtureId
-      };
-
-      try {
-        const response = await fetch(`https://${host}/3/device/${pt.token}`, {
-          method: "POST",
-          headers: {
-            "authorization": `bearer ${jwtToken}`,
-            "apns-topic": apnsBundleId!,
-            "apns-push-type": "alert"
-          },
-          body: JSON.stringify(payload)
-        });
-
-        const status = response.status;
-        const text = await response.text();
-
-        let isSuccess = status === 200;
-        
-        let providerResp = null;
-        if (text) {
-          try {
-            providerResp = JSON.parse(text);
-          } catch(e) {
-            providerResp = { raw: text };
+          data: {
+            type,
+            fixtureId
           }
-        }
+        };
 
-        await supabase.from('push_notification_log').insert({
-          user_id: pt.user_id,
-          fixture_id: fixtureId,
-          notification_type: type,
-          title,
-          body,
-          platform: 'ios',
-          token_start: pt.token.substring(0, 25),
-          success: isSuccess,
-          provider_status: status.toString(),
-          provider_response: providerResp
-        });
+        try {
+          const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+            method: "POST",
+            headers: {
+              "Authorization": `key=${fcmServerKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+          });
 
-        if (isSuccess) {
-          sentCount++;
-          results.push({ user_id: pt.user_id, token_start: pt.token.substring(0, 25), status: 'sent' });
-        } else {
+          const status = response.status;
+          const text = await response.text();
+          let isSuccess = status === 200;
+          
+          let providerResp = null;
+          if (text) {
+            try { providerResp = JSON.parse(text); } catch(e) { providerResp = { raw: text }; }
+          }
+
+          // Check if FCM indicated failure in response even with 200 OK
+          if (isSuccess && providerResp?.failure && providerResp.failure > 0) {
+             isSuccess = false;
+          }
+
+          try {
+            await supabase.from('push_notification_log').insert({
+              user_id: pt.user_id,
+              fixture_id: fixtureId,
+              notification_type: type,
+              title,
+              body,
+              platform: 'android',
+              token_start: pt.token.substring(0, 25),
+              success: isSuccess,
+              provider_status: status.toString(),
+              provider_response: providerResp
+            });
+          } catch(e) { console.error('Log insert duplicate error ignored'); }
+
+          if (isSuccess) {
+            androidSent++;
+            results.push({ user_id: pt.user_id, platform: 'android', token_start: pt.token.substring(0, 25), status: 'sent' });
+          } else {
+            failedCount++;
+            results.push({ user_id: pt.user_id, platform: 'android', token_start: pt.token.substring(0, 25), status: 'failed', provider_status: status, response: providerResp });
+          }
+        } catch (err: any) {
           failedCount++;
-          results.push({ user_id: pt.user_id, token_start: pt.token.substring(0, 25), status: 'failed', provider_status: status, response: providerResp });
+          results.push({ user_id: pt.user_id, platform: 'android', token_start: pt.token.substring(0, 25), status: 'error', error: err.message });
+          
+          try {
+            await supabase.from('push_notification_log').insert({
+              user_id: pt.user_id,
+              fixture_id: fixtureId,
+              notification_type: type,
+              title,
+              body,
+              platform: 'android',
+              token_start: pt.token.substring(0, 25),
+              success: false,
+              provider_status: 'error',
+              provider_response: { error: err.message }
+            });
+          } catch(e) { /* ignore */ }
         }
-      } catch (err: any) {
-        failedCount++;
-        results.push({ user_id: pt.user_id, token_start: pt.token.substring(0, 25), status: 'error', error: err.message });
-
-        await supabase.from('push_notification_log').insert({
-          user_id: pt.user_id,
-          fixture_id: fixtureId,
-          notification_type: type,
-          title,
-          body,
-          platform: 'ios',
-          token_start: pt.token.substring(0, 25),
-          success: false,
-          provider_status: 'error',
-          provider_response: { error: err.message }
-        });
       }
     }
 
@@ -304,8 +428,10 @@ serve(async (req) => {
       fixtureId,
       recipientsMode,
       recipientsFound: relevantUserIds.length,
-      tokensFound: pushTokens.length,
-      sent: sentCount,
+      iosTokensFound: iosTokens.length,
+      androidTokensFound: androidTokens.length,
+      iosSent,
+      androidSent,
       skippedDuplicates: skippedCount,
       failed: failedCount,
       results
