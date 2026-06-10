@@ -21,8 +21,10 @@ import {
   Minus,
   Zap,
   Square,
-  RefreshCw
+  RefreshCw,
+  Share2
 } from 'lucide-react';
+import * as htmlToImage from 'html-to-image';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { supabaseService } from '../../services/supabaseService';
 import { supabase } from '../../lib/supabase';
@@ -231,6 +233,47 @@ const MatchResult: React.FC = () => {
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
   const [processing, setProcessing] = useState(false);
   const [autoProcessed, setAutoProcessed] = useState(false);
+  const [sharingMVP, setSharingMVP] = useState(false);
+  const mvpExportRef = React.useRef<HTMLDivElement>(null);
+
+  const handleShareMVP = async () => {
+    if (!mvpExportRef.current || !fixture) return;
+    setSharingMVP(true);
+    try {
+      // Small delay to ensure images/fonts are loaded
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const dataUrl = await htmlToImage.toPng(mvpExportRef.current, {
+        pixelRatio: 3,
+        backgroundColor: '#09090b', // zinc-950
+      });
+
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      const file = new File([blob], `mvp_${fixture.id.substring(0,8)}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `MVP: ${(fixture as any).home_team?.name || ''} vs ${(fixture as any).away_team?.name || ''}`,
+          text: `Schau dir den MVP des Spiels an!`
+        });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Error sharing MVP:', err);
+      alert('Fehler beim Teilen des MVPs. Ggf. blockieren externe Bilder den Export.');
+    } finally {
+      setSharingMVP(false);
+    }
+  };
 
   // Auto-process for admins if voting is closed but results are missing
   useEffect(() => {
@@ -763,9 +806,104 @@ const MatchResult: React.FC = () => {
                     <span className="text-sm font-black text-white italic uppercase tracking-wider">{(fixture as any).mvp_sponsor_name}</span>
                   </div>
                 )}
+
+                <button 
+                  onClick={handleShareMVP}
+                  disabled={sharingMVP}
+                  className="mt-8 w-full max-w-sm bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all text-white font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                >
+                  <Share2 className="w-5 h-5 text-amber-500" />
+                  {sharingMVP ? 'Wird verarbeitet...' : 'MVP teilen'}
+                </button>
               </div>
             </div>
           </motion.section>
+        )}
+
+        {/* Hidden MVP Share Container */}
+        {mvp && fixture && (
+          <div className="absolute -left-[9999px] top-0 pointer-events-none flex opacity-0">
+            <div ref={mvpExportRef} className="w-[800px] bg-zinc-950 p-12 flex flex-col items-center justify-center font-sans tracking-tight rounded-3xl" style={{ overflow: 'hidden' }}>
+              <div className="flex flex-col items-center gap-4 mb-10 w-full text-center">
+                <div className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-amber-300 to-amber-600 text-black rounded-full shadow-[0_0_30px_rgba(251,191,36,0.3)] border-2 border-amber-200/50">
+                  <Star className="w-8 h-8 fill-black" />
+                  <span className="text-2xl font-black italic uppercase tracking-[0.3em]">MVP DES SPIELS</span>
+                </div>
+                {/* Match Info */}
+                <div className="mt-4 flex items-center justify-center gap-6 w-full text-white text-3xl font-black italic uppercase">
+                  <span>{(fixture as any).home_team?.name}</span>
+                  <div className="px-6 py-2 bg-white/10 rounded-xl">
+                     {(() => {
+                        const { homeScore, awayScore } = calculateMatchScore(fixture, matchEvents);
+                        return `${homeScore}:${awayScore}`;
+                     })()}
+                  </div>
+                  <span>{(fixture as any).away_team?.name}</span>
+                </div>
+                {fixture.match_type && (
+                  <div className="text-zinc-500 font-bold uppercase tracking-widest text-lg mt-2">
+                     {fixture.match_type === 'reserve' ? 'Reserve' : 'KAMPFMANNSCHAFT'}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-center gap-16 w-full px-12 mt-4 pb-8">
+                <div className="scale-[1.3] transform origin-center shadow-[0_20px_60px_rgba(251,191,36,0.2)] rounded-[32px] overflow-hidden ml-8">
+                   <PlayerCard 
+                     player={mvp.players || { full_name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' } as any} 
+                     clubLogo={mvp.players?.teams?.clubs?.logo_url}
+                     jerseyNumber={mvp.jersey_number}
+                     lineupRole={mvp.lineup_role}
+                     isTopPerformer={true}
+                   />
+                </div>
+                
+                <div className="flex flex-col gap-6 pl-12 border-l-2 border-white/10 min-w-[300px]">
+                   <div className="flex flex-col">
+                     <span className="text-zinc-500 font-black uppercase text-lg tracking-widest">Neues Rating</span>
+                     <div className="text-7xl font-black italic text-white flex items-center gap-4">
+                       {mvp.new_overall} 
+                       <span className="text-3xl text-emerald-500 font-bold tracking-tight">+{safeFixed(mvp.delta_overall)}</span>
+                     </div>
+                   </div>
+                   
+                   <div className="h-px w-full bg-white/10" />
+                   
+                   {mvp.goal_count > 0 && (
+                     <div className="flex items-center justify-between text-2xl font-black italic text-white">
+                        <span className="text-zinc-400 uppercase tracking-widest">Tore</span>
+                        <div className="flex items-center justify-end gap-2">⚽ {mvp.goal_count}</div>
+                     </div>
+                   )}
+                   {(mvp.assists || 0) > 0 && (
+                     <div className="flex items-center justify-between text-2xl font-black italic text-white">
+                        <span className="text-zinc-400 uppercase tracking-widest">Vorlagen</span>
+                        <div className="flex items-center justify-end gap-2">🎯 {mvp.assists}</div>
+                     </div>
+                   )}
+                   {(mvp.votes_up || 0) > 0 && (
+                     <div className="flex items-center justify-between text-2xl font-black italic text-white">
+                        <span className="text-zinc-400 uppercase tracking-widest">Upvotes</span>
+                        <div className="flex items-center justify-end gap-2 text-emerald-500"><ThumbsUp className="w-6 h-6" /> {mvp.votes_up}</div>
+                     </div>
+                   )}
+                   
+                   {/* MVP Sponsor Inline */}
+                   {(fixture as any).mvp_sponsor_name && (
+                     <div className="mt-8 flex flex-col items-start gap-3 p-6 bg-amber-500/10 rounded-[2rem] border border-amber-500/20">
+                       <span className="text-sm font-black uppercase tracking-[0.3em] text-amber-500/70">präsentiert von</span>
+                       <div className="flex items-center gap-4">
+                         {(fixture as any).mvp_sponsor_logo_url && (
+                           <img src={(fixture as any).mvp_sponsor_logo_url} alt={(fixture as any).mvp_sponsor_name} className="h-12 object-contain" />
+                         )}
+                         <span className="text-xl font-black text-white italic uppercase tracking-wider">{(fixture as any).mvp_sponsor_name}</span>
+                       </div>
+                     </div>
+                   )}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* RANKINGS SECTION */}
