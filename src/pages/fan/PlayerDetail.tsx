@@ -16,8 +16,11 @@ import {
   Activity,
   ChevronRight,
   Star,
-  Users
+  Users,
+  Share2
 } from 'lucide-react';
+import * as htmlToImage from 'html-to-image';
+import { useAuth } from '../../context/AuthContext';
 import { 
   LineChart, 
   Line, 
@@ -45,9 +48,52 @@ type ExtendedHistory = PlayerRatingHistory & {
 export const PlayerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [player, setPlayer] = useState<(Player & { teams: Team & { clubs: Club }, player_stats: PlayerStats[] }) | null>(null);
   const [history, setHistory] = useState<ExtendedHistory[]>([]);
+  const [sharing, setSharing] = useState(false);
+  const exportRef = React.useRef<HTMLDivElement>(null);
+
+  const handleShare = async () => {
+    if (!exportRef.current || !player) return;
+    setSharing(true);
+    try {
+      // Add slight delay to ensure fonts/images are ready
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const dataUrl = await htmlToImage.toPng(exportRef.current, {
+        pixelRatio: 3,
+        backgroundColor: 'transparent',
+      });
+
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      const file = new File([blob], `plyrz_card_${player.full_name?.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Meine PLYRZ Karte: ${player.full_name}`,
+          text: `Schau dir meine aktuelle PLYRZ Karte an!`
+        });
+      } else {
+        // Fallback to download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Error sharing card:', err);
+      alert('Fehler beim Teilen der Karte. Ggf. blockieren externe Bilder den Export.');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -176,12 +222,25 @@ export const PlayerDetail: React.FC = () => {
               style={{ backgroundColor: glowColor }}
             />
             <div className="relative z-10">
-              <PlayerCard 
-                player={player} 
-                clubLogo={clubLogo}
-                jerseyNumber={player.jersey_number}
-                onClick={() => navigate(`/players/${player.id}`)}
-              />
+              <div ref={exportRef} className="bg-transparent rounded-3xl" style={{ overflow: 'hidden' }}>
+                <PlayerCard 
+                  player={player} 
+                  clubLogo={clubLogo}
+                  jerseyNumber={player.jersey_number}
+                  onClick={() => navigate(`/players/${player.id}`)}
+                />
+              </div>
+
+              {player.claimed_by_user_id === user?.id && (
+                <button 
+                  onClick={handleShare}
+                  disabled={sharing}
+                  className="mt-6 w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all text-white font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                >
+                  <Share2 className="w-5 h-5 text-emerald-500" />
+                  {sharing ? 'Wird verarbeitet...' : 'Meine Karte teilen'}
+                </button>
+              )}
             </div>
           </motion.div>
 
