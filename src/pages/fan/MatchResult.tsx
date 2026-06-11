@@ -31,6 +31,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture, Player, PlayerStats, Team, Club, PlayerRatingHistory, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
+import { SponsorBox } from '../../components/SponsorBox';
 import { VotingCountdown } from '../../components/VotingCountdown';
 import { calculateMatchScore } from '../../lib/score';
 
@@ -798,12 +799,12 @@ const MatchResult: React.FC = () => {
 
                 {/* MVP Sponsor */}
                 {(fixture as any).mvp_sponsor_name && (
-                  <div className="mt-8 flex flex-col items-center justify-center space-y-3">
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] text-amber-500/70">präsentiert von</span>
-                    {(fixture as any).mvp_sponsor_logo_url && (
-                      <img src={(fixture as any).mvp_sponsor_logo_url} alt={(fixture as any).mvp_sponsor_name} className="h-10 object-contain drop-shadow-xl" />
-                    )}
-                    <span className="text-sm font-black text-white italic uppercase tracking-wider">{(fixture as any).mvp_sponsor_name}</span>
+                  <div className="mt-8 flex justify-center w-full max-w-[360px]">
+                    <SponsorBox 
+                      type="MVP" 
+                      sponsorName={(fixture as any).mvp_sponsor_name} 
+                      sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
+                    />
                   </div>
                 )}
 
@@ -935,20 +936,12 @@ const MatchResult: React.FC = () => {
 
                 {/* MVP Sponsor Inline */}
                 {(fixture as any).mvp_sponsor_name && (
-                  <div className="mt-8 flex flex-col items-center gap-6 p-8 bg-amber-500/10 rounded-3xl border border-amber-500/30 w-full max-w-[800px]">
-                    <span className="text-xl font-black uppercase tracking-[0.4em] text-amber-500/80">präsentiert von</span>
-                    <div className="flex flex-col items-center justify-center gap-6">
-                      {(fixture as any).mvp_sponsor_logo_url && (
-                        <img 
-                           src={(fixture as any).mvp_sponsor_logo_url} 
-                           alt={(fixture as any).mvp_sponsor_name} 
-                           className="h-28 object-contain drop-shadow-lg" 
-                           crossOrigin="anonymous" 
-                           referrerPolicy="no-referrer"
-                        />
-                      )}
-                      <span className="text-4xl font-black italic uppercase tracking-widest">{(fixture as any).mvp_sponsor_name}</span>
-                    </div>
+                  <div className="mt-20 w-[360px] origin-bottom scale-[2.7] flex justify-center pb-8">
+                    <SponsorBox 
+                      type="MVP" 
+                      sponsorName={(fixture as any).mvp_sponsor_name} 
+                      sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
+                    />
                   </div>
                 )}
               </div>

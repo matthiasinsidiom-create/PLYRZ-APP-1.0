@@ -30,6 +30,7 @@ import { appConfig } from '../../lib/config';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture, Player, PlayerStats, Team, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
+import { SponsorBox } from '../../components/SponsorBox';
 import { PlayerVoteCard } from '../../components/PlayerVoteCard';
 import { SwipeVotingOverlay } from '../../components/SwipeVotingOverlay';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
@@ -1322,12 +1323,12 @@ export const MatchDetail: React.FC = () => {
 
         {/* Match Sponsor */}
         {(fixture as any).match_sponsor_name && (
-          <div className="mt-6 flex flex-col items-center justify-center space-y-3">
-            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Match präsentiert von</span>
-            {(fixture as any).match_sponsor_logo_url && (
-              <img src={(fixture as any).match_sponsor_logo_url} alt={(fixture as any).match_sponsor_name} className="h-10 object-contain" />
-            )}
-            <span className="text-sm font-black text-white italic uppercase tracking-wider">{(fixture as any).match_sponsor_name}</span>
+          <div className="mt-8 flex justify-center w-full max-w-[360px] mx-auto">
+            <SponsorBox 
+              type="MATCH" 
+              sponsorName={(fixture as any).match_sponsor_name} 
+              sponsorLogoUrl={(fixture as any).match_sponsor_logo_url} 
+            />
           </div>
         )}
       </div>
