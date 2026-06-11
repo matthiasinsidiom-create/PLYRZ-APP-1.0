@@ -775,7 +775,7 @@ const MatchResult: React.FC = () => {
                           <ThumbsUp className="w-3 h-3 text-emerald-500" />
                           <span className="text-[8px] font-black italic text-zinc-500 uppercase tracking-widest">Votes</span>
                         </div>
-                        <span className="text-lg font-black italic text-white">{mvp.votes_up}</span>
+                        <span className="text-lg font-black italic text-white">{mvp.positive_votes || 0}</span>
                       </div>
                       <div className="text-[10px] font-black italic text-zinc-500">
                         Impact: +{safeFixed(mvp.vote_impact, 2)}
@@ -839,85 +839,110 @@ const MatchResult: React.FC = () => {
                 </div>
                 
                 {/* Match Info */}
-                <div className="mt-16 w-full flex flex-col items-center gap-6 text-white">
-                  <div className="flex items-center justify-center gap-8 w-full text-5xl font-black italic uppercase">
-                    <span className="flex-1 text-right truncate">{(fixture as any).home_team?.name}</span>
-                    <div className="px-8 py-4 bg-white/10 rounded-2xl border border-white/5 whitespace-nowrap">
+                <div className="mt-12 w-full flex flex-col items-center gap-8 text-white text-center">
+                  <div className="flex items-center justify-center gap-6 w-full font-black italic uppercase">
+                    <div className="flex-1 flex flex-col items-center justify-end gap-4 text-center">
+                      {((fixture as any).home_team?.clubs?.logo_url) && (
+                        <img src={(fixture as any).home_team.clubs.logo_url} className="w-24 h-24 object-contain drop-shadow-xl" alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+                      )}
+                      <span className="text-4xl leading-tight text-balance">{(fixture as any).home_team?.clubs?.name || (fixture as any).home_team?.name}</span>
+                    </div>
+                    <div className="px-8 py-4 mx-4 bg-white/10 rounded-2xl border border-white/5 whitespace-nowrap text-5xl shadow-2xl">
                        {(() => {
                           const { homeScore, awayScore } = calculateMatchScore(fixture, matchEvents);
                           return `${homeScore}:${awayScore}`;
                        })()}
                     </div>
-                    <span className="flex-1 text-left truncate">{(fixture as any).away_team?.name}</span>
-                  </div>
-                  {fixture.match_type && (
-                    <div className="text-zinc-500 font-bold uppercase tracking-[0.4em] text-2xl mt-4">
-                       {fixture.match_type === 'reserve' ? 'Reserve' : 'KAMPFMANNSCHAFT'}
+                    <div className="flex-1 flex flex-col items-center justify-start gap-4 text-center">
+                      {((fixture as any).away_team?.clubs?.logo_url) && (
+                        <img src={(fixture as any).away_team.clubs.logo_url} className="w-24 h-24 object-contain drop-shadow-xl" alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+                      )}
+                      <span className="text-4xl leading-tight text-balance">{(fixture as any).away_team?.clubs?.name || (fixture as any).away_team?.name}</span>
                     </div>
-                  )}
+                  </div>
+                  
+                  <div className="flex items-center justify-center gap-6 mt-4 opacity-80 text-2xl font-bold tracking-widest uppercase">
+                    {fixture.match_type && (
+                      <span className="text-amber-500">
+                         {fixture.match_type === 'reserve' ? 'Reserve' : 'KAMPFMANNSCHAFT'}
+                      </span>
+                    )}
+                    {fixture.match_type && <span className="w-2 h-2 rounded-full bg-white/20" />}
+                    {fixture.round_number && <span>Runde {fixture.round_number}</span>}
+                    {fixture.round_number && <span className="w-2 h-2 rounded-full bg-white/20" />}
+                    {fixture.kickoff_at && <span>{new Date(fixture.kickoff_at).toLocaleDateString('de-DE')}</span>}
+                  </div>
                 </div>
               </div>
 
               {/* CENTER SECTION: Player Card */}
-              <div className="flex-1 flex items-center justify-center relative w-full z-10 scale-[1.7] my-32">
-                 <div className="shadow-[0_40px_100px_rgba(251,191,36,0.3)] rounded-[32px]">
-                   <PlayerCard 
-                     player={mvp.players || { full_name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' } as any} 
-                     clubLogo={mvp.players?.teams?.clubs?.logo_url}
-                     jerseyNumber={mvp.jersey_number}
-                     lineupRole={mvp.lineup_role}
-                     isTopPerformer={true}
-                   />
+              <div className="flex-1 flex flex-col items-center justify-center relative w-full z-10 my-10">
+                 <div className="flex flex-col items-center gap-10" style={{ transform: 'scale(1.5)', transformOrigin: 'center center' }}>
+                   <div className="shadow-[0_40px_100px_rgba(251,191,36,0.3)] rounded-[32px]">
+                     <PlayerCard 
+                       player={{ ...(mvp.players || { full_name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' }), claimed_by_user_id: null } as any} 
+                       clubLogo={mvp.players?.teams?.clubs?.logo_url}
+                       jerseyNumber={null}
+                     />
+                   </div>
+                   {mvp.lineup_role && (
+                     <div className={`px-10 py-3 rounded-full font-black text-sm italic uppercase tracking-[0.2em] text-[#09090b] shadow-2xl ${mvp.lineup_role === 'starter' ? 'bg-[#34d399]' : 'bg-[#fbbf24]'}`}>
+                       {mvp.lineup_role === 'starter' ? 'STARTELF' : 'EINGEWECHSELT'}
+                     </div>
+                   )}
                  </div>
               </div>
 
               {/* BOTTOM SECTION: Stats & Sponsor */}
-              <div className="w-full pb-32 px-16 flex flex-col items-center gap-12 relative z-10 text-white">
-                <div className="w-full flex items-center justify-center gap-x-12 gap-y-8 flex-wrap">
-                   {/* Rating */}
-                   <div className="flex flex-col items-center bg-zinc-900 border border-white/10 rounded-[2rem] p-8 min-w-[280px]">
-                     <span className="text-zinc-400 font-black uppercase text-xl tracking-widest mb-4">Neues Rating</span>
-                     <div className="text-7xl font-black italic flex items-center gap-4 text-white">
-                       {mvp.new_overall} 
-                       <span className="text-4xl text-emerald-500 font-bold tracking-tight">+{safeFixed(mvp.delta_overall)}</span>
+              <div className="w-full pb-20 px-16 flex flex-col items-center gap-8 relative z-10 text-white">
+                 <div className="flex flex-col items-center gap-8 w-full max-w-[900px]">
+                   {/* Match Stats Row */}
+                   <div className="flex items-center justify-center gap-16 bg-zinc-900 border border-white/10 rounded-[3rem] px-16 py-10 w-full shadow-2xl">
+                     <div className="flex flex-col items-center gap-4">
+                        <span className="text-6xl">⚽</span>
+                        <div className="flex flex-col items-center">
+                           <span className="text-5xl font-black italic">{mvp.goal_count || 0}</span>
+                           <span className="text-zinc-500 text-lg font-black uppercase tracking-widest mt-1">Tore</span>
+                        </div>
+                     </div>
+                     <div className="w-px h-24 bg-white/10" />
+                     <div className="flex flex-col items-center gap-4">
+                        <span className="text-6xl">👟</span>
+                        <div className="flex flex-col items-center">
+                           <span className="text-5xl font-black italic">{mvp.assists || 0}</span>
+                           <span className="text-zinc-500 text-lg font-black uppercase tracking-widest mt-1">Assists</span>
+                        </div>
+                     </div>
+                     <div className="w-px h-24 bg-white/10" />
+                     <div className="flex flex-col items-center gap-3">
+                        <div className="text-emerald-500"><ThumbsUp className="w-16 h-16" strokeWidth={2.5} /></div>
+                        <div className="flex flex-col items-center">
+                           <span className="text-5xl font-black italic text-emerald-500">{mvp.positive_votes || 0}</span>
+                           <span className="text-zinc-500 text-lg font-black uppercase tracking-widest mt-1">Upvotes</span>
+                        </div>
                      </div>
                    </div>
 
-                   {/* Other Stats */}
-                   {(mvp.goal_count > 0 || (mvp.assists || 0) > 0 || (mvp.votes_up || 0) > 0) && (
-                     <div className="flex flex-col gap-6 bg-zinc-900 border border-white/10 rounded-[2rem] p-8 min-w-[360px] justify-center">
-                       {mvp.goal_count > 0 && (
-                         <div className="flex items-center justify-between text-4xl font-black italic w-full">
-                            <span className="text-zinc-500 uppercase tracking-widest">Tore</span>
-                            <div className="flex items-center justify-end gap-3">⚽ {mvp.goal_count}</div>
-                         </div>
-                       )}
-                       {(mvp.assists || 0) > 0 && (
-                         <div className="flex items-center justify-between text-4xl font-black italic w-full">
-                            <span className="text-zinc-500 uppercase tracking-widest">Vorlagen</span>
-                            <div className="flex items-center justify-end gap-3">🎯 {mvp.assists}</div>
-                         </div>
-                       )}
-                       {(mvp.votes_up || 0) > 0 && (
-                         <div className="flex items-center justify-between text-4xl font-black italic w-full">
-                            <span className="text-zinc-500 uppercase tracking-widest">Upvotes</span>
-                            <div className="flex items-center justify-end gap-3 text-emerald-500"><ThumbsUp className="w-10 h-10" /> {mvp.votes_up}</div>
-                         </div>
-                       )}
+                   {/* Row below stats: Rating */}
+                   <div className="flex flex-col items-center justify-center bg-zinc-900 border border-white/10 rounded-[3rem] p-8 w-full shadow-2xl">
+                     <span className="text-zinc-500 font-black uppercase text-2xl tracking-[0.3em] mb-4">Neues Rating</span>
+                     <div className="text-7xl font-black italic flex items-center gap-4 text-white">
+                       {mvp.new_overall} <span className="text-3xl text-zinc-500">OVR</span>
+                       <span className="text-4xl text-emerald-500 font-bold tracking-tight">+{safeFixed(mvp.delta_overall)}</span>
                      </div>
-                   )}
-                </div>
+                   </div>
+                 </div>
 
                 {/* MVP Sponsor Inline */}
                 {(fixture as any).mvp_sponsor_name && (
                   <div className="mt-8 flex flex-col items-center gap-6 p-8 bg-amber-500/10 rounded-3xl border border-amber-500/30 w-full max-w-[800px]">
                     <span className="text-xl font-black uppercase tracking-[0.4em] text-amber-500/80">präsentiert von</span>
-                    <div className="flex items-center justify-center gap-8">
+                    <div className="flex flex-col items-center justify-center gap-6">
                       {(fixture as any).mvp_sponsor_logo_url && (
                         <img 
                            src={(fixture as any).mvp_sponsor_logo_url} 
                            alt={(fixture as any).mvp_sponsor_name} 
-                           className="h-20 object-contain drop-shadow-lg" 
+                           className="h-28 object-contain drop-shadow-lg" 
                            crossOrigin="anonymous" 
                            referrerPolicy="no-referrer"
                         />
@@ -1078,6 +1103,19 @@ const MatchResult: React.FC = () => {
         </div>
       </div>
     </div>
+    
+    {/* Admin Debug Section for MVP Data */}
+    {isAdmin && mvp && (
+      <div className="mt-8 p-4 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-400">
+        <h4 className="font-bold text-white mb-2">MVP Share Data (Debug):</h4>
+        <div>fixtureId: {fixture?.id}</div>
+        <div>playerId: {mvp.player_id}</div>
+        <div>votesUp: {mvp.positive_votes || 0}</div>
+        <div>votesDown: {mvp.negative_votes || 0}</div>
+        <div>votesNeutral: {mvp.neutral_votes || 0}</div>
+        <div>Quelle: player_rating_history</div>
+      </div>
+    )}
     </SafeAreaWrapper>
   );
 };

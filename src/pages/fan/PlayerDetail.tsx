@@ -221,7 +221,18 @@ export const PlayerDetail: React.FC = () => {
               className="absolute -inset-8 blur-3xl rounded-full opacity-30 animate-pulse"
               style={{ backgroundColor: glowColor }}
             />
-            <div ref={exportRef} className="relative z-10 w-fit mx-auto">
+            
+            <div className="absolute -left-[9999px] top-0 pointer-events-none opacity-0 flex">
+               <div ref={exportRef} className="bg-transparent w-[350px] h-[490px]">
+                   <PlayerCard 
+                     player={{ ...player, claimed_by_user_id: null } as any} 
+                     clubLogo={clubLogo}
+                     jerseyNumber={null}
+                   />
+               </div>
+            </div>
+
+            <div className="relative z-10 w-fit mx-auto">
                 <PlayerCard 
                   player={player} 
                   clubLogo={clubLogo}
