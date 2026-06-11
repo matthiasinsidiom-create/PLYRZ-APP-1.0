@@ -363,7 +363,10 @@ export const PlayerCard = React.memo(({
       onClick={onClick}
     >
       {/* BASE LAYER: FRAME */}
-      <div
+      <img
+        src={frameSrc}
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
         style={{
           ...styles.frame,
           width: `${100 * frameScale}%`,
@@ -372,12 +375,9 @@ export const PlayerCard = React.memo(({
           position: 'absolute',
           left: `${50 + frameX}%`,
           top: `${50 + frameY}%`,
-          backgroundImage: `url("${frameSrc}")`,
-          backgroundSize: '100% 100%',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
+          objectFit: 'fill'
         }} 
-        title={`${tier} card frame`} 
+        alt={`${tier} card frame`} 
       />
       
       {/* OVERALL & POSITION */}

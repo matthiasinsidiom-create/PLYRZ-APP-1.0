@@ -221,16 +221,16 @@ export const PlayerDetail: React.FC = () => {
               className="absolute -inset-8 blur-3xl rounded-full opacity-30 animate-pulse"
               style={{ backgroundColor: glowColor }}
             />
-            <div className="relative z-10">
-              <div ref={exportRef} className="bg-transparent rounded-3xl" style={{ overflow: 'hidden' }}>
+            <div ref={exportRef} className="relative z-10 w-fit mx-auto">
                 <PlayerCard 
                   player={player} 
                   clubLogo={clubLogo}
                   jerseyNumber={player.jersey_number}
                   onClick={() => navigate(`/players/${player.id}`)}
                 />
-              </div>
+            </div>
 
+            <div className="relative z-10">
               {player.claimed_by_user_id === user?.id && (
                 <button 
                   onClick={handleShare}
