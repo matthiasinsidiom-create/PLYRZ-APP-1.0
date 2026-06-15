@@ -74,7 +74,14 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       .eq('fixture_id', fixtureId);
     
     if (lineupError) throw new Error(`Lineup fetch failed: ${lineupError.message}`);
-    if (!lineupData || lineupData.length === 0) throw new Error('No players in lineup for this fixture.');
+    if (!lineupData || lineupData.length === 0) {
+      console.log(`[PROCESSOR] No players in lineup for ${fixtureId}. Marking as processed and skipping.`);
+      await supabase
+        .from('fixtures')
+        .update({ results_processed_at: now })
+        .eq('id', fixtureId);
+      return;
+    }
 
     // 3. Load Player Stats
     const playerIds = lineupData.map((e: any) => e.player_id).filter(Boolean);
