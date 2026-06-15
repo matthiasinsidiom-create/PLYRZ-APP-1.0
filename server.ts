@@ -436,6 +436,22 @@ async function startServer() {
 
       for (const fixture of fixtures) {
         console.log(`[CRON] Processing fixture ${fixture.id}...`);
+        
+        // Prevent remote 500 errors by checking lineup locally first
+        const { count } = await supabaseAdmin
+          .from('fixture_lineups')
+          .select('*', { count: 'exact', head: true })
+          .eq('fixture_id', fixture.id);
+
+        if (count === 0) {
+          console.log(`[CRON] No players in lineup for ${fixture.id}. Marking as processed and skipping.`);
+          await supabaseAdmin
+            .from('fixtures')
+            .update({ results_processed_at: now })
+            .eq('id', fixture.id);
+          continue;
+        }
+
         const response = await fetch(`${SUPABASE_URL}/functions/v1/match-processor`, {
           method: 'POST',
           headers: {

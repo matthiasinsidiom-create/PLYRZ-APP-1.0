@@ -20,6 +20,7 @@ import MatchResult from './pages/fan/MatchResult';
 import PlayerList from './pages/fan/PlayerList';
 import PlayerDetail from './pages/fan/PlayerDetail';
 import { Leaderboard } from './pages/Leaderboard';
+import { SeasonTop3 } from './pages/fan/SeasonTop3';
 import { Profile } from './pages/fan/Profile';
 import { RatingLogicScreen } from './pages/fan/RatingLogicScreen';
 import { VoteList } from './pages/fan/VoteList';
@@ -208,6 +209,7 @@ const AppContent: React.FC = () => {
           <Route path="/players" element={<PlayerList />} />
           <Route path="/players/:id" element={<PlayerDetail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/season-top3" element={<SeasonTop3 />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/rating-logic" element={<RatingLogicScreen />} />
           <Route path="/vote" element={<VoteList />} />

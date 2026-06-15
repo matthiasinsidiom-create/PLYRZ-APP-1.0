@@ -112,6 +112,25 @@ export const Leaderboard: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
+        {/* Season End Actions */}
+        <button
+          onClick={() => navigate('/season-top3')}
+          className="w-full bg-[#18181b] border border-amber-500/20 rounded-[2rem] p-5 flex items-center justify-between shadow-2xl hover:bg-zinc-900 transition-all active:scale-95"
+        >
+           <div className="flex items-center gap-4">
+             <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center">
+               <Trophy className="w-6 h-6 text-amber-500" />
+             </div>
+             <div className="text-left">
+               <div className="text-[10px] font-black uppercase tracking-widest text-amber-500/80 mb-0.5">Saisonende</div>
+               <div className="font-black italic text-lg text-white">Top 3 der Saison</div>
+             </div>
+           </div>
+           <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center">
+             <ChevronLeft className="w-4 h-4 text-zinc-500 rotate-180" />
+           </div>
+        </button>
+
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">

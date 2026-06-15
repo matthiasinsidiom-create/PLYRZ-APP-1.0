@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { appConfig } from '../lib/config';
 import { calculateDistance } from '../lib/geo';
 import { League, Club, Team, Player, Fixture, Profile, FixtureLineup, PlayerStats, PlayerRatingHistory, MatchEvent, ClubAdmin } from '../types';
-import { mapPlayerWithStats } from '../lib/stats';
+import { mapPlayerWithStats, resolveLatestStats } from '../lib/stats';
 import { User } from '@supabase/supabase-js';
 
 const FALLBACK_LEAGUES: League[] = [
@@ -2667,6 +2667,60 @@ export const supabaseService = {
         away_team: { name: string, clubs: { name: string } } 
       } 
     })[];
+  },
+
+  async getSeasonTop10Players() {
+    // 1. Reuse getPlayers to securely fetch players with stats (handles RLS & Proxy)
+    const allPlayers = await this.getPlayers();
+
+    // 2. Fetch rating history
+    const { data: history, error: hErr } = await supabase
+      .from('player_rating_history')
+      .select('player_id, is_mvp, positive_votes, negative_votes, goal_count, assists, red_count, delta_overall');
+
+    if (hErr) throw hErr;
+
+    const statsMap = new Map();
+    for (const h of history || []) {
+      if (!statsMap.has(h.player_id)) {
+        statsMap.set(h.player_id, {
+          mvps: 0, upvotes: 0, downvotes: 0, goals: 0, assists: 0,
+          red_cards: 0, delta_overall: 0, appearances: 0
+        });
+      }
+      const s = statsMap.get(h.player_id);
+      s.mvps += (h.is_mvp ? 1 : 0);
+      s.upvotes += (h.positive_votes || 0);
+      s.downvotes += (h.negative_votes || 0);
+      s.goals += (h.goal_count || 0);
+      s.assists += (h.assists || 0);
+      s.red_cards += (h.red_count || 0);
+      s.delta_overall += (h.delta_overall || 0);
+      s.appearances += 1;
+    }
+
+    // 3. Map players & calculate score
+    const rankedPlayers = allPlayers.map(p => {
+      const s = statsMap.get(p.id) || { mvps: 0, upvotes: 0, downvotes: 0, goals: 0, assists: 0, red_cards: 0, delta_overall: 0, appearances: 0 };
+      
+      const score = 
+        (s.mvps * 30) +
+        (s.upvotes * 1) +
+        (s.goals * 5) +
+        (s.assists * 4) +
+        (s.appearances * 2) +
+        (s.delta_overall * 10) -
+        (s.downvotes * 1) -
+        (s.red_cards * 10);
+
+      return {
+        ...p,
+        season_stats: s,
+        season_score: parseFloat(score.toFixed(2))
+      };
+    }).sort((a, b) => b.season_score - a.season_score);
+
+    return rankedPlayers.slice(0, 10);
   },
 
   async savePushToken(token: string, platform: string) {

@@ -37,6 +37,7 @@ export const Dashboard: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [topPlayers, setTopPlayers] = useState<Player[]>([]);
+  const [seasonWinner, setSeasonWinner] = useState<any>(null);
   const [loadingTopPlayers, setLoadingTopPlayers] = useState(true);
   const [mvpKM, setMvpKM] = useState<Player | null>(null);
   const [mvpReserve, setMvpReserve] = useState<Player | null>(null);
@@ -46,6 +47,89 @@ export const Dashboard: React.FC = () => {
   const [activeCardIndex, setActiveCardIndex] = useState(0);
   const carouselRef = useRef<HTMLDivElement>(null);
   
+  const [showSeasonTeaser, setShowSeasonTeaser] = useState(false);
+
+  useEffect(() => {
+    // Saisonende: 08.06.2026
+    const seasonEnd = new Date('2026-06-08T00:00:00+02:00');
+    // Saisonstart: 21.08.2026 (erstes Meisterschaftsspiel)
+    const exactSeasonStart = new Date('2026-08-21T00:00:00+02:00');
+    const now = new Date();
+
+    const isEnded = now >= seasonEnd;
+    const isStartedByDate = now >= exactSeasonStart;
+    
+    // Dynamischer Check, ob Meisterschaftsspiel gestartet hat
+    const hasStartedDynamically = fixtures.some(f => 
+      (f.status === 'live' || f.status === 'finished') && 
+      new Date(f.kickoff_at) >= exactSeasonStart
+    );
+
+    if (isEnded && !isStartedByDate && !hasStartedDynamically) {
+      setShowSeasonTeaser(true);
+    } else {
+      setShowSeasonTeaser(false);
+    }
+  }, [fixtures]);
+
+  const renderSeasonEndTeaser = () => {
+    const winner = seasonWinner || (topPlayers && topPlayers[0]) || null;
+    if (!winner) return null;
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full bg-[#050505] backdrop-blur-3xl border border-amber-500/20 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 flex flex-col items-center justify-between relative overflow-hidden shadow-2xl"
+      >
+        {/* Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] sm:w-[350px] sm:h-[350px] bg-amber-500/15 blur-[80px] sm:blur-[100px] pointer-events-none rounded-full z-0" />
+        
+        {/* Vignette */}
+        <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.9)] z-0 pointer-events-none"></div>
+
+        {/* Header */}
+        <div className="text-center mb-8 relative z-10 w-full flex flex-col items-center">
+          <div className="inline-flex items-center justify-center p-3 sm:p-4 bg-gradient-to-br from-amber-500/20 to-yellow-600/10 border border-amber-500/30 rounded-full mb-4 shadow-[0_0_40px_rgba(245,158,11,0.2)]">
+            <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 drop-shadow-md" />
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-transparent px-2 w-full truncate drop-shadow-lg">TOP 10 DER SAISON</h2>
+          <div className="text-[10px] sm:text-[11px] font-bold text-amber-500/80 uppercase tracking-[0.2em] mt-1">
+            PLYRZ Award 2025/26
+          </div>
+        </div>
+
+        {/* Card & Details */}
+        <div className="flex flex-col items-center relative z-10 w-full mb-8">
+          <div className="relative w-[175px] h-[245px] sm:w-[210px] sm:h-[294px] drop-shadow-2xl z-10 mx-auto mb-6">
+            <div className="absolute inset-0 bg-amber-500/20 blur-[40px] rounded-full z-0"></div>
+            <div className="absolute top-0 left-0 w-[350px] h-[490px] origin-top-left scale-[0.5] sm:scale-[0.6] z-10">
+              <PlayerCard 
+                player={winner} 
+                clubLogo={teams.find(t => t.id === winner.team_id)?.clubs?.logo_url}
+              />
+            </div>
+          </div>
+          
+          <div className="text-center space-y-1 w-full">
+            <div className="text-xl sm:text-2xl font-black italic uppercase text-white tracking-widest drop-shadow-md truncate px-2">🥇 {winner.full_name}</div>
+            <div className="text-xs sm:text-sm font-black uppercase tracking-widest text-zinc-400">
+              OVR <span className="text-white italic">{winner.current_stats?.overall || '-'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Button */}
+        <button 
+          onClick={() => navigate('/season-top3')}
+          className="w-full relative z-10 bg-amber-500 text-black font-black italic uppercase tracking-widest py-4 rounded-full sm:rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-95 text-sm sm:text-base"
+        >
+          TOP 10 ANSEHEN
+        </button>
+      </motion.div>
+    );
+  };
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const scrollCenter = container.scrollLeft + container.clientWidth / 2;
@@ -369,6 +453,11 @@ export const Dashboard: React.FC = () => {
   };
 
   const renderHeroBlock = () => {
+    // 0. Season Teaser OVERRIDES everything if season is over and no live/voting matches
+    if (showSeasonTeaser && heroStatus !== 'live' && heroStatus !== 'voting') {
+      return renderSeasonEndTeaser();
+    }
+
     // 1. Result Hero (KM + Reserve)
     if (heroStatus === 'result' && (mvpKM || mvpReserve)) {
       const renderMVPHero = (mvp: Player, fixture: Fixture, teamTitle: string) => (
@@ -607,6 +696,11 @@ export const Dashboard: React.FC = () => {
     try {
       const top = await supabaseService.getTopPlayers(6);
       setTopPlayers(top);
+      
+      const top10 = await supabaseService.getSeasonTop10Players();
+      if (top10 && top10.length > 0) {
+        setSeasonWinner(top10[0]);
+      }
     } catch (err) {
       console.error('Error loading top players:', err);
     } finally {
