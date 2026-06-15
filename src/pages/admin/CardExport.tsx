@@ -145,7 +145,7 @@ const CardExport: React.FC = () => {
     setExporting(true);
     setExportProgress(0);
     try {
-      const sanitizedName = (player.last_name || player.full_name || 'player').replace(/[^a-z0-9ßäöüÄÖÜ]/gi, '_').toLowerCase();
+      const sanitizedName = (player.full_name || 'player').replace(/[^a-z0-9ßäöüÄÖÜ]/gi, '_').toLowerCase();
       
       const frontDataUrl = await htmlToImage.toPng(frontNode, getExportOptions());
       saveAs(frontDataUrl, `${sanitizedName}_card.png`);

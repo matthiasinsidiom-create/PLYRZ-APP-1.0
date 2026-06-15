@@ -44,13 +44,13 @@ export function calculateMatchScore(fixture: Fixture | null, events: MatchEvent[
 
   // 2. Count Goals directly and precisely by team
   const homeGoals = matchEvents.filter(e => 
-    (e.event_type === 'goal' && e.team_id === fixture.home_team_id) ||
-    (e.event_type === 'opponent_goal' && e.team_id === fixture.away_team_id)
+    (e.event_type === 'goal' || e.event_type === 'opponent_goal') && 
+    e.team_id === fixture.home_team_id
   ).length;
 
   const awayGoals = matchEvents.filter(e => 
-    (e.event_type === 'goal' && e.team_id === fixture.away_team_id) ||
-    (e.event_type === 'opponent_goal' && e.team_id === fixture.home_team_id)
+    (e.event_type === 'goal' || e.event_type === 'opponent_goal') && 
+    e.team_id === fixture.away_team_id
   ).length;
 
   let homeScore = homeGoals;
