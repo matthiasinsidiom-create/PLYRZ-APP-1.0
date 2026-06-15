@@ -787,7 +787,16 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="space-y-8">
-              {currentRound && (
+              {showSeasonTeaser ? (
+                <div className="py-12 text-center space-y-4 bg-zinc-900/40 backdrop-blur-md rounded-[2rem] border border-dashed border-white/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none"></div>
+                  <Calendar className="w-8 h-8 text-amber-500/50 mx-auto relative z-10" strokeWidth={1} />
+                  <div className="relative z-10 space-y-1">
+                    <p className="text-white text-base font-black italic uppercase tracking-widest">Saison 2025/2026 beendet</p>
+                    <p className="text-zinc-400 text-[11px] uppercase tracking-widest font-bold">Wir sehen uns in der neuen Saison 2026/2027</p>
+                  </div>
+                </div>
+              ) : currentRound ? (
                 <div className="text-center space-y-4">
                   <div className="inline-flex flex-col items-center">
                     <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/50 mb-1">Aktuell</span>
@@ -808,9 +817,7 @@ export const Dashboard: React.FC = () => {
                     }
                   </div>
                 </div>
-              )}
-              
-              {(!currentRound || fixtures.filter(f => f.round_number === currentRound).length === 0) && (
+              ) : (
                 <div className="py-12 text-center space-y-3 bg-zinc-900/10 rounded-[2rem] border border-dashed border-white/5">
                   <Calendar className="w-8 h-8 text-zinc-800 mx-auto" strokeWidth={1} />
                   <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Keine aktuellen Termine</p>
