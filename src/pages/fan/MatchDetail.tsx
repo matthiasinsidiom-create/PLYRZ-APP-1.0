@@ -1724,7 +1724,7 @@ export const MatchDetail: React.FC = () => {
                 vote={userVotes[entry.player_id] || null}
                 onVote={(vote) => handleVote(entry.player_id, vote)}
                 loading={votingLoading === entry.player_id}
-                disabled={!isVotingOpen || !isCheckedIn || (userTeamId !== null && userTeamId !== entry.team_id)}
+                disabled={!isVotingOpen || (userTeamId !== null && userTeamId !== entry.team_id)}
                 jerseyNumber={entry.jersey_number}
                 lineupRole={entry.lineup_role as 'starter' | 'sub'}
                 onClick={() => navigate(`/players/${entry.player_id}`)}
@@ -1769,7 +1769,7 @@ export const MatchDetail: React.FC = () => {
                 vote={userVotes[entry.player_id] || null}
                 onVote={(vote) => handleVote(entry.player_id, vote)}
                 loading={votingLoading === entry.player_id}
-                disabled={!isVotingOpen || !isCheckedIn || (userTeamId !== null && userTeamId !== entry.team_id)}
+                disabled={!isVotingOpen || (userTeamId !== null && userTeamId !== entry.team_id)}
                 jerseyNumber={entry.jersey_number}
                 lineupRole={entry.lineup_role as 'starter' | 'sub'}
                 onClick={() => navigate(`/players/${entry.player_id}`)}
