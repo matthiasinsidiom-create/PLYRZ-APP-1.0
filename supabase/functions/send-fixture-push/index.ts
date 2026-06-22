@@ -226,8 +226,52 @@ serve(async (req) => {
     const host = apnsEnv === 'production' ? 'api.push.apple.com' : 'api.sandbox.push.apple.com';
 
     // Setup FCM
-    const fcmServerKey = Deno.env.get('FCM_SERVER_KEY');
-    const canSendFCM = !!fcmServerKey;
+    const firebaseProjectId = Deno.env.get('FIREBASE_PROJECT_ID');
+    const firebaseClientEmail = Deno.env.get('FIREBASE_CLIENT_EMAIL');
+    const firebasePrivateKey = Deno.env.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
+
+    let fcmAccessToken = "";
+    let canSendFCM = true;
+
+    if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
+      canSendFCM = false;
+    }
+
+    if (canSendFCM) {
+      try {
+        const privateKey = await jose.importPKCS8(firebasePrivateKey!, "RS256");
+        const fcmJwt = await new jose.SignJWT({
+          iss: firebaseClientEmail,
+          sub: firebaseClientEmail,
+          aud: "https://oauth2.googleapis.com/token",
+          scope: "https://www.googleapis.com/auth/firebase.messaging"
+        })
+          .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+          .setIssuedAt(Math.floor(Date.now() / 1000))
+          .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
+          .sign(privateKey);
+
+        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            assertion: fcmJwt
+          })
+        });
+
+        if (!tokenResponse.ok) {
+          console.error("FCM Access Token fetch failed", await tokenResponse.text());
+          canSendFCM = false;
+        } else {
+          const tokenData = await tokenResponse.json();
+          fcmAccessToken = tokenData.access_token;
+        }
+      } catch (e) {
+        console.error("FCM setup failed", e);
+        canSendFCM = false;
+      }
+    }
 
     let iosSent = 0;
     let androidSent = 0;
@@ -334,31 +378,32 @@ serve(async (req) => {
           } catch(e) { /* ignore uniqueness issues */ }
         }
       } else if (pt.platform === 'android') {
-        if (!canSendFCM) {
+        if (!canSendFCM || !fcmAccessToken) {
           failedCount++;
-          results.push({ user_id: pt.user_id, platform: 'android', status: 'skipped', reason: 'Missing FCM credentials' });
+          results.push({ user_id: pt.user_id, platform: 'android', status: 'skipped', reason: 'Missing FCM credentials or token' });
           // Note: we do not log missing config to DB to avoid DB bloat when FCM isn't setup.
           continue;
         }
 
         const payload = {
-          to: pt.token,
-          notification: {
-            title: title,
-            body: body,
-            sound: "default"
-          },
-          data: {
-            type,
-            fixtureId
+          message: {
+            token: pt.token,
+            notification: {
+              title: title,
+              body: body
+            },
+            data: {
+              type,
+              fixtureId
+            }
           }
         };
 
         try {
-          const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+          const response = await fetch(`https://fcm.googleapis.com/v1/projects/${firebaseProjectId}/messages:send`, {
             method: "POST",
             headers: {
-              "Authorization": `key=${fcmServerKey}`,
+              "Authorization": `Bearer ${fcmAccessToken}`,
               "Content-Type": "application/json"
             },
             body: JSON.stringify(payload)
@@ -373,8 +418,7 @@ serve(async (req) => {
             try { providerResp = JSON.parse(text); } catch(e) { providerResp = { raw: text }; }
           }
 
-          // Check if FCM indicated failure in response even with 200 OK
-          if (isSuccess && providerResp?.failure && providerResp.failure > 0) {
+          if (isSuccess && providerResp?.error) {
              isSuccess = false;
           }
 
