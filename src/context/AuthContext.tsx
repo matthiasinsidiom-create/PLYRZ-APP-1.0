@@ -13,6 +13,8 @@ interface AuthContextType {
   clubAdminLeagueIds: string[];
   clubAdminClubIds: string[];
   profileError: any | null;
+  isPasswordRecovery: boolean;
+  clearPasswordRecovery: () => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -27,6 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [clubAdminLeagueIds, setClubAdminLeagueIds] = useState<string[]>([]);
   const [clubAdminClubIds, setClubAdminClubIds] = useState<string[]>([]);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     console.log('AuthContext: Fetching initial session...');
@@ -78,7 +81,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initAuth = async () => {
       console.log('AuthContext: initAuth starting...');
       
-      // Check if we can access localStorage (important for iframes)
+      if (window.location.hash) {
+        if (window.location.hash.includes('type=recovery')) {
+          setIsPasswordRecovery(true);
+        }
+      }
+      
       try {
         localStorage.setItem('test', 'test');
         localStorage.removeItem('test');
@@ -156,6 +164,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('AuthContext: Auth state changed', { event: _event, session: !!session });
       
       if (!isMounted) return;
+
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
 
       if (_event === 'INITIAL_SESSION' || _event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
         setSession(session);
@@ -332,6 +344,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(null);
   };
 
+  const clearPasswordRecovery = () => setIsPasswordRecovery(false);
+
   return (
     <AuthContext.Provider value={{
       session,
@@ -343,6 +357,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clubAdminLeagueIds,
       clubAdminClubIds,
       profileError,
+      isPasswordRecovery,
+      clearPasswordRecovery,
       signOut,
       refreshProfile
     }}>

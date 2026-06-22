@@ -29,10 +29,11 @@ import { motion } from 'framer-motion';
 import { setupPushNotifications } from './lib/pushNotifications';
 import { supabaseService } from './services/supabaseService';
 
+import { ResetPassword } from './pages/ResetPassword';
 import { TeamAdminDashboard } from './pages/team-admin/Dashboard';
 
 const AppContent: React.FC = () => {
-  const { user, profile, loading, isAdmin, hasAdminAccess, profileError, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isAdmin, hasAdminAccess, profileError, refreshProfile, signOut, isPasswordRecovery } = useAuth();
   const location = useLocation();
   const [showForceStart, setShowForceStart] = React.useState(false);
 
@@ -42,6 +43,7 @@ const AppContent: React.FC = () => {
       hasProfile: !!profile, 
       loading, 
       isAdmin, 
+      isPasswordRecovery,
       hasProfileError: !!profileError 
     });
     
@@ -49,7 +51,7 @@ const AppContent: React.FC = () => {
     if (user && profile) {
       setupPushNotifications();
     }
-  }, [user, profile, loading, isAdmin, profileError]);
+  }, [user, profile, loading, isAdmin, profileError, isPasswordRecovery]);
   
   React.useEffect(() => {
     if (loading) {
@@ -57,6 +59,12 @@ const AppContent: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [loading]);
+
+  // If in password recovery flow, show reset password screen regardless of loading state 
+  // (unless it's checking initial auth)
+  if (isPasswordRecovery && !loading) {
+    return <ResetPassword />;
+  }
 
   // Root navigation logic
   // 1. Auth or Profile loading

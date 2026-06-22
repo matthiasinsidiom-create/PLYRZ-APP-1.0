@@ -4,19 +4,39 @@ import { motion } from 'framer-motion';
 import { LogIn, UserPlus } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const [isRegister, setIsRegister] = useState(false);
+  const [view, setView] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const mapAuthError = (errMessage: string) => {
+    const msg = errMessage.toLowerCase();
+    if (msg.includes('email not confirmed')) return 'Bitte bestätige zuerst deine E-Mail-Adresse. Prüfe deinen Posteingang.';
+    if (msg.includes('invalid login credentials')) return 'E-Mail oder Passwort ist falsch.';
+    if (msg.includes('user already registered')) return 'Diese E-Mail-Adresse wird bereits verwendet.';
+    if (msg.includes('password should be at least')) return 'Das Passwort muss mindestens 6 Zeichen lang sein.';
+    return errMessage;
+  };
+
+  const getRedirectUrl = () => {
+    // If it's Capacitor/native, use a custom URL scheme or let Supabase use its default SITE_URL.
+    // For web preview, window.location.origin is fine.
+    if (window.location.origin.includes('localhost') || window.location.origin.startsWith('capacitor://')) {
+      return undefined; // Let Supabase use the configured SITE_URL
+    }
+    return window.location.origin;
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setLoading(true);
     try {
-      if (isRegister) {
+      if (view === 'register') {
         const { error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -24,12 +44,22 @@ export const Login: React.FC = () => {
             data: {
               display_name: displayName,
             },
-            emailRedirectTo: window.location.origin
+            emailRedirectTo: getRedirectUrl()
           }
         });
         if (signUpError) throw signUpError;
         
-        alert('Registrierung erfolgreich! Bitte überprüfe deine E-Mails zur Verifizierung.');
+        setSuccessMsg('Bitte bestätige deine E-Mail-Adresse. Danach kannst du dich einloggen.');
+        setView('login');
+        setPassword('');
+      } else if (view === 'forgot') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: getRedirectUrl()
+        });
+        if (resetError) throw resetError;
+        
+        setSuccessMsg('Eine E-Mail zum Zurücksetzen deines Passworts wurde versendet.');
+        setView('login');
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -38,7 +68,7 @@ export const Login: React.FC = () => {
         if (signInError) throw signInError;
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(mapAuthError(err.message));
     } finally {
       setLoading(false);
     }
@@ -62,7 +92,13 @@ export const Login: React.FC = () => {
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4 bg-black/40 p-8 rounded-3xl border border-white/10 backdrop-blur-xl">
-          {isRegister && (
+          {successMsg && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl text-left">
+              <p className="text-emerald-500 text-sm font-medium">{successMsg}</p>
+            </div>
+          )}
+
+          {view === 'register' && (
             <div className="space-y-2 text-left">
               <label className="text-xs font-bold uppercase tracking-widest text-zinc-500 ml-1">Anzeigename</label>
               <input 
@@ -71,7 +107,7 @@ export const Login: React.FC = () => {
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
                 placeholder="Dein Name"
-                required={isRegister}
+                required={view === 'register'}
               />
             </div>
           )}
@@ -86,42 +122,69 @@ export const Login: React.FC = () => {
               required
             />
           </div>
-          <div className="space-y-2 text-left">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-500 ml-1">Passwort</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
-              placeholder="••••••••"
-              required
-            />
-          </div>
+          
+          {view !== 'forgot' && (
+            <div className="space-y-2 text-left">
+              <div className="flex items-center justify-between ml-1">
+                <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Passwort</label>
+                {view === 'login' && (
+                  <button 
+                    type="button" 
+                    onClick={() => { setView('forgot'); setError(''); setSuccessMsg(''); }}
+                    className="text-[10px] text-emerald-500 hover:text-emerald-400 font-bold uppercase tracking-wider"
+                  >
+                    Passwort vergessen?
+                  </button>
+                )}
+              </div>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+                placeholder="••••••••"
+                required={view !== 'forgot'}
+              />
+            </div>
+          )}
 
           {error && <p className="text-red-400 text-sm font-medium">{error}</p>}
 
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-500 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-400 transition-colors disabled:opacity-50"
+            className="w-full bg-emerald-500 text-black font-black py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-400 transition-colors disabled:opacity-50 mt-4"
           >
             {loading ? (
               <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-5 h-5 border-2 border-black border-t-transparent rounded-full" />
             ) : (
               <>
-                {isRegister ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
-                {isRegister ? 'ACCOUNT ERSTELLEN' : 'ANMELDEN'}
+                {view === 'register' ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+                {view === 'register' ? 'ACCOUNT ERSTELLEN' : view === 'forgot' ? 'ZURÜCKSETZEN' : 'ANMELDEN'}
               </>
             )}
           </button>
 
-          <button 
-            type="button"
-            onClick={() => setIsRegister(!isRegister)}
-            className="text-emerald-500 text-sm font-bold hover:underline mt-4"
-          >
-            {isRegister ? 'BEREITS EIN KONTO? ANMELDEN' : "NOCH KEIN KONTO? REGISTRIEREN"}
-          </button>
+          <div className="flex flex-col gap-2 pt-4 border-t border-white/5">
+            {view !== 'login' && (
+              <button 
+                type="button"
+                onClick={() => { setView('login'); setError(''); setSuccessMsg(''); }}
+                className="text-zinc-400 text-sm font-bold hover:text-white transition-colors"
+              >
+                ZURÜCK ZUR ANMELDUNG
+              </button>
+            )}
+            {view === 'login' && (
+              <button 
+                type="button"
+                onClick={() => { setView('register'); setError(''); setSuccessMsg(''); }}
+                className="text-emerald-500 text-sm font-bold hover:text-emerald-400 transition-colors"
+              >
+                NOCH KEIN KONTO? REGISTRIEREN
+              </button>
+            )}
+          </div>
         </form>
 
         <div className="pt-12 text-[10px] text-zinc-700 font-mono space-y-1">
