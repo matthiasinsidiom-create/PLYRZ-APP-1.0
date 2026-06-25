@@ -21,15 +21,6 @@ export const Login: React.FC = () => {
     return errMessage;
   };
 
-  const getRedirectUrl = () => {
-    // If it's Capacitor/native, use a custom URL scheme or let Supabase use its default SITE_URL.
-    // For web preview, window.location.origin is fine.
-    if (window.location.origin.includes('localhost') || window.location.origin.startsWith('capacitor://')) {
-      return undefined; // Let Supabase use the configured SITE_URL
-    }
-    return window.location.origin;
-  };
-
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -44,7 +35,7 @@ export const Login: React.FC = () => {
             data: {
               display_name: displayName,
             },
-            emailRedirectTo: getRedirectUrl()
+            emailRedirectTo: 'https://www.plyrz.at/auth-callback'
           }
         });
         if (signUpError) throw signUpError;
@@ -54,7 +45,7 @@ export const Login: React.FC = () => {
         setPassword('');
       } else if (view === 'forgot') {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: getRedirectUrl()
+          redirectTo: 'https://www.plyrz.at/reset-password'
         });
         if (resetError) throw resetError;
         
