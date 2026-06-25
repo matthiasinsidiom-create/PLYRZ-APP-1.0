@@ -245,22 +245,13 @@ export const Onboarding: React.FC = () => {
       await refreshProfile();
       console.log('Onboarding: Profile refreshed in context');
       
-      if (role === 'fan') {
-        console.log('Onboarding: Navigating to /matches');
-        navigate('/matches');
-      } else {
-        console.log('Onboarding: Navigating to /');
-        navigate('/');
-      }
+      console.log('Onboarding: Navigating to /');
+      navigate('/');
     } catch (err: any) {
       console.error('Onboarding: Error completing onboarding:', err);
       // Removed alert as requested to not block user
       // Falls ein Fehler auftritt, versuchen wir trotzdem weiterzuleiten
-      if (role === 'fan') {
-        navigate('/matches');
-      } else {
-        navigate('/');
-      }
+      navigate('/');
     } finally {
       setSaving(false);
     }
