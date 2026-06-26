@@ -137,7 +137,7 @@ const AdminLineups: React.FC = () => {
   const navigate = useNavigate();
   const { fixtureId } = useParams<{ fixtureId: string }>();
   const location = useLocation();
-  const { isAdmin: isSuperAdmin } = useAuth();
+  const { isAdmin: isSuperAdmin, clubAdminClubIds } = useAuth();
 
   const isTeamAdminView = location.pathname.startsWith('/team-admin');
   const backPath = isTeamAdminView ? '/team-admin' : '/admin';
@@ -146,6 +146,9 @@ const AdminLineups: React.FC = () => {
   const [selectedFixture, setSelectedFixture] = useState<any>(null);
   const [homePlayers, setHomePlayers] = useState<any[]>([]);
   const [awayPlayers, setAwayPlayers] = useState<any[]>([]);
+  
+  const [canManageHome, setCanManageHome] = useState(true);
+  const [canManageAway, setCanManageAway] = useState(true);
   const [lineup, setLineup] = useState<{ home: LineupEntryState[], away: LineupEntryState[] }>({ home: [], away: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -238,6 +241,12 @@ const AdminLineups: React.FC = () => {
         console.error('DEBUG: Club IDs missing!', { homeClubId, awayClubId });
         throw new Error('Club IDs missing for this fixture');
       }
+      
+      const isHomeAdmin = isSuperAdmin || clubAdminClubIds.includes(homeClubId);
+      const isAwayAdmin = isSuperAdmin || clubAdminClubIds.includes(awayClubId);
+      
+      setCanManageHome(isHomeAdmin);
+      setCanManageAway(isAwayAdmin);
 
       console.log('DEBUG: Fetching players for clubs:', [homeClubId, awayClubId]);
       const [allPlayers, currentLineup] = await Promise.all([
@@ -252,20 +261,22 @@ const AdminLineups: React.FC = () => {
 
       console.log('DEBUG: Existing lineup entries:', currentLineup.length);
 
-      // Filter players by their club
-      const homeClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === homeClubId);
-      const awayClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === awayClubId);
+      // Filter players strictly by their team_id to match fixture exactly
+      const homeTeamPlayers = allPlayers.filter(p => p.team_id === fixture.home_team_id);
+      const awayTeamPlayers = allPlayers.filter(p => p.team_id === fixture.away_team_id);
       
-      console.log('DEBUG: Eligible players count for home club:', homeClubPlayers.length);
-      console.log('DEBUG: Eligible players count for away club:', awayClubPlayers.length);
+      console.log('DEBUG: Eligible players count for home team:', homeTeamPlayers.length);
+      console.log('DEBUG: Eligible players count for away team:', awayTeamPlayers.length);
 
-      setHomePlayers(homeClubPlayers);
-      setAwayPlayers(awayClubPlayers);
+      // If user is not superadmin and cannot manage home, hide home players from selection
+      setHomePlayers(isHomeAdmin ? homeTeamPlayers : []);
+      // If user is not superadmin and cannot manage away, hide away players from selection
+      setAwayPlayers(isAwayAdmin ? awayTeamPlayers : []);
       
       const homeEntries = currentLineup
         .filter(l => l.team_id === fixture.home_team_id)
         .map(l => {
-          const player = homeClubPlayers.find(p => p.id === l.player_id);
+          const player = homeTeamPlayers.find(p => p.id === l.player_id);
           return { 
             player_id: l.player_id, 
             jersey_number: (l.jersey_number || player?.jersey_number || '').toString(), 
@@ -275,7 +286,7 @@ const AdminLineups: React.FC = () => {
       const awayEntries = currentLineup
         .filter(l => l.team_id === fixture.away_team_id)
         .map(l => {
-          const player = awayClubPlayers.find(p => p.id === l.player_id);
+          const player = awayTeamPlayers.find(p => p.id === l.player_id);
           return { 
             player_id: l.player_id, 
             jersey_number: (l.jersey_number || player?.jersey_number || '').toString(), 
@@ -465,7 +476,17 @@ const AdminLineups: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {homePlayers.length === 0 && awayPlayers.length === 0 ? (
+            {(!canManageHome && !canManageAway) ? (
+              <div className="lg:col-span-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
+                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-8 h-8 text-zinc-600" />
+                </div>
+                <h3 className="text-xl font-black italic uppercase tracking-tight text-white mb-2">Keine Berechtigung</h3>
+                <p className="text-zinc-500 max-w-md mx-auto text-sm">
+                  Du hast keine Berechtigung, die Aufstellung für dieses Spiel zu bearbeiten.
+                </p>
+              </div>
+            ) : homePlayers.length === 0 && awayPlayers.length === 0 ? (
               <div className="lg:col-span-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Users className="w-8 h-8 text-zinc-600" />
@@ -479,6 +500,7 @@ const AdminLineups: React.FC = () => {
             ) : (
               <>
                 {/* Home Team */}
+                {canManageHome && (
             <div className="space-y-4">
               <div className="flex flex-col gap-1 p-4 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl">
                 <div className="flex items-center gap-3">
@@ -555,8 +577,10 @@ const AdminLineups: React.FC = () => {
                 </div>
               </div>
             </div>
+                )}
 
                 {/* Away Team */}
+                {canManageAway && (
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
                     <div className="flex items-center gap-3">
@@ -639,6 +663,7 @@ const AdminLineups: React.FC = () => {
                   </div>
                   )}
                 </div>
+                )}
               </>
             )}
           </div>
