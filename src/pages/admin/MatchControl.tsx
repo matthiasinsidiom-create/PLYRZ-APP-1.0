@@ -42,7 +42,7 @@ const AdminMatchControl: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdmin: isSuperAdmin } = useAuth();
+  const { isAdmin: isSuperAdmin, clubAdminClubIds } = useAuth();
   
   const isTeamAdminView = location.pathname.startsWith('/team-admin');
   const backPath = isTeamAdminView ? '/team-admin' : '/admin/fixtures';
@@ -80,6 +80,11 @@ const AdminMatchControl: React.FC = () => {
   const [opponentMinute, setOpponentMinute] = useState('');
   
   // UI State
+  const [canManageHome, setCanManageHome] = useState(true);
+  const [canManageAway, setCanManageAway] = useState(true);
+  const [homeHasAdmins, setHomeHasAdmins] = useState(false);
+  const [awayHasAdmins, setAwayHasAdmins] = useState(false);
+  
   const [activeSection, setActiveSection] = useState<'live' | 'lineups' | 'events' | 'votes' | 'processing'>(() => {
     // Default to lineups if not live, or events/live if live
     return 'lineups';
@@ -97,6 +102,27 @@ const AdminMatchControl: React.FC = () => {
     message: '',
     type: 'success'
   });
+  
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const handleStatusChangeClick = (newStatus: string) => {
+    if (newStatus === 'finished' || newStatus === 'cancelled') {
+      setPendingStatus(newStatus);
+    } else {
+      handleUpdateFixture({ status: newStatus as any });
+    }
+  };
+
+  const confirmStatusChange = () => {
+    if (pendingStatus) {
+      handleUpdateFixture({ status: pendingStatus as any });
+      setPendingStatus(null);
+    }
+  };
+
+  const cancelStatusChange = () => {
+    setPendingStatus(null);
+  };
 
   useEffect(() => {
     if (id) {
@@ -164,6 +190,14 @@ const AdminMatchControl: React.FC = () => {
       const awayClubId = currentFixture.away_team?.club_id;
       
       if (homeClubId && awayClubId) {
+        setCanManageHome(isSuperAdmin || clubAdminClubIds.includes(homeClubId));
+        setCanManageAway(isSuperAdmin || clubAdminClubIds.includes(awayClubId));
+        
+        const homeAdmins = await supabaseService.hasClubAdmins(homeClubId);
+        const awayAdmins = await supabaseService.hasClubAdmins(awayClubId);
+        setHomeHasAdmins(homeAdmins);
+        setAwayHasAdmins(awayAdmins);
+
         const allPlayers = await supabaseService.getPlayersByClubs([homeClubId, awayClubId]);
         
         const homeClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === homeClubId);
@@ -803,12 +837,24 @@ const AdminMatchControl: React.FC = () => {
                           )}
                         </span>
                       </div>
-                      <button 
-                        onClick={() => event.event_type === 'opponent_goal' ? handleRemoveOpponentGoal(event.team_id === fixture.home_team_id ? 'home' : 'away', event.id) : handleRemoveEvent(event.player_id, event.event_type)}
-                        className="p-1 hover:bg-red-500/10 rounded group transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-zinc-700 group-hover:text-red-500" />
-                      </button>
+                      {(() => {
+                        const canManageEvent = isSuperAdmin || 
+                          (event.team_id === fixture.home_team_id ? (canManageHome || (!canManageHome && !homeHasAdmins)) : 
+                          event.team_id === fixture.away_team_id ? (canManageAway || (!canManageAway && !awayHasAdmins)) : false);
+                        
+                        return canManageEvent ? (
+                          <button 
+                            onClick={() => event.event_type === 'opponent_goal' ? handleRemoveOpponentGoal(event.team_id === fixture.home_team_id ? 'home' : 'away', event.id) : handleRemoveEvent(event.player_id, event.event_type)}
+                            className="p-1 hover:bg-red-500/10 rounded group transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-zinc-700 group-hover:text-red-500" />
+                          </button>
+                        ) : (
+                          <div className="p-1 px-2 bg-zinc-800/50 rounded-lg" title="Dieses Ereignis gehört zur gegnerischen Mannschaft und kann nur vom zuständigen Clubadmin bearbeitet werden.">
+                            <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Nur Lesezugriff</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -890,24 +936,33 @@ const AdminMatchControl: React.FC = () => {
                         currentlyOnPitch={currentlyOnPitch}
                         isSubbingMode={!!subbingOutPlayerId}
                         subbingOutPlayerId={subbingOutPlayerId}
+                        readOnly={!canManageHome}
                       />
                     );
                   })}
 
                   {/* Opponent Goal Actions for Home */}
-                  <OpponentGoalSection 
-                    teamType="home"
-                    isAdding={isAddingOpponentGoal === 'home'}
-                    jerseyNumber={opponentJerseyNumber}
-                    minute={opponentMinute}
-                    events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.home_team_id)}
-                    onStartAdd={() => setIsAddingOpponentGoal('home')}
-                    onCancel={() => setIsAddingOpponentGoal(null)}
-                    onJerseyChange={setOpponentJerseyNumber}
-                    onMinuteChange={setOpponentMinute}
-                    onAdd={() => handleAddOpponentGoal('home')}
-                    onRemove={(eventId) => handleRemoveOpponentGoal('home', eventId)}
-                  />
+                  {!canManageHome && homeHasAdmins ? (
+                    <div className="p-3 bg-zinc-900/40 border border-white/5 rounded-xl mt-4">
+                      <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
+                        Der Gegner nutzt ebenfalls PLYRZ. Ereignisse der gegnerischen Mannschaft werden vom gegnerischen Clubadmin erfasst.
+                      </p>
+                    </div>
+                  ) : (
+                    <OpponentGoalSection 
+                      teamType="home"
+                      isAdding={isAddingOpponentGoal === 'home'}
+                      jerseyNumber={opponentJerseyNumber}
+                      minute={opponentMinute}
+                      events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.home_team_id)}
+                      onStartAdd={() => setIsAddingOpponentGoal('home')}
+                      onCancel={() => setIsAddingOpponentGoal(null)}
+                      onJerseyChange={setOpponentJerseyNumber}
+                      onMinuteChange={setOpponentMinute}
+                      onAdd={() => handleAddOpponentGoal('home')}
+                      onRemove={(eventId) => handleRemoveOpponentGoal('home', eventId)}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -935,24 +990,33 @@ const AdminMatchControl: React.FC = () => {
                         currentlyOnPitch={currentlyOnPitch}
                         isSubbingMode={!!subbingOutPlayerId}
                         subbingOutPlayerId={subbingOutPlayerId}
+                        readOnly={!canManageAway}
                       />
                     );
                   })}
                   
                   {/* Opponent Goal Actions for Away */}
-                  <OpponentGoalSection 
-                    teamType="away"
-                    isAdding={isAddingOpponentGoal === 'away'}
-                    jerseyNumber={opponentJerseyNumber}
-                    minute={opponentMinute}
-                    events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.away_team_id)}
-                    onStartAdd={() => setIsAddingOpponentGoal('away')}
-                    onCancel={() => setIsAddingOpponentGoal(null)}
-                    onJerseyChange={setOpponentJerseyNumber}
-                    onMinuteChange={setOpponentMinute}
-                    onAdd={() => handleAddOpponentGoal('away')}
-                    onRemove={(eventId) => handleRemoveOpponentGoal('away', eventId)}
-                  />
+                  {!canManageAway && awayHasAdmins ? (
+                    <div className="p-3 bg-zinc-900/40 border border-white/5 rounded-xl mt-4">
+                      <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
+                        Der Gegner nutzt ebenfalls PLYRZ. Ereignisse der gegnerischen Mannschaft werden vom gegnerischen Clubadmin erfasst.
+                      </p>
+                    </div>
+                  ) : (
+                    <OpponentGoalSection 
+                      teamType="away"
+                      isAdding={isAddingOpponentGoal === 'away'}
+                      jerseyNumber={opponentJerseyNumber}
+                      minute={opponentMinute}
+                      events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.away_team_id)}
+                      onStartAdd={() => setIsAddingOpponentGoal('away')}
+                      onCancel={() => setIsAddingOpponentGoal(null)}
+                      onJerseyChange={setOpponentJerseyNumber}
+                      onMinuteChange={setOpponentMinute}
+                      onAdd={() => handleAddOpponentGoal('away')}
+                      onRemove={(eventId) => handleRemoveOpponentGoal('away', eventId)}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -972,7 +1036,7 @@ const AdminMatchControl: React.FC = () => {
                   <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Spielstatus</p>
                   <select 
                     value={fixture.status}
-                    onChange={(e) => handleUpdateFixture({ status: e.target.value as any })}
+                    onChange={(e) => handleStatusChangeClick(e.target.value)}
                     className="w-full bg-transparent font-black italic uppercase tracking-tighter text-lg outline-none"
                   >
                     <option value="upcoming">Anstehend</option>
@@ -1264,6 +1328,49 @@ const AdminMatchControl: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {/* Status Confirmation Modal */}
+      <AnimatePresence>
+        {pendingStatus && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-950 border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full relative overflow-hidden shadow-2xl"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent pointer-events-none" />
+              
+              <div className="relative flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-3xl bg-blue-500/20 flex items-center justify-center mb-6">
+                  <AlertCircle className="w-8 h-8 text-blue-500" />
+                </div>
+                
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-2">Spielstatus ändern?</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed mb-8">
+                  Möchtest du den Status wirklich auf <span className="text-white font-bold">{pendingStatus === 'finished' ? 'Beendet' : 'Abgebrochen'}</span> setzen? 
+                  {pendingStatus === 'finished' ? ' Die Abstimmung für Spieler des Spiels kann dann nicht mehr verändert werden.' : ' Keine Ergebnisse werden gewertet.'}
+                </p>
+                
+                <div className="flex flex-col gap-3 w-full">
+                  <button 
+                    onClick={confirmStatusChange}
+                    className="w-full h-12 bg-blue-500 text-white font-black uppercase tracking-widest text-xs rounded-xl hover:bg-blue-600 transition-colors"
+                  >
+                    Bestätigen
+                  </button>
+                  <button 
+                    onClick={cancelStatusChange}
+                    className="w-full h-12 bg-white/5 text-white font-bold uppercase tracking-widest text-xs rounded-xl hover:bg-white/10 transition-colors"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Confirmation Modal */}
       <AnimatePresence>
         {showConfirmProcess && (
@@ -1472,7 +1579,8 @@ const PlayerEventRow: React.FC<{
   currentlyOnPitch?: boolean;
   isSubbingMode?: boolean;
   subbingOutPlayerId?: string | null;
-}> = ({ player, events, onAdd, onRemove, currentlyOnPitch = true, isSubbingMode = false, subbingOutPlayerId }) => {
+  readOnly?: boolean;
+}> = ({ player, events, onAdd, onRemove, currentlyOnPitch = true, isSubbingMode = false, subbingOutPlayerId, readOnly = false }) => {
   const goalCount = events.filter(e => e.event_type === 'goal' && e.player_id === player.id).length;
   const hasYellow = events.some(e => e.event_type === 'yellow_card');
   const hasRed = events.some(e => e.event_type === 'red_card');
@@ -1487,17 +1595,18 @@ const PlayerEventRow: React.FC<{
       </div>
       
       <div className="flex items-center gap-3">
-        {isSubbingMode ? (
-          !currentlyOnPitch && (
-            <button 
-              onClick={() => onAdd(subbingOutPlayerId!, 'sub_out', player.id)}
-              className="px-4 h-9 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-tighter animate-pulse shadow-lg shadow-emerald-500/20"
-            >
-              Einwechseln
-            </button>
-          )
-        ) : currentlyOnPitch && (
-          <>
+        {!readOnly && (
+          isSubbingMode ? (
+            !currentlyOnPitch && (
+              <button 
+                onClick={() => onAdd(subbingOutPlayerId!, 'sub_out', player.id)}
+                className="px-4 h-9 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-tighter animate-pulse shadow-lg shadow-emerald-500/20"
+              >
+                Einwechseln
+              </button>
+            )
+          ) : currentlyOnPitch && (
+            <>
             {/* Goal Controls */}
             <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl border border-white/5">
               <button 
@@ -1551,7 +1660,7 @@ const PlayerEventRow: React.FC<{
               <span className="text-xs">🔄</span>
             </button>
           </>
-        )}
+        ))}
       </div>
     </div>
   );

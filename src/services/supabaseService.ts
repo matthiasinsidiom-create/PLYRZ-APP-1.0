@@ -1125,6 +1125,15 @@ export const supabaseService = {
     return mapPlayerWithStats(playersWithStats);
   },
 
+  async hasClubAdmins(clubId: string) {
+    const { count } = await supabase
+      .from('club_admins')
+      .select('*', { count: 'exact', head: true })
+      .eq('club_id', clubId)
+      .eq('is_active', true);
+    return (count || 0) > 0;
+  },
+
   // Fixtures
   async createFixture(fixture: Partial<Fixture>) {
     console.log('DEBUG: createFixture payload:', fixture);
