@@ -221,6 +221,44 @@ export const Profile: React.FC = () => {
         {/* Push Debug (Admin Only) */}
         {isAdmin && <PushDebug />}
 
+        {/* Rechtliches */}
+        <div className="space-y-4 pt-4">
+          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 pl-4">Rechtliches & Support</h3>
+          <div className="space-y-2">
+            <a 
+              href="https://www.plyrz.at/datenschutz" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-all"
+            >
+              <span className="text-sm font-bold uppercase tracking-tight italic text-zinc-300 group-hover:text-white transition-colors">
+                Datenschutz
+              </span>
+              <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+            </a>
+            <a 
+              href="https://www.plyrz.at/impressum" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-all"
+            >
+              <span className="text-sm font-bold uppercase tracking-tight italic text-zinc-300 group-hover:text-white transition-colors">
+                Impressum
+              </span>
+              <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+            </a>
+            <a 
+              href="mailto:support@plyrz.at" 
+              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-all"
+            >
+              <span className="text-sm font-bold uppercase tracking-tight italic text-zinc-300 group-hover:text-white transition-colors">
+                Support kontaktieren
+              </span>
+              <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+            </a>
+          </div>
+        </div>
+
         {/* Sign Out */}
         <button
           onClick={() => signOut()}

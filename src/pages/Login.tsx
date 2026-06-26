@@ -178,7 +178,13 @@ export const Login: React.FC = () => {
           </div>
         </form>
 
-        <div className="pt-12 text-[10px] text-zinc-700 font-mono space-y-1">
+        <div className="pt-8 flex items-center justify-center gap-4 text-xs font-medium text-zinc-500">
+          <a href="https://www.plyrz.at/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-500 transition-colors">Datenschutz</a>
+          <span>&bull;</span>
+          <a href="https://www.plyrz.at/impressum" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-500 transition-colors">Impressum</a>
+        </div>
+
+        <div className="pt-8 text-[10px] text-zinc-700 font-mono space-y-1">
           <p>Origin: {window.location.origin}</p>
           <p>Hash: {window.location.hash ? 'Present' : 'None'}</p>
           <p>Search: {window.location.search ? 'Present' : 'None'}</p>
