@@ -838,7 +838,8 @@ const AdminMatchControl: React.FC = () => {
                         </span>
                       </div>
                       {(() => {
-                        const canManageEvent = isSuperAdmin || 
+                        const isOpponentGoalFallback = event.event_type === 'opponent_goal' && !event.player_id;
+                        const canManageEvent = isSuperAdmin || isOpponentGoalFallback ||
                           (event.team_id === fixture.home_team_id ? (canManageHome || (!canManageHome && !homeHasAdmins)) : 
                           event.team_id === fixture.away_team_id ? (canManageAway || (!canManageAway && !awayHasAdmins)) : false);
                         
@@ -942,27 +943,26 @@ const AdminMatchControl: React.FC = () => {
                   })}
 
                   {/* Opponent Goal Actions for Home */}
-                  {!canManageHome && homeHasAdmins ? (
-                    <div className="p-3 bg-zinc-900/40 border border-white/5 rounded-xl mt-4">
-                      <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
-                        Der Gegner nutzt ebenfalls PLYRZ. Ereignisse der gegnerischen Mannschaft werden vom gegnerischen Clubadmin erfasst.
+                  {!canManageHome && homeHasAdmins && (
+                    <div className="p-2 mb-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <p className="text-[9px] text-blue-400 text-center leading-relaxed font-bold">
+                        Gegner nutzt PLYRZ. Gegner-Tore werden hier als Teamtore ohne Spielerwertung als Fallback erfasst.
                       </p>
                     </div>
-                  ) : (
-                    <OpponentGoalSection 
-                      teamType="home"
-                      isAdding={isAddingOpponentGoal === 'home'}
-                      jerseyNumber={opponentJerseyNumber}
-                      minute={opponentMinute}
-                      events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.home_team_id)}
-                      onStartAdd={() => setIsAddingOpponentGoal('home')}
-                      onCancel={() => setIsAddingOpponentGoal(null)}
-                      onJerseyChange={setOpponentJerseyNumber}
-                      onMinuteChange={setOpponentMinute}
-                      onAdd={() => handleAddOpponentGoal('home')}
-                      onRemove={(eventId) => handleRemoveOpponentGoal('home', eventId)}
-                    />
                   )}
+                  <OpponentGoalSection 
+                    teamType="home"
+                    isAdding={isAddingOpponentGoal === 'home'}
+                    jerseyNumber={opponentJerseyNumber}
+                    minute={opponentMinute}
+                    events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.home_team_id)}
+                    onStartAdd={() => setIsAddingOpponentGoal('home')}
+                    onCancel={() => setIsAddingOpponentGoal(null)}
+                    onJerseyChange={setOpponentJerseyNumber}
+                    onMinuteChange={setOpponentMinute}
+                    onAdd={() => handleAddOpponentGoal('home')}
+                    onRemove={(eventId) => handleRemoveOpponentGoal('home', eventId)}
+                  />
                 </div>
               </div>
 
@@ -996,27 +996,26 @@ const AdminMatchControl: React.FC = () => {
                   })}
                   
                   {/* Opponent Goal Actions for Away */}
-                  {!canManageAway && awayHasAdmins ? (
-                    <div className="p-3 bg-zinc-900/40 border border-white/5 rounded-xl mt-4">
-                      <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
-                        Der Gegner nutzt ebenfalls PLYRZ. Ereignisse der gegnerischen Mannschaft werden vom gegnerischen Clubadmin erfasst.
+                  {!canManageAway && awayHasAdmins && (
+                    <div className="p-2 mb-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <p className="text-[9px] text-blue-400 text-center leading-relaxed font-bold">
+                        Gegner nutzt PLYRZ. Gegner-Tore werden hier als Teamtore ohne Spielerwertung als Fallback erfasst.
                       </p>
                     </div>
-                  ) : (
-                    <OpponentGoalSection 
-                      teamType="away"
-                      isAdding={isAddingOpponentGoal === 'away'}
-                      jerseyNumber={opponentJerseyNumber}
-                      minute={opponentMinute}
-                      events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.away_team_id)}
-                      onStartAdd={() => setIsAddingOpponentGoal('away')}
-                      onCancel={() => setIsAddingOpponentGoal(null)}
-                      onJerseyChange={setOpponentJerseyNumber}
-                      onMinuteChange={setOpponentMinute}
-                      onAdd={() => handleAddOpponentGoal('away')}
-                      onRemove={(eventId) => handleRemoveOpponentGoal('away', eventId)}
-                    />
                   )}
+                  <OpponentGoalSection 
+                    teamType="away"
+                    isAdding={isAddingOpponentGoal === 'away'}
+                    jerseyNumber={opponentJerseyNumber}
+                    minute={opponentMinute}
+                    events={events.filter(e => e.event_type === 'opponent_goal' && e.team_id === fixture.away_team_id)}
+                    onStartAdd={() => setIsAddingOpponentGoal('away')}
+                    onCancel={() => setIsAddingOpponentGoal(null)}
+                    onJerseyChange={setOpponentJerseyNumber}
+                    onMinuteChange={setOpponentMinute}
+                    onAdd={() => handleAddOpponentGoal('away')}
+                    onRemove={(eventId) => handleRemoveOpponentGoal('away', eventId)}
+                  />
                 </div>
               </div>
             </div>
