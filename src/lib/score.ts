@@ -75,3 +75,44 @@ export function calculateMatchScore(fixture: Fixture | null, events: MatchEvent[
 
   return { homeScore, awayScore, scoreString, isOwnTeamHome };
 }
+
+/**
+ * Robustly calculates the current match minute based on match_phase and start times.
+ */
+export function getLiveMatchMinute(fixture: Fixture | null, now = new Date()): string {
+  if (!fixture || fixture.status === 'finished' || fixture.status === 'cancelled') {
+    return '';
+  }
+
+  const kickoffDate = new Date(fixture.kickoff_at);
+  const isActuallyLive = fixture.status === 'live' || (fixture.status === 'upcoming' && now >= kickoffDate);
+  
+  if (!isActuallyLive) {
+    return '';
+  }
+
+  const phase = fixture.match_phase || 'first_half';
+  
+  if (phase === 'first_half') {
+    const startAt = fixture.first_half_started_at ? new Date(fixture.first_half_started_at) : kickoffDate;
+    if (startAt) {
+      const diff = Math.floor((now.getTime() - startAt.getTime()) / (1000 * 60)) + 1;
+      const displayMin = Math.min(45, Math.max(1, diff));
+      return `${displayMin}'`;
+    }
+  } else if (phase === 'halftime') {
+    return 'HZ';
+  } else if (phase === 'second_half') {
+    const startAt = fixture.second_half_started_at ? new Date(fixture.second_half_started_at) : null;
+    if (startAt) {
+      const diff = Math.floor((now.getTime() - startAt.getTime()) / (1000 * 60));
+      return `${46 + diff}'`;
+    } else {
+      return '46\'';
+    }
+  } else if (phase === 'full_time') {
+    return '90\'';
+  }
+  
+  return '';
+}
