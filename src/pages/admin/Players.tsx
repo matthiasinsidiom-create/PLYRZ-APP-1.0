@@ -19,7 +19,8 @@ import {
   Save,
   Globe,
   Copy,
-  Palette
+  Palette,
+  Crown
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { supabaseService } from '../../services/supabaseService';
@@ -136,6 +137,8 @@ const AdminPlayers: React.FC = () => {
     photo_url: '',
     birth_year: '',
     is_active: true,
+    is_premium: false,
+    premium_until: '',
     nationality: 'de',
     club_id: '',
     overall: '50',
@@ -228,6 +231,8 @@ const AdminPlayers: React.FC = () => {
         photo_url: player.photo_url || '',
         birth_year: player.birth_year?.toString() || '',
         is_active: player.is_active ?? true,
+        is_premium: player.is_premium ?? false,
+        premium_until: player.premium_until ? new Date(player.premium_until).toISOString().split('T')[0] : '',
         nationality: player.nationality || 'de',
         overall: (stats.overall ?? 50).toString(),
         stats: statsToLoad,
@@ -249,6 +254,8 @@ const AdminPlayers: React.FC = () => {
         photo_url: '',
         birth_year: '',
         is_active: true,
+        is_premium: false,
+        premium_until: '',
         nationality: 'de',
         overall: '50',
         stats: {
@@ -331,6 +338,8 @@ const AdminPlayers: React.FC = () => {
         photo_url: formData.photo_url,
         birth_year: formData.birth_year ? parseInt(formData.birth_year) : null,
         is_active: formData.is_active,
+        is_premium: formData.is_premium,
+        premium_until: formData.premium_until ? new Date(formData.premium_until).toISOString() : null,
         nationality: formData.nationality,
         card_layout: formData.card_layout
       };
@@ -852,6 +861,31 @@ const AdminPlayers: React.FC = () => {
                             <option value="inactive">Inaktiv</option>
                           </select>
                         </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <Crown className="w-3.5 h-3.5" /> Premium
+                          </label>
+                          <select
+                            value={formData.is_premium ? 'yes' : 'no'}
+                            onChange={(e) => setFormData({ ...formData, is_premium: e.target.value === 'yes' })}
+                            className="w-full bg-zinc-800 border border-amber-500/20 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500/50 transition-colors"
+                          >
+                            <option value="no">Nein</option>
+                            <option value="yes">Ja (Aktiviert)</option>
+                          </select>
+                        </div>
+                        {formData.is_premium && (
+                          <div className="space-y-2 col-span-2">
+                            <label className="text-xs font-bold text-amber-500 uppercase tracking-wider">Premium gültig bis</label>
+                            <input 
+                              type="date"
+                              value={formData.premium_until}
+                              onChange={(e) => setFormData({ ...formData, premium_until: e.target.value })}
+                              className="w-full bg-zinc-800 border border-amber-500/20 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-amber-500/50 transition-colors"
+                            />
+                            <p className="text-[10px] text-zinc-500">Standard: 2027-06-30</p>
+                          </div>
+                        )}
                       </div>
 
                       <button

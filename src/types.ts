@@ -72,11 +72,24 @@ export interface Player {
   claimed_by_user_id?: string;
   nationality?: string;
   card_layout?: any;
+  is_premium?: boolean;
+  premium_until?: string;
   created_at: string;
   updated_at: string;
   teams?: { name: string, club_id: string, clubs?: Club };
   player_stats?: PlayerStats[];
   current_stats?: PlayerStats;
+}
+
+export interface PlayerPremiumRequest {
+  id: string;
+  user_id: string;
+  player_id: string;
+  club_id: string;
+  status: 'pending' | 'approved' | 'rejected' | 'done';
+  note?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Fixture {

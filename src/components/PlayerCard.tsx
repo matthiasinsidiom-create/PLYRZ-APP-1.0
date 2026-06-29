@@ -1,7 +1,7 @@
 import React from 'react';
 import { Player } from '../types';
 import { resolveLatestStats } from '../lib/stats';
-import { Check, ShieldCheck } from 'lucide-react';
+import { Check, ShieldCheck, Crown } from 'lucide-react';
 import { getPositionShort } from '../lib/positions';
 
 interface PlayerCardProps {
@@ -414,6 +414,17 @@ export const PlayerCard = React.memo(({
       
       {/* BADGES CONTAINER */}
       <div style={styles.badgesContainer}>
+        {/* PREMIUM BADGE */}
+        {player.is_premium && (!player.premium_until || new Date(player.premium_until) >= new Date()) && (
+          <div 
+            style={styles.iconBadge} 
+            title="Premium"
+            aria-label="Premium"
+          >
+            <Crown className="w-4 h-4 text-amber-400" strokeWidth={2.5} />
+          </div>
+        )}
+        
         {/* CLAIMED BADGE */}
         {player.claimed_by_user_id && (
           <div 

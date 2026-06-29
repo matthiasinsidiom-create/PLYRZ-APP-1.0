@@ -17,7 +17,9 @@ import {
   ChevronRight,
   Star,
   Users,
-  Share2
+  Share2,
+  Crown,
+  ShieldCheck
 } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import { useAuth } from '../../context/AuthContext';
@@ -53,7 +55,31 @@ export const PlayerDetail: React.FC = () => {
   const [player, setPlayer] = useState<(Player & { teams: Team & { clubs: Club }, player_stats: PlayerStats[] }) | null>(null);
   const [history, setHistory] = useState<ExtendedHistory[]>([]);
   const [sharing, setSharing] = useState(false);
+  const [requestingPremium, setRequestingPremium] = useState(false);
+  const [premiumRequested, setPremiumRequested] = useState(false);
   const exportRef = React.useRef<HTMLDivElement>(null);
+
+  const handlePremiumRequest = async () => {
+    if (!user || !player) return;
+    try {
+      setRequestingPremium(true);
+      await supabaseService.requestPremium(player.id, player.team_id);
+      setPremiumRequested(true);
+      alert('Deine Premium-Anfrage ist eingegangen. Wir melden uns in Kürze.');
+    } catch (err: any) {
+      console.error('Error requesting premium:', err);
+      if (err.message === 'already_requested') {
+        setPremiumRequested(true);
+        alert('Deine Premium-Anfrage liegt bereits vor und wird bearbeitet.');
+      } else if (err.message.includes('Datenbank nicht bereit')) {
+        alert('Die Premium-Funktion ist noch nicht vollständig eingerichtet. Bitte den Admin kontaktieren (SQL Migration fehlt).');
+      } else {
+        alert('Fehler bei der Anfrage. Bitte versuche es später noch einmal.');
+      }
+    } finally {
+      setRequestingPremium(false);
+    }
+  };
 
   const handleShare = async () => {
     if (!exportRef.current || !player) return;
@@ -241,15 +267,26 @@ export const PlayerDetail: React.FC = () => {
                 />
             </div>
 
-            <div className="relative z-10">
+            <div className="relative z-10 flex flex-col gap-3 mt-6">
               {player.claimed_by_user_id === user?.id && (
                 <button 
                   onClick={handleShare}
                   disabled={sharing}
-                  className="mt-6 w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all text-white font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all text-white font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
                 >
                   <Share2 className="w-5 h-5 text-emerald-500" />
                   {sharing ? 'Wird verarbeitet...' : 'Meine Karte teilen'}
+                </button>
+              )}
+
+              {player.claimed_by_user_id === user?.id && !(player.is_premium && (!player.premium_until || new Date(player.premium_until) >= new Date())) && (
+                <button 
+                  onClick={handlePremiumRequest}
+                  disabled={requestingPremium || premiumRequested}
+                  className="w-full bg-[#18181b] border border-amber-500/20 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-amber-500 font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                >
+                  <Crown className="w-5 h-5" />
+                  {premiumRequested ? 'Anfrage eingegangen' : requestingPremium ? 'Wird gesendet...' : 'Premium Interesse senden'}
                 </button>
               )}
             </div>
@@ -263,13 +300,23 @@ export const PlayerDetail: React.FC = () => {
                   animate={{ opacity: 1, x: 0 }}
                   className="text-6xl md:text-7xl font-black italic uppercase tracking-tighter leading-none text-white drop-shadow-2xl"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col md:flex-row md:items-center gap-4">
                     {player.full_name}
-                    {player.claimed_by_user_id && (
-                      <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-black uppercase tracking-widest border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
-                        BEANSPRUCHT
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
+                      {player.claimed_by_user_id && (
+                        <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-black uppercase tracking-widest border border-emerald-500/20 shadow-lg shadow-emerald-500/10 flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          VERIFIZIERT
+                        </span>
+                      )}
+                      
+                      {player.is_premium && (!player.premium_until || new Date(player.premium_until) >= new Date()) ? (
+                        <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-black uppercase tracking-widest border border-amber-500/20 shadow-lg shadow-amber-500/10 flex items-center gap-1.5">
+                          <Crown className="w-3.5 h-3.5" />
+                          PREMIUM
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </motion.h2>
                 <motion.div 

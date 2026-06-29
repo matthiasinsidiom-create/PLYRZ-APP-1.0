@@ -723,7 +723,7 @@ export const supabaseService = {
 
   async updatePlayer(id: string, updates: Partial<Player>, statsUpdates?: Partial<PlayerStats>) {
     console.log('DEBUG: [SERVICE] updatePlayer started for ID:', id);
-    await this.checkAdmin();
+    const { isSuperAdmin } = await this.checkAdmin();
     
     const playerUpdateData: any = {
       team_id: updates.team_id,
@@ -741,15 +741,43 @@ export const supabaseService = {
     if (updates.claimed_by_user_id !== undefined) {
       playerUpdateData.claimed_by_user_id = updates.claimed_by_user_id;
     }
+
+    if (isSuperAdmin) {
+      if (updates.is_premium !== undefined) playerUpdateData.is_premium = updates.is_premium;
+      if (updates.premium_until !== undefined) playerUpdateData.premium_until = updates.premium_until;
+    }
     
     console.log('DEBUG: [SERVICE] updatePlayer - Player Update Payload:', playerUpdateData);
 
-    const { data, error } = await supabase
+    let data, error;
+    
+    // First try
+    const result = await supabase
       .from('players')
       .update(playerUpdateData)
       .eq('id', id)
       .select()
       .single();
+      
+    data = result.data;
+    error = result.error;
+    
+    // Fallback if is_premium column doesn't exist yet
+    if (error && error.message && error.message.includes('is_premium')) {
+      console.warn('DEBUG: [SERVICE] updatePlayer - is_premium column not found. Retrying without premium fields. Please run the SQL migration.');
+      delete playerUpdateData.is_premium;
+      delete playerUpdateData.premium_until;
+      
+      const retryResult = await supabase
+        .from('players')
+        .update(playerUpdateData)
+        .eq('id', id)
+        .select()
+        .single();
+        
+      data = retryResult.data;
+      error = retryResult.error;
+    }
     
     if (error) {
       console.error('DEBUG: [SERVICE] updatePlayer - Player Update Error:', error);
@@ -2789,6 +2817,70 @@ export const supabaseService = {
       return false;
     }
     return (count || 0) > 0;
+  },
+
+  async requestPremium(playerId: string, clubId: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Nicht authentifiziert");
+
+    // Check if already pending
+    const { data: existing, error: checkError } = await supabase
+      .from('player_premium_requests')
+      .select('id')
+      .eq('player_id', playerId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (checkError) {
+      if (checkError.message.includes('relation') || checkError.message.includes('does not exist')) {
+         throw new Error("Datenbank nicht bereit. Bitte führe das SQL Skript in Supabase aus.");
+      }
+      throw checkError;
+    }
+
+    if (existing) {
+      throw new Error("already_requested");
+    }
+
+    const { error } = await supabase
+      .from('player_premium_requests')
+      .insert({
+        user_id: user.id,
+        player_id: playerId,
+        club_id: clubId,
+        status: 'pending'
+      });
+
+    if (error) throw error;
+  },
+
+  async getPremiumRequests() {
+    const isAdmin = await this.isUserAdmin();
+    if (!isAdmin) throw new Error("Nicht autorisiert");
+
+    const { data, error } = await supabase
+      .from('player_premium_requests')
+      .select(`
+        *,
+        players ( full_name ),
+        clubs ( name )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+  },
+
+  async updatePremiumRequest(id: string, status: 'approved' | 'rejected' | 'done', note?: string) {
+    const isAdmin = await this.isUserAdmin();
+    if (!isAdmin) throw new Error("Nicht autorisiert");
+
+    const { error } = await supabase
+      .from('player_premium_requests')
+      .update({ status, note })
+      .eq('id', id);
+
+    if (error) throw error;
   },
 
   async savePushToken(token: string, platform: string) {
