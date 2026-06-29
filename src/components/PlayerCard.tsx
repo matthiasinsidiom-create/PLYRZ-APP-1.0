@@ -1,7 +1,7 @@
 import React from 'react';
 import { Player } from '../types';
 import { resolveLatestStats } from '../lib/stats';
-import { Check } from 'lucide-react';
+import { Check, ShieldCheck } from 'lucide-react';
 import { getPositionShort } from '../lib/positions';
 
 interface PlayerCardProps {
@@ -188,28 +188,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: '#fbbf24', // amber-400
     color: '#000000',
   },
-  claimedBadge: {
+  badgesContainer: {
     position: 'absolute',
     top: '12px',
-    right: '12px',
+    left: '12px',
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '6px',
+    zIndex: 30,
+  } as React.CSSProperties,
+  iconBadge: {
+    width: '28px',
+    height: '28px',
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     backdropFilter: 'blur(8px)',
-    padding: '4px 10px',
-    borderRadius: '999px',
+    borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    justifyContent: 'center',
     border: '1px solid rgba(255, 255, 255, 0.2)',
-    zIndex: 30,
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-  },
-  claimedText: {
-    color: '#ffffff',
-    fontSize: '10px',
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
+  } as React.CSSProperties,
 };
 
 export const PlayerCard = React.memo(({ 
@@ -413,19 +412,19 @@ export const PlayerCard = React.memo(({
         </div>
       )}
       
-      {/* CLAIMED BADGE */}
-      {player.claimed_by_user_id && (
-        <div style={{
-          ...styles.claimedBadge,
-          // If jersey number is present, move the claimed badge down slightly to avoid overlap
-          top: (jerseyNumber !== undefined && jerseyNumber !== null) 
-            ? (isTopPerformer ? '128px' : '88px') 
-            : '12px'
-        }}>
-          <Check className="w-3 h-3 text-emerald-400" strokeWidth={4} />
-          <span style={styles.claimedText}>BEANSPRUCHT</span>
-        </div>
-      )}
+      {/* BADGES CONTAINER */}
+      <div style={styles.badgesContainer}>
+        {/* CLAIMED BADGE */}
+        {player.claimed_by_user_id && (
+          <div 
+            style={styles.iconBadge} 
+            title="Beansprucht"
+            aria-label="Beansprucht"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" strokeWidth={2.5} />
+          </div>
+        )}
+      </div>
 
       {lineupRole && (
         <div style={{
