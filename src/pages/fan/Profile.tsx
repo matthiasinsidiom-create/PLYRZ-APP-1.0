@@ -7,6 +7,7 @@ import {
   Shield, 
   Trophy, 
   Star,
+  Crown,
   ChevronRight,
   Mail,
   Calendar,
@@ -143,6 +144,7 @@ export const Profile: React.FC = () => {
   };
 
   const menuItems = [
+    { id: 'premium', label: 'PLYRZ Premium', icon: Crown, path: '/premium', color: 'text-amber-500' },
     { id: 'logic', label: 'Rating-Logik', icon: Star, path: '/rating-logic' },
     { id: 'settings', label: 'Einstellungen', icon: Settings, path: '/settings' },
   ];
@@ -206,14 +208,14 @@ export const Profile: React.FC = () => {
               className="w-full bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-all"
             >
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center group-hover:bg-emerald-500/10 transition-colors">
-                  <item.icon className="w-5 h-5 text-zinc-500 group-hover:text-emerald-500 transition-colors" />
+                <div className={`w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center transition-colors ${item.color ? 'group-hover:bg-amber-500/10' : 'group-hover:bg-emerald-500/10'}`}>
+                  <item.icon className={`w-5 h-5 transition-colors ${item.color || 'text-zinc-500 group-hover:text-emerald-500'}`} />
                 </div>
-                <span className="text-sm font-bold uppercase tracking-tight italic">
+                <span className={`text-sm font-bold uppercase tracking-tight italic ${item.color || ''}`}>
                   {item.label}
                 </span>
               </div>
-              <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
+              <ChevronRight className={`w-5 h-5 transition-colors ${item.color || 'text-zinc-700 group-hover:text-emerald-500'}`} />
             </motion.button>
           ))}
         </div>

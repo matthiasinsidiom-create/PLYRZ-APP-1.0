@@ -415,7 +415,7 @@ export const PlayerCard = React.memo(({
       {/* BADGES CONTAINER */}
       <div style={styles.badgesContainer}>
         {/* PREMIUM BADGE */}
-        {player.is_premium && (!player.premium_until || new Date(player.premium_until) >= new Date()) && (
+        {player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()) && (
           <div 
             style={styles.iconBadge} 
             title="Premium"

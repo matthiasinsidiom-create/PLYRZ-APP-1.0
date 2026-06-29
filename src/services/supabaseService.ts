@@ -668,14 +668,39 @@ export const supabaseService = {
     if (player.claimed_by_user_id !== undefined) {
       playerInsertData.claimed_by_user_id = player.claimed_by_user_id;
     }
+
+    const { isSuperAdmin } = await this.checkAdmin();
+    if (isSuperAdmin) {
+      if (player.is_premium !== undefined) playerInsertData.is_premium = player.is_premium;
+      if (player.premium_until !== undefined) playerInsertData.premium_until = player.premium_until;
+    }
     
     console.log('DEBUG: [SERVICE] createPlayer - Player Payload:', playerInsertData);
 
-    const { data: playerData, error: playerError } = await supabase
+    let playerData, playerError;
+    const result = await supabase
       .from('players')
       .insert(playerInsertData)
       .select()
       .single();
+      
+    playerData = result.data;
+    playerError = result.error;
+    
+    if (playerError && JSON.stringify(playerError).includes('is_premium')) {
+      console.warn('DEBUG: [SERVICE] createPlayer - is_premium column not found. Retrying without premium fields.');
+      delete playerInsertData.is_premium;
+      delete playerInsertData.premium_until;
+      
+      const retryResult = await supabase
+        .from('players')
+        .insert(playerInsertData)
+        .select()
+        .single();
+        
+      playerData = retryResult.data;
+      playerError = retryResult.error;
+    }
     
     if (playerError) {
       console.error('DEBUG: [SERVICE] createPlayer - Player Insert Error:', playerError);
@@ -763,7 +788,7 @@ export const supabaseService = {
     error = result.error;
     
     // Fallback if is_premium column doesn't exist yet
-    if (error && error.message && error.message.includes('is_premium')) {
+    if (error && JSON.stringify(error).includes('is_premium')) {
       console.warn('DEBUG: [SERVICE] updatePlayer - is_premium column not found. Retrying without premium fields. Please run the SQL migration.');
       delete playerUpdateData.is_premium;
       delete playerUpdateData.premium_until;
@@ -2842,7 +2867,7 @@ export const supabaseService = {
       throw new Error("already_requested");
     }
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('player_premium_requests')
       .insert({
         user_id: user.id,
@@ -2851,7 +2876,12 @@ export const supabaseService = {
         status: 'pending'
       });
 
-    if (error) throw error;
+    if (error) {
+      if (error.message.includes('relation') || error.message.includes('does not exist')) {
+         throw new Error("Datenbank nicht bereit. Bitte führe das SQL Skript in Supabase aus.");
+      }
+      throw error;
+    }
   },
 
   async getPremiumRequests() {
@@ -2867,7 +2897,12 @@ export const supabaseService = {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      if (error.message.includes('relation') || error.message.includes('does not exist')) {
+        return [];
+      }
+      throw error;
+    }
     return data;
   },
 
@@ -2880,7 +2915,12 @@ export const supabaseService = {
       .update({ status, note })
       .eq('id', id);
 
-    if (error) throw error;
+    if (error) {
+      if (error.message.includes('relation') || error.message.includes('does not exist')) {
+        throw new Error("Datenbank nicht bereit. Bitte führe das SQL Skript in Supabase aus.");
+      }
+      throw error;
+    }
   },
 
   async savePushToken(token: string, platform: string) {

@@ -55,31 +55,7 @@ export const PlayerDetail: React.FC = () => {
   const [player, setPlayer] = useState<(Player & { teams: Team & { clubs: Club }, player_stats: PlayerStats[] }) | null>(null);
   const [history, setHistory] = useState<ExtendedHistory[]>([]);
   const [sharing, setSharing] = useState(false);
-  const [requestingPremium, setRequestingPremium] = useState(false);
-  const [premiumRequested, setPremiumRequested] = useState(false);
   const exportRef = React.useRef<HTMLDivElement>(null);
-
-  const handlePremiumRequest = async () => {
-    if (!user || !player) return;
-    try {
-      setRequestingPremium(true);
-      await supabaseService.requestPremium(player.id, player.team_id);
-      setPremiumRequested(true);
-      alert('Deine Premium-Anfrage ist eingegangen. Wir melden uns in Kürze.');
-    } catch (err: any) {
-      console.error('Error requesting premium:', err);
-      if (err.message === 'already_requested') {
-        setPremiumRequested(true);
-        alert('Deine Premium-Anfrage liegt bereits vor und wird bearbeitet.');
-      } else if (err.message.includes('Datenbank nicht bereit')) {
-        alert('Die Premium-Funktion ist noch nicht vollständig eingerichtet. Bitte den Admin kontaktieren (SQL Migration fehlt).');
-      } else {
-        alert('Fehler bei der Anfrage. Bitte versuche es später noch einmal.');
-      }
-    } finally {
-      setRequestingPremium(false);
-    }
-  };
 
   const handleShare = async () => {
     if (!exportRef.current || !player) return;
@@ -279,14 +255,13 @@ export const PlayerDetail: React.FC = () => {
                 </button>
               )}
 
-              {player.claimed_by_user_id === user?.id && !(player.is_premium && (!player.premium_until || new Date(player.premium_until) >= new Date())) && (
+              {player.claimed_by_user_id === user?.id && !(player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now())) && (
                 <button 
-                  onClick={handlePremiumRequest}
-                  disabled={requestingPremium || premiumRequested}
-                  className="w-full bg-[#18181b] border border-amber-500/20 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-amber-500 font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                  onClick={() => navigate('/premium')}
+                  className="w-full bg-[#18181b] border border-amber-500/20 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-amber-500 font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl"
                 >
                   <Crown className="w-5 h-5" />
-                  {premiumRequested ? 'Anfrage eingegangen' : requestingPremium ? 'Wird gesendet...' : 'Premium Interesse senden'}
+                  Was ist PLYRZ Premium?
                 </button>
               )}
             </div>
@@ -310,7 +285,7 @@ export const PlayerDetail: React.FC = () => {
                         </span>
                       )}
                       
-                      {player.is_premium && (!player.premium_until || new Date(player.premium_until) >= new Date()) ? (
+                      {player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()) ? (
                         <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-black uppercase tracking-widest border border-amber-500/20 shadow-lg shadow-amber-500/10 flex items-center gap-1.5">
                           <Crown className="w-3.5 h-3.5" />
                           PREMIUM
