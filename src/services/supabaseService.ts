@@ -2063,11 +2063,18 @@ export const supabaseService = {
           filtered = proxied.filter(p => {
             const isActive = p.is_active === true;
             if (!isActive) return false;
-            if (p.teams?.clubs?.name?.includes('Gerersdorf')) return false;
+            
             const pLeagueId = p.teams?.clubs?.league_id;
             if (pLeagueId && visibility.onboarding_completed && !visibility.leagueIds.includes(pLeagueId)) {
               return false;
             }
+            
+            const pClubId = p.teams?.club_id;
+            if (visibility.clubIds && pClubId && visibility.clubIds.includes(pClubId)) {
+              return true;
+            }
+            
+            if (p.teams?.clubs?.name?.includes('Gerersdorf')) return false;
             return true;
           });
         }
@@ -2120,8 +2127,15 @@ export const supabaseService = {
     const playersData = rawPlayersData.filter(p => {
       if (visibility.isMainAdmin) return true;
       const isActive = p.is_active === true;
+      if (!isActive) return false;
+      
+      const pClubId = p.teams?.club_id;
+      if (visibility.clubIds && pClubId && visibility.clubIds.includes(pClubId)) {
+        return true;
+      }
+      
       const isGerersdorf = p.teams?.clubs?.name?.includes('Gerersdorf');
-      return isActive && !isGerersdorf;
+      return !isGerersdorf;
     });
 
     console.log(`DEBUG: [FILTER] getPlayers: Total loaded: ${rawPlayersData.length}, Selected: ${playersData.length}`);
@@ -2235,16 +2249,20 @@ export const supabaseService = {
               return null;
             }
 
-            const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
-            if (involvesGerersdorf) {
-              return null;
-            }
-
-            // Check if player's league is in user's leagueIds
             const playerLeagueId = (mapped.teams as any)?.clubs?.league_id;
             if (playerLeagueId && visibility.onboarding_completed && !visibility.leagueIds.includes(playerLeagueId)) {
               console.warn(`DEBUG: [SECURITY] Refusing to serve player outside allowed leagues`);
               return null;
+            }
+
+            const pClubId = mapped.teams?.club_id;
+            if (visibility.clubIds && pClubId && visibility.clubIds.includes(pClubId)) {
+              // Club Admin, allow access
+            } else {
+              const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
+              if (involvesGerersdorf) {
+                return null;
+              }
             }
           }
 
@@ -2300,16 +2318,21 @@ export const supabaseService = {
           return null;
         }
 
-        const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
-        if (involvesGerersdorf) {
-          return null;
-        }
-
         // Check if player's league is in user's leagueIds
         const playerLeagueId = (mapped.teams as any)?.clubs?.league_id;
         if (playerLeagueId && visibility.onboarding_completed && !visibility.leagueIds.includes(playerLeagueId)) {
           console.warn(`DEBUG: [SECURITY] Refusing to serve player outside allowed leagues`);
           return null;
+        }
+
+        const pClubId = mapped.teams?.club_id;
+        if (visibility.clubIds && pClubId && visibility.clubIds.includes(pClubId)) {
+          // Club Admin, allow access
+        } else {
+          const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
+          if (involvesGerersdorf) {
+            return null;
+          }
         }
       }
 
@@ -2338,6 +2361,14 @@ export const supabaseService = {
         // Filter out Gerersdorf fixtures for normal users
         const filteredData = proxied.filter(f => {
           if (visibility.isMainAdmin) return true;
+          
+          // If the user is a club admin for one of the participating clubs, always show the fixture
+          const homeClubId = f.home_team?.club_id;
+          const awayClubId = f.away_team?.club_id;
+          if (visibility.clubIds && (visibility.clubIds.includes(homeClubId) || visibility.clubIds.includes(awayClubId))) {
+            return true;
+          }
+          
           const homeClub = f.home_team?.clubs?.name;
           const awayClub = f.away_team?.clubs?.name;
           const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
@@ -2387,6 +2418,14 @@ export const supabaseService = {
     // Filter out Gerersdorf fixtures for normal users
     const filteredData = (data || []).filter(f => {
       if (visibility.isMainAdmin) return true;
+
+      // If the user is a club admin for one of the participating clubs, always show the fixture
+      const homeClubId = f.home_team?.club_id;
+      const awayClubId = f.away_team?.club_id;
+      if (visibility.clubIds && (visibility.clubIds.includes(homeClubId) || visibility.clubIds.includes(awayClubId))) {
+        return true;
+      }
+
       const homeClub = f.home_team?.clubs?.name;
       const awayClub = f.away_team?.clubs?.name;
       const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
