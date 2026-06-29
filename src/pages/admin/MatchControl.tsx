@@ -182,8 +182,8 @@ const AdminMatchControl: React.FC = () => {
         }
       }
       
-      // Load Lineups
-      const currentLineup = await supabaseService.getFixtureLineup(id);
+      // Load Lineups with Players to ensure all lineup players are available
+      const currentLineup = await supabaseService.getFixtureLineupWithPlayers(id);
       
       // Load Players for both clubs
       const homeClubId = currentFixture.home_team?.club_id;
@@ -200,8 +200,18 @@ const AdminMatchControl: React.FC = () => {
 
         const allPlayers = await supabaseService.getPlayersByClubs([homeClubId, awayClubId]);
         
-        const homeClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === homeClubId);
-        const awayClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === awayClubId);
+        // Combine allPlayers with players from currentLineup to ensure lineup players are always available
+        const lineupPlayers = currentLineup.map(l => (l as any).players).filter(Boolean);
+        const mergedPlayers = [...allPlayers];
+        
+        lineupPlayers.forEach(lp => {
+          if (!mergedPlayers.find(p => p.id === lp.id)) {
+            mergedPlayers.push(lp);
+          }
+        });
+        
+        const homeClubPlayers = mergedPlayers.filter(p => (p as any).teams?.club_id === homeClubId || (p as any).team_id === currentFixture.home_team_id);
+        const awayClubPlayers = mergedPlayers.filter(p => (p as any).teams?.club_id === awayClubId || (p as any).team_id === currentFixture.away_team_id);
         
         setHomePlayers(homeClubPlayers);
         setAwayPlayers(awayClubPlayers);
@@ -212,6 +222,7 @@ const AdminMatchControl: React.FC = () => {
             const player = homeClubPlayers.find(p => p.id === l.player_id);
             return {
               player_id: l.player_id,
+              player_name: (l as any).players?.full_name || player?.full_name,
               jersey_number: (l.jersey_number || player?.jersey_number || '').toString(),
               lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter'
             };
@@ -222,6 +233,7 @@ const AdminMatchControl: React.FC = () => {
             const player = awayClubPlayers.find(p => p.id === l.player_id);
             return {
               player_id: l.player_id,
+              player_name: (l as any).players?.full_name || player?.full_name,
               jersey_number: (l.jersey_number || player?.jersey_number || '').toString(),
               lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter'
             };
@@ -921,8 +933,11 @@ const AdminMatchControl: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {lineup.home.map(entry => {
-                    const player = homePlayers.find(p => p.id === entry.player_id);
-                    if (!player) return null;
+                    const player = homePlayers.find(p => p.id === entry.player_id) || {
+                      id: entry.player_id,
+                      full_name: (entry as any).player_name || 'Spieler unbekannt',
+                      position: 'Unbekannt'
+                    };
                     const currentlyOnPitch = isPlayerOnPitch(player.id);
                     
                     if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
@@ -974,8 +989,11 @@ const AdminMatchControl: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {lineup.away.map(entry => {
-                    const player = awayPlayers.find(p => p.id === entry.player_id);
-                    if (!player) return null;
+                    const player = awayPlayers.find(p => p.id === entry.player_id) || {
+                      id: entry.player_id,
+                      full_name: (entry as any).player_name || 'Spieler unbekannt',
+                      position: 'Unbekannt'
+                    };
                     const currentlyOnPitch = isPlayerOnPitch(player.id);
 
                     if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
@@ -1254,8 +1272,11 @@ const AdminMatchControl: React.FC = () => {
                       )}
 
                       {(liveGoalTeam === 'home' ? lineup.home : lineup.away).map(entry => {
-                        const player = (liveGoalTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === entry.player_id);
-                        if (!player) return null;
+                        const player = (liveGoalTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === entry.player_id) || {
+                          id: entry.player_id,
+                          full_name: (entry as any).player_name || 'Spieler unbekannt',
+                          position: 'Unbekannt'
+                        };
                         if (playerSearchQuery && !player.full_name.toLowerCase().includes(playerSearchQuery.toLowerCase())) return null;
                         if (assistSelectionPhase === 'assist' && player.id === selectedGoalScorerId) return null;
 

@@ -1702,11 +1702,14 @@ export const supabaseService = {
       console.log(`DEBUG: [SERVICE] Loaded ${lineupData.length} raw lineup entries`);
       
       // STRICT FILTERING: active only
-      const isAdmin = await this.isUserAdmin();
       const filteredLineupData = (lineupData || []).filter(entry => {
         const p = entry.players;
         if (!p) return false;
-        if (isAdmin) return true;
+        
+        // Admins and club admins (isAuthorizedToSeeEarly) should see ALL lineup players
+        // because fixture_lineups is the source of truth for the match.
+        if (isAuthorizedToSeeEarly) return true;
+        
         return p.is_active === true;
       });
 
