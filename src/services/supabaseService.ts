@@ -2730,6 +2730,10 @@ export const supabaseService = {
       .select('player_id, is_mvp, positive_votes, negative_votes, goal_count, assists, red_count, delta_overall');
 
     if (hErr) throw hErr;
+    
+    if (!history || history.length === 0) {
+      return [];
+    }
 
     const statsMap = new Map();
     for (const h of history || []) {
@@ -2771,7 +2775,20 @@ export const supabaseService = {
       };
     }).sort((a, b) => b.season_score - a.season_score);
 
-    return rankedPlayers.slice(0, 10);
+    // Only return players who have actually played (score > 0 or appearances > 0)
+    return rankedPlayers.filter(p => p.season_stats.appearances > 0).slice(0, 10);
+  },
+
+  async hasRatingHistory() {
+    const { count, error } = await supabase
+      .from('player_rating_history')
+      .select('*', { count: 'exact', head: true });
+    
+    if (error) {
+      console.error('Error checking rating history:', error);
+      return false;
+    }
+    return (count || 0) > 0;
   },
 
   async savePushToken(token: string, platform: string) {

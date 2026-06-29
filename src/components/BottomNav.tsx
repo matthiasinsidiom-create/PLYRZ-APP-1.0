@@ -6,6 +6,7 @@ import {
   Calendar, 
   ThumbsUp, 
   Trophy, 
+  ListOrdered,
   User,
   ShieldAlert
 } from 'lucide-react';
@@ -49,13 +50,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHa
   const hasAccess = internalHasAdminAccess;
 
   const tabs = [
-    { id: 'home', label: 'Start', icon: Home, path: '/' },
+    { id: 'home', label: 'Home', icon: Home, path: '/' },
     { id: 'matches', label: 'Spiele', icon: Calendar, path: '/matches' },
-    { id: 'vote', label: 'Voten', icon: ThumbsUp, path: '/vote' },
+    { id: 'vote', label: 'Voting', icon: ThumbsUp, path: '/vote' },
     { id: 'leaderboard', label: 'Ranking', icon: Trophy, path: '/leaderboard' },
+    { id: 'table', label: 'Tabelle', icon: ListOrdered, path: '/table' },
   ];
-
-  tabs.push({ id: 'profile', label: 'Profil', icon: User, path: '/profile' });
 
   const isActive = (path: string) => {
     if (path === '/') {

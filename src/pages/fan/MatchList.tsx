@@ -11,7 +11,8 @@ import {
   Trophy,
   ArrowLeft,
   CheckCircle2,
-  Timer
+  Timer,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../../services/supabaseService';
@@ -133,7 +134,14 @@ export const MatchList: React.FC = () => {
             </button>
           </div>
 
-          <div className="w-6" /> {/* Spacer */}
+          <button 
+            onClick={() => navigate('/profile')}
+            className="w-8 h-8 bg-zinc-900 rounded-lg border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+            title="Profil"
+            aria-label="Profil"
+          >
+            <User className="w-4 h-4" />
+          </button>
         </div>
       </div>
 

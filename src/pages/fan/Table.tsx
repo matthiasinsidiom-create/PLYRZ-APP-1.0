@@ -184,8 +184,8 @@ export const Table: React.FC = () => {
             <div className="w-16 h-16 bg-zinc-800/50 rounded-2xl flex items-center justify-center mb-6 border border-white/5 shadow-inner">
               <ListOrdered className="w-8 h-8 text-zinc-500" />
             </div>
-            <h3 className="text-xl font-black italic uppercase tracking-tighter mb-2">Keine Daten</h3>
-            <p className="text-zinc-500 text-sm font-medium">Noch keine fertigen Spiele in dieser Liga verfügbar.</p>
+            <h3 className="text-xl font-black italic uppercase tracking-tighter mb-2">Keine Teams</h3>
+            <p className="text-zinc-500 text-sm font-medium">Noch keine Teams für diese Liga angelegt.</p>
           </div>
         ) : (
           <div className="bg-zinc-900/60 border border-white/10 rounded-3xl shadow-2xl backdrop-blur-xl">

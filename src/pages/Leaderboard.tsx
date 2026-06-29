@@ -10,7 +10,8 @@ import {
   Users,
   Loader2,
   Medal,
-  Star
+  Star,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../services/supabaseService';
@@ -31,6 +32,7 @@ export const Leaderboard: React.FC = () => {
   // Initialize selectedLeague with profile.selected_league_id if available, otherwise 'all'
   const [selectedLeague, setSelectedLeague] = useState<string>(profile?.selected_league_id || 'all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasHistory, setHasHistory] = useState(false);
 
   // Update selectedLeague when profile loads
   useEffect(() => {
@@ -51,10 +53,11 @@ export const Leaderboard: React.FC = () => {
       // If user is not admin, only fetch players from their selected league
       const fetchLeagueId = isAdmin ? undefined : profile?.selected_league_id;
       
-      const [p, c, l] = await Promise.all([
+      const [p, c, l, historyExists] = await Promise.all([
         supabaseService.getPlayers(undefined, fetchLeagueId),
         supabaseService.getClubs(fetchLeagueId),
-        supabaseService.getLeagues()
+        supabaseService.getLeagues(),
+        supabaseService.hasRatingHistory()
       ]);
       
       // Sort players by overall descending
@@ -65,6 +68,7 @@ export const Leaderboard: React.FC = () => {
       setPlayers(sortedPlayers);
       setClubs(c);
       setLeagues(l);
+      setHasHistory(historyExists);
     } catch (err) {
       console.error('Error loading leaderboard data:', err);
     } finally {
@@ -79,8 +83,8 @@ export const Leaderboard: React.FC = () => {
     return matchesClub && matchesLeague && matchesSearch;
   });
 
-  const top3 = filteredPlayers.slice(0, 3);
-  const remaining = filteredPlayers.slice(3);
+  const top3 = hasHistory ? filteredPlayers.slice(0, 3) : [];
+  const remaining = hasHistory ? filteredPlayers.slice(3) : filteredPlayers;
 
   // Reorder top 3 for visual layout: [2, 1, 3]
   const visualTop3 = [
@@ -104,32 +108,51 @@ export const Leaderboard: React.FC = () => {
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-black italic uppercase tracking-tight">Ranking</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className="p-2 bg-emerald-500/10 rounded-lg">
             <Trophy className="w-5 h-5 text-emerald-500" />
           </div>
+          <button 
+            onClick={() => navigate('/profile')}
+            className="w-10 h-10 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+            title="Profil"
+            aria-label="Profil"
+          >
+            <User className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-8">
         {/* Season End Actions */}
-        <button
-          onClick={() => navigate('/season-top3')}
-          className="w-full bg-[#18181b] border border-amber-500/20 rounded-[2rem] p-5 flex items-center justify-between shadow-2xl hover:bg-zinc-900 transition-all active:scale-95"
-        >
-           <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center">
-               <Trophy className="w-6 h-6 text-amber-500" />
+        {hasHistory && (
+          <button
+            onClick={() => navigate('/season-top3')}
+            className="w-full bg-[#18181b] border border-amber-500/20 rounded-[2rem] p-5 flex items-center justify-between shadow-2xl hover:bg-zinc-900 transition-all active:scale-95"
+          >
+             <div className="flex items-center gap-4">
+               <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center">
+                 <Trophy className="w-6 h-6 text-amber-500" />
+               </div>
+               <div className="text-left">
+                 <div className="text-[10px] font-black uppercase tracking-widest text-amber-500/80 mb-0.5">Saisonende</div>
+                 <div className="font-black italic text-lg text-white">Top 3 der Saison</div>
+               </div>
              </div>
-             <div className="text-left">
-               <div className="text-[10px] font-black uppercase tracking-widest text-amber-500/80 mb-0.5">Saisonende</div>
-               <div className="font-black italic text-lg text-white">Top 3 der Saison</div>
+             <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center">
+               <ChevronLeft className="w-4 h-4 text-zinc-500 rotate-180" />
              </div>
-           </div>
-           <div className="w-8 h-8 bg-white/5 rounded-full flex items-center justify-center">
-             <ChevronLeft className="w-4 h-4 text-zinc-500 rotate-180" />
-           </div>
-        </button>
+          </button>
+        )}
+
+        {!hasHistory && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5 text-center">
+            <Trophy className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
+            <p className="text-emerald-500 font-bold uppercase tracking-wider text-xs">
+              Das Ranking startet mit den ersten gespielten Partien der Saison 2026/2027.
+            </p>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4">
@@ -168,7 +191,7 @@ export const Leaderboard: React.FC = () => {
         </div>
 
         {/* Top 3 Section */}
-        {top3.length > 0 && (
+        {hasHistory && top3.length > 0 && (
           <div className="relative pt-20 pb-12">
             <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent blur-3xl rounded-full opacity-50" />
             
@@ -267,7 +290,7 @@ export const Leaderboard: React.FC = () => {
                   className="bg-white/5 border border-white/5 hover:border-emerald-500/30 hover:bg-white/10 p-3 sm:p-4 rounded-2xl grid grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[4rem_1fr_8rem_4rem] items-center group cursor-pointer transition-all gap-2"
                 >
                   <div className="text-center font-black italic text-zinc-500 group-hover:text-emerald-500 transition-colors">
-                    #{idx + 4}
+                    #{idx + (hasHistory ? 4 : 1)}
                   </div>
 
                   <div className="flex items-center gap-3 pl-1 sm:pl-4 min-w-0">

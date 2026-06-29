@@ -22,6 +22,7 @@ import PlayerDetail from './pages/fan/PlayerDetail';
 import { Leaderboard } from './pages/Leaderboard';
 import { SeasonTop3 } from './pages/fan/SeasonTop3';
 import { Profile } from './pages/fan/Profile';
+import { Table } from './pages/fan/Table';
 import { RatingLogicScreen } from './pages/fan/RatingLogicScreen';
 import { VoteList } from './pages/fan/VoteList';
 import { BottomNav } from './components/BottomNav';
@@ -217,6 +218,7 @@ const AppContent: React.FC = () => {
           <Route path="/players" element={<PlayerList />} />
           <Route path="/players/:id" element={<PlayerDetail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/table" element={<Table />} />
           <Route path="/season-top3" element={<SeasonTop3 />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/rating-logic" element={<RatingLogicScreen />} />

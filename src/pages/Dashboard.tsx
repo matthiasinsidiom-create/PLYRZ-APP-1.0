@@ -46,32 +46,19 @@ export const Dashboard: React.FC = () => {
   const [fixtureReserve, setFixtureReserve] = useState<Fixture | null>(null);
   const [currentRound, setCurrentRound] = useState<number | null>(null);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [hasHistory, setHasHistory] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   
   const [showSeasonTeaser, setShowSeasonTeaser] = useState(false);
 
   useEffect(() => {
-    // Saisonende: 08.06.2026
-    const seasonEnd = new Date('2026-06-08T00:00:00+02:00');
-    // Saisonstart: 21.08.2026 (erstes Meisterschaftsspiel)
-    const exactSeasonStart = new Date('2026-08-21T00:00:00+02:00');
-    const now = new Date();
-
-    const isEnded = now >= seasonEnd;
-    const isStartedByDate = now >= exactSeasonStart;
-    
-    // Dynamischer Check, ob Meisterschaftsspiel gestartet hat
-    const hasStartedDynamically = fixtures.some(f => 
-      (f.status === 'live' || f.status === 'finished') && 
-      new Date(f.kickoff_at) >= exactSeasonStart
-    );
-
-    if (isEnded && !isStartedByDate && !hasStartedDynamically) {
+    // Only show season teaser if we actually have history and all fixtures are finished/cancelled
+    if (fixtures.length > 0 && hasHistory && fixtures.every(f => f.status === 'finished' || f.status === 'cancelled')) {
       setShowSeasonTeaser(true);
     } else {
       setShowSeasonTeaser(false);
     }
-  }, [fixtures]);
+  }, [fixtures, hasHistory]);
 
   const renderSeasonEndTeaser = () => {
     const winner = seasonWinner || (topPlayers && topPlayers[0]) || null;
@@ -96,7 +83,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-transparent px-2 w-full truncate drop-shadow-lg">TOP 10 DER SAISON</h2>
           <div className="text-[10px] sm:text-[11px] font-bold text-amber-500/80 uppercase tracking-[0.2em] mt-1">
-            PLYRZ Award 2025/26
+            PLYRZ Award
           </div>
         </div>
 
@@ -695,12 +682,17 @@ export const Dashboard: React.FC = () => {
   const loadTopPlayers = async () => {
     setLoadingTopPlayers(true);
     try {
-      const top = await supabaseService.getTopPlayers(6);
-      setTopPlayers(top);
-      
-      const top10 = await supabaseService.getSeasonTop10Players();
-      if (top10 && top10.length > 0) {
-        setSeasonWinner(top10[0]);
+      const historyExists = await supabaseService.hasRatingHistory();
+      setHasHistory(historyExists);
+
+      if (historyExists) {
+        const top = await supabaseService.getTopPlayers(6);
+        setTopPlayers(top);
+        
+        const top10 = await supabaseService.getSeasonTop10Players();
+        if (top10 && top10.length > 0) {
+          setSeasonWinner(top10[0]);
+        }
       }
     } catch (err) {
       console.error('Error loading top players:', err);
@@ -790,8 +782,8 @@ export const Dashboard: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none"></div>
                   <Calendar className="w-8 h-8 text-amber-500/50 mx-auto relative z-10" strokeWidth={1} />
                   <div className="relative z-10 space-y-1">
-                    <p className="text-white text-base font-black italic uppercase tracking-widest">Saison 2025/2026 beendet</p>
-                    <p className="text-zinc-400 text-[11px] uppercase tracking-widest font-bold">Wir sehen uns in der neuen Saison 2026/2027</p>
+                    <p className="text-white text-base font-black italic uppercase tracking-widest">Saison beendet</p>
+                    <p className="text-zinc-400 text-[11px] uppercase tracking-widest font-bold">Die Liga-Saison ist offiziell abgeschlossen.</p>
                   </div>
                 </div>
               ) : currentRound ? (
@@ -813,6 +805,14 @@ export const Dashboard: React.FC = () => {
                         />
                       ))
                     }
+                  </div>
+                </div>
+              ) : fixtures.length === 0 ? (
+                <div className="py-12 text-center space-y-4 bg-zinc-900/40 backdrop-blur-md rounded-[2rem] border border-dashed border-white/10 relative overflow-hidden">
+                  <Calendar className="w-8 h-8 text-zinc-600 mx-auto relative z-10" strokeWidth={1} />
+                  <div className="relative z-10 space-y-1">
+                    <p className="text-white text-base font-black italic uppercase tracking-widest">Keine Spiele</p>
+                    <p className="text-zinc-400 text-[11px] uppercase tracking-widest font-bold">Noch keine Spiele für die Saison 2026/2027 angelegt.</p>
                   </div>
                 </div>
               ) : (
@@ -839,30 +839,39 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
             
-            <div 
-              ref={carouselRef}
-              onScroll={handleScroll}
-              className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar pb-12 pt-8 -mx-5 px-5"
-            >
-              {topPlayers.slice(0, 6).map((p, index) => {
-                const isActive = index === activeCardIndex;
-                return (
-                  <div 
-                    key={p.id} 
-                    className={`flex-shrink-0 w-[227px] h-[318px] relative transition-all duration-300 snap-center ${index > 0 ? '-ml-24' : ''} ${isActive ? 'scale-110 z-50 -translate-y-4' : 'scale-90 opacity-60'} hover:z-50 hover:opacity-100`}
-                    style={{ zIndex: isActive ? 50 : 10 - index }}
-                  >
-                     <div className="absolute top-0 left-0 scale-[0.65] origin-top-left drop-shadow-2xl cursor-pointer">
-                      <PlayerCard 
-                        player={p}
-                        clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
-                        onClick={() => navigate(`/players/${p.id}`)}
-                      />
+            {hasHistory && topPlayers.length > 0 ? (
+              <div 
+                ref={carouselRef}
+                onScroll={handleScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar pb-12 pt-8 -mx-5 px-5"
+              >
+                {topPlayers.slice(0, 6).map((p, index) => {
+                  const isActive = index === activeCardIndex;
+                  return (
+                    <div 
+                      key={p.id} 
+                      className={`flex-shrink-0 w-[227px] h-[318px] relative transition-all duration-300 snap-center ${index > 0 ? '-ml-24' : ''} ${isActive ? 'scale-110 z-50 -translate-y-4' : 'scale-90 opacity-60'} hover:z-50 hover:opacity-100`}
+                      style={{ zIndex: isActive ? 50 : 10 - index }}
+                    >
+                       <div className="absolute top-0 left-0 scale-[0.65] origin-top-left drop-shadow-2xl cursor-pointer">
+                        <PlayerCard 
+                          player={p}
+                          clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
+                          onClick={() => navigate(`/players/${p.id}`)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-12 text-center space-y-3 bg-zinc-900/10 rounded-[2rem] border border-dashed border-white/5">
+                <Trophy className="w-8 h-8 text-zinc-800 mx-auto" strokeWidth={1} />
+                <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest px-4">
+                  Noch keine Ranking-Daten für die neue Saison verfügbar.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* D. OPTIONAL SECTIONS (BOTTOM ONLY) */}
