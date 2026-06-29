@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../../services/supabaseService';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture } from '../../types';
-import { calculateMatchScore } from '../../lib/score';
+import { calculateMatchScore, getLiveMatchMinute } from '../../lib/score';
 
 export const MatchList: React.FC = () => {
   const navigate = useNavigate();
@@ -78,14 +78,6 @@ export const MatchList: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getMatchMinute = (kickoffAt: string) => {
-    const kickoff = new Date(kickoffAt).getTime();
-    const diff = Math.floor((now.getTime() - kickoff) / (1000 * 60));
-    if (diff <= 0) return '1\'';
-    if (diff > 90) return '90+\'';
-    return `${diff}'`;
   };
 
   const filteredFixtures = fixtures
@@ -157,9 +149,10 @@ export const MatchList: React.FC = () => {
           >
             {filteredFixtures.length > 0 ? (
               filteredFixtures.map((fixture) => {
-                const isLive = fixture.status === 'live';
+                const kickoffDate = new Date(fixture.kickoff_at);
+                const isLive = fixture.status === 'live' || (fixture.status === 'upcoming' && now >= kickoffDate);
                 const isFinished = fixture.status === 'finished';
-                const isUpcoming = fixture.status === 'upcoming';
+                const isUpcoming = fixture.status === 'upcoming' && !isLive;
                 const isCancelled = fixture.status === 'cancelled';
                 const isVoting = isFinished && !fixture.results_processed_at && fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
 
@@ -233,7 +226,7 @@ export const MatchList: React.FC = () => {
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center gap-1 bg-red-500 px-2 py-0.5 rounded-full">
                             <Timer className="w-3 h-3 text-white" />
-                            <span className="text-[10px] font-black text-white">{getMatchMinute(fixture.kickoff_at)}</span>
+                            <span className="text-[10px] font-black text-white">{getLiveMatchMinute(fixture, now) || '1\''}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             {(() => {

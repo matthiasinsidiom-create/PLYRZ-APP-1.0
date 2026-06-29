@@ -241,24 +241,38 @@ const MatchResult: React.FC = () => {
     if (!mvpExportRef.current || !fixture) return;
     setSharingMVP(true);
     try {
-      // Small delay to ensure images/fonts are loaded
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Very small delay to ensure React has flushed DOM (avoid eating into 1s user gesture window)
+      await new Promise(resolve => setTimeout(resolve, 50));
       
-      const dataUrl = await htmlToImage.toPng(mvpExportRef.current, {
-        pixelRatio: 3,
-        backgroundColor: '#09090b', // zinc-950
-      });
+      let dataUrl: string;
+      try {
+        dataUrl = await htmlToImage.toPng(mvpExportRef.current, {
+          pixelRatio: 3,
+          backgroundColor: '#09090b', // zinc-950
+        });
+      } catch (firstErr) {
+        console.warn('First export failed, likely due to CORS. Retrying without external images...', firstErr);
+        // Retry without external images
+        dataUrl = await htmlToImage.toPng(mvpExportRef.current, {
+          pixelRatio: 3,
+          backgroundColor: '#09090b',
+          filter: (node: HTMLElement) => {
+            if (node.tagName === 'IMG') {
+              const src = (node as HTMLImageElement).src;
+              // Allow local assets, filter out external ones
+              if (src && (src.startsWith('http://') || src.startsWith('https://')) && !src.includes(window.location.origin)) {
+                return false; // Skip external images
+              }
+            }
+            return true;
+          }
+        });
+      }
 
       const blob = await fetch(dataUrl).then(r => r.blob());
       const file = new File([blob], `mvp_${fixture.id.substring(0,8)}.png`, { type: 'image/png' });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `MVP: ${(fixture as any).home_team?.name || ''} vs ${(fixture as any).away_team?.name || ''}`,
-          text: `Schau dir den MVP des Spiels an!`
-        });
-      } else {
+      const downloadFallback = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -266,11 +280,31 @@ const MatchResult: React.FC = () => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      };
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `MVP: ${(fixture as any).home_team?.name || ''} vs ${(fixture as any).away_team?.name || ''}`,
+            text: `Schau dir den MVP des Spiels an!`
+          });
+        } catch (shareErr: any) {
+          console.warn('navigator.share failed:', shareErr);
+          if (shareErr.name === 'NotAllowedError') {
+             // Fallback to download if gesture token expired
+             downloadFallback();
+          } else if (shareErr.name !== 'AbortError') { // AbortError means user cancelled
+             throw shareErr;
+          }
+        }
+      } else {
+        downloadFallback();
       }
     } catch (err) {
       console.error('Error sharing MVP:', err);
-      alert('Fehler beim Teilen des MVPs. Ggf. blockieren externe Bilder den Export.');
+      alert('Bildexport fehlgeschlagen. Versuche es ggf. in einem anderen Browser.');
     } finally {
       setSharingMVP(false);
     }
@@ -798,15 +832,13 @@ const MatchResult: React.FC = () => {
                 </div>
 
                 {/* MVP Sponsor */}
-                {(fixture as any).mvp_sponsor_name && (
-                  <div className="mt-8 flex justify-center w-full max-w-[360px]">
-                    <SponsorBox 
-                      type="MVP" 
-                      sponsorName={(fixture as any).mvp_sponsor_name} 
-                      sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
-                    />
-                  </div>
-                )}
+                <div className="mt-8 flex justify-center w-full max-w-[360px]">
+                  <SponsorBox 
+                    type="MVP" 
+                    sponsorName={(fixture as any).mvp_sponsor_name || "PLYRZ"} 
+                    sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
+                  />
+                </div>
 
                 <button 
                   onClick={handleShareMVP}
@@ -935,15 +967,13 @@ const MatchResult: React.FC = () => {
                  </div>
 
                 {/* MVP Sponsor Inline */}
-                {(fixture as any).mvp_sponsor_name && (
-                  <div className="mt-20 w-[360px] origin-bottom scale-[2.7] flex justify-center pb-8">
-                    <SponsorBox 
-                      type="MVP" 
-                      sponsorName={(fixture as any).mvp_sponsor_name} 
-                      sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
-                    />
-                  </div>
-                )}
+                <div className="mt-20 w-[360px] origin-bottom scale-[2.7] flex justify-center pb-8">
+                  <SponsorBox 
+                    type="MVP" 
+                    sponsorName={(fixture as any).mvp_sponsor_name || "PLYRZ"} 
+                    sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
+                  />
+                </div>
               </div>
             </div>
           </div>

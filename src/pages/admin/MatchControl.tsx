@@ -280,6 +280,12 @@ const AdminMatchControl: React.FC = () => {
       const { homeScore, awayScore } = calculateMatchScore(fixture, events);
       fixtureUpdates.home_score = homeScore;
       fixtureUpdates.away_score = awayScore;
+      
+      // Auto-start first half if not already started
+      if (!fixture.match_phase || fixture.match_phase === 'upcoming') {
+        fixtureUpdates.match_phase = 'first_half';
+        fixtureUpdates.first_half_started_at = new Date().toISOString();
+      }
     }
 
     try {

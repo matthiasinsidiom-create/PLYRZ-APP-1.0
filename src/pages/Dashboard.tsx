@@ -24,7 +24,7 @@ import { supabaseService } from '../services/supabaseService';
 import { Player, Fixture, Club, Team, PlayerStats, MatchEvent } from '../types';
 import { PlayerCard } from '../components/PlayerCard';
 import { MatchCard } from '../components/MatchCard';
-import { calculateMatchScore } from '../lib/score';
+import { calculateMatchScore, getLiveMatchMinute } from '../lib/score';
 
 // --- MAIN DASHBOARD ---
 
@@ -641,7 +641,7 @@ export const Dashboard: React.FC = () => {
                     );
                   })()}
                 </div>
-                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{heroFixture.match_phase === 'halftime' ? 'HZ' : heroFixture.match_phase === 'first_half' ? '1. HZ' : '2. HZ'}</div>
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{getLiveMatchMinute(heroFixture, now) || '1. HZ'}</div>
               </div>
 
               <div className="flex-1 flex flex-col items-center gap-2">

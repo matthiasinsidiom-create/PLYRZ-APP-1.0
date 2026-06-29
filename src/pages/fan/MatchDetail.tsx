@@ -35,7 +35,7 @@ import { PlayerVoteCard } from '../../components/PlayerVoteCard';
 import { SwipeVotingOverlay } from '../../components/SwipeVotingOverlay';
 import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { VotingCountdown } from '../../components/VotingCountdown';
-import { calculateMatchScore } from '../../lib/score';
+import { calculateMatchScore, getLiveMatchMinute } from '../../lib/score';
 
 interface LineupEntry {
   id: string;
@@ -169,28 +169,7 @@ export const MatchDetail: React.FC = () => {
       return;
     }
 
-    const phase = fixture.match_phase || (isActuallyLive ? 'first_half' : null);
-    
-    if (phase === 'first_half') {
-      const startAt = fixture.first_half_started_at ? new Date(fixture.first_half_started_at) : kickoffDate;
-      if (startAt) {
-        const diff = Math.floor((now.getTime() - startAt.getTime()) / (1000 * 60)) + 1;
-        const displayMin = Math.min(45, Math.max(1, diff));
-        setMatchMinute(`${displayMin}'`);
-      }
-    } else if (phase === 'halftime') {
-      setMatchMinute('HZ');
-    } else if (phase === 'second_half') {
-      const startAt = fixture.second_half_started_at ? new Date(fixture.second_half_started_at) : null;
-      if (startAt) {
-        const diff = Math.floor((now.getTime() - startAt.getTime()) / (1000 * 60));
-        setMatchMinute(`${46 + diff}'`);
-      } else {
-        setMatchMinute('46\'');
-      }
-    } else {
-      setMatchMinute('');
-    }
+    setMatchMinute(getLiveMatchMinute(fixture as Fixture, now));
   }, [fixture, now, kickoffDate, isActuallyLive]);
 
   useEffect(() => {
@@ -369,6 +348,19 @@ export const MatchDetail: React.FC = () => {
         halftime_started_at: nowIso 
       }).eq('id', id);
     }
+  };
+
+  const handleStartFirstHalf = async () => {
+    if (!id || !isMatchAdmin || !fixture) return;
+    const nowIso = new Date().toISOString();
+    setFixture(prev => prev ? { ...prev, status: 'live', match_phase: 'first_half', first_half_started_at: nowIso } : null);
+    
+    // We update directly since we don't have an RPC for first half specifically
+    await supabase.from('fixtures').update({ 
+      status: 'live',
+      match_phase: 'first_half', 
+      first_half_started_at: nowIso 
+    }).eq('id', id);
   };
 
   const handleStartSecondHalf = async () => {
@@ -1399,7 +1391,15 @@ export const MatchDetail: React.FC = () => {
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
             {/* Match Phase Controls */}
             <div className="flex gap-2 p-3 border-b border-white/5 bg-zinc-950/30">
-              {isLive && (!fixture.match_phase || fixture.match_phase === 'first_half') && (
+              {(!fixture.match_phase || fixture.match_phase === 'upcoming' || fixture.status === 'upcoming') && (
+                <button 
+                  onClick={handleStartFirstHalf}
+                  className="flex-1 py-2.5 bg-emerald-500 text-black font-black rounded-xl text-[9px] uppercase tracking-widest transition-all"
+                >
+                  Anpfiff (1. HZ)
+                </button>
+              )}
+              {isLive && fixture.match_phase === 'first_half' && (
                 <button 
                   onClick={handleStartHalftime}
                   className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-white/5"

@@ -18,8 +18,8 @@ export const SponsorBox: React.FC<SponsorBoxProps> = ({ type, sponsorName, spons
           {type} PRÄSENTIERT VON
         </span>
         
-        <div className="w-[220px] h-[90px] flex items-center justify-center mb-2 shrink-0">
-          {sponsorLogoUrl ? (
+        {sponsorLogoUrl ? (
+          <div className="w-[220px] h-[90px] flex items-center justify-center mb-2 shrink-0">
             <img 
                src={sponsorLogoUrl} 
                alt={sponsorName} 
@@ -27,14 +27,10 @@ export const SponsorBox: React.FC<SponsorBoxProps> = ({ type, sponsorName, spons
                crossOrigin="anonymous" 
                referrerPolicy="no-referrer"
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <span className="text-zinc-700 font-bold italic">LOGO FEHLT</span>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : null}
         
-        <span className="text-sm font-black text-white italic uppercase tracking-wider text-center line-clamp-2 leading-tight w-full max-w-[280px]">
+        <span className={`${sponsorLogoUrl ? 'text-sm' : 'text-xl'} font-black text-white italic uppercase tracking-wider text-center line-clamp-2 leading-tight w-full max-w-[280px]`}>
           {sponsorName}
         </span>
       </div>
