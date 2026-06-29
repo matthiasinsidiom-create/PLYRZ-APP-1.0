@@ -251,19 +251,27 @@ const AdminLineups: React.FC = () => {
       console.log('DEBUG: Fetching players for clubs:', [homeClubId, awayClubId]);
       const [allPlayers, currentLineup] = await Promise.all([
         supabaseService.getPlayersByClubs([homeClubId, awayClubId]),
-        supabaseService.getFixtureLineup(fixture.id)
+        supabaseService.getFixtureLineupWithPlayers(fixture.id)
       ]);
 
-      console.log('DEBUG: Eligible players full result array:', allPlayers);
-      allPlayers.forEach(p => {
+      const lineupPlayers = currentLineup.map(l => (l as any).players).filter(Boolean);
+      const mergedPlayers = [...allPlayers];
+      lineupPlayers.forEach(lp => {
+        if (!mergedPlayers.find(p => p.id === lp.id)) {
+          mergedPlayers.push(lp);
+        }
+      });
+
+      console.log('DEBUG: Eligible players full result array:', mergedPlayers);
+      mergedPlayers.forEach(p => {
         console.log(`DEBUG: Player: ${p.id} | Name: ${p.full_name} | Base Team ID: ${p.team_id} | Base Team Name: ${p.teams?.name} | Club ID: ${p.teams?.club_id} | Club Name: ${p.teams?.clubs?.name}`);
       });
 
       console.log('DEBUG: Existing lineup entries:', currentLineup.length);
 
       // Filter players strictly by their team_id to match fixture exactly
-      const homeTeamPlayers = allPlayers.filter(p => p.team_id === fixture.home_team_id);
-      const awayTeamPlayers = allPlayers.filter(p => p.team_id === fixture.away_team_id);
+      const homeTeamPlayers = mergedPlayers.filter(p => p.team_id === fixture.home_team_id);
+      const awayTeamPlayers = mergedPlayers.filter(p => p.team_id === fixture.away_team_id);
       
       console.log('DEBUG: Eligible players count for home team:', homeTeamPlayers.length);
       console.log('DEBUG: Eligible players count for away team:', awayTeamPlayers.length);
@@ -278,7 +286,8 @@ const AdminLineups: React.FC = () => {
         .map(l => {
           const player = homeTeamPlayers.find(p => p.id === l.player_id);
           return { 
-            player_id: l.player_id, 
+            player_id: l.player_id,
+            player_name: (l as any).players?.full_name || player?.full_name,
             jersey_number: (l.jersey_number || player?.jersey_number || '').toString(), 
             lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter' 
           };
@@ -289,6 +298,7 @@ const AdminLineups: React.FC = () => {
           const player = awayTeamPlayers.find(p => p.id === l.player_id);
           return { 
             player_id: l.player_id, 
+            player_name: (l as any).players?.full_name || player?.full_name,
             jersey_number: (l.jersey_number || player?.jersey_number || '').toString(), 
             lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter' 
           };
@@ -524,8 +534,11 @@ const AdminLineups: React.FC = () => {
                   <div className="space-y-1 mb-4">
                     <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest px-2 mb-2">Startelf</p>
                     {lineup.home.filter(e => e.lineup_role === 'starter').map(entry => {
-                      const player = homePlayers.find(p => p.id === entry.player_id);
-                      if (!player) return null;
+                      const player = homePlayers.find(p => p.id === entry.player_id) || {
+                        id: entry.player_id,
+                        full_name: (entry as any).player_name || 'Spieler unbekannt',
+                        position: 'Unbekannt'
+                      };
                       return (
                         <PlayerRow 
                           key={player.id}
@@ -545,8 +558,11 @@ const AdminLineups: React.FC = () => {
                   <div className="space-y-1 mb-4">
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Auswechselspieler</p>
                     {lineup.home.filter(e => e.lineup_role === 'sub').map(entry => {
-                      const player = homePlayers.find(p => p.id === entry.player_id);
-                      if (!player) return null;
+                      const player = homePlayers.find(p => p.id === entry.player_id) || {
+                        id: entry.player_id,
+                        full_name: (entry as any).player_name || 'Spieler unbekannt',
+                        position: 'Unbekannt'
+                      };
                       return (
                         <PlayerRow 
                           key={player.id}
@@ -609,8 +625,11 @@ const AdminLineups: React.FC = () => {
                       <div className="space-y-1 mb-4">
                         <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest px-2 mb-2">Startelf</p>
                         {lineup.away.filter(e => e.lineup_role === 'starter').map(entry => {
-                          const player = awayPlayers.find(p => p.id === entry.player_id);
-                          if (!player) return null;
+                          const player = awayPlayers.find(p => p.id === entry.player_id) || {
+                            id: entry.player_id,
+                            full_name: (entry as any).player_name || 'Spieler unbekannt',
+                            position: 'Unbekannt'
+                          };
                           return (
                             <PlayerRow 
                               key={player.id}
@@ -630,8 +649,11 @@ const AdminLineups: React.FC = () => {
                       <div className="space-y-1 mb-4">
                         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Auswechselspieler</p>
                         {lineup.away.filter(e => e.lineup_role === 'sub').map(entry => {
-                          const player = awayPlayers.find(p => p.id === entry.player_id);
-                          if (!player) return null;
+                          const player = awayPlayers.find(p => p.id === entry.player_id) || {
+                            id: entry.player_id,
+                            full_name: (entry as any).player_name || 'Spieler unbekannt',
+                            position: 'Unbekannt'
+                          };
                           return (
                             <PlayerRow 
                               key={player.id}
