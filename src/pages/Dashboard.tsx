@@ -15,7 +15,8 @@ import {
   X,
   ArrowLeft,
   CheckCircle2,
-  Settings
+  Settings,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -722,17 +723,17 @@ export const Dashboard: React.FC = () => {
         {/* Remove previous redundant dark overlay to restore App.tsx background */}
 
         {/* Header - Fixed Top Anchor */}
-        <div className="sticky top-0 pt-6 pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
-          <div className="flex items-center">
+        <div className="sticky top-0 pt-4 sm:pt-6 pb-4 sm:pb-6 px-4 sm:px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
+          <div className="flex items-center flex-shrink-0">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ" 
-            className="h-16 w-auto object-contain brightness-125 drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]"
+            className="h-10 sm:h-16 w-auto object-contain brightness-125 drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]"
             
           />
         </div>
         
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {hasAdminAccess && (
             <button 
               onClick={() => navigate(isAdmin ? '/admin' : '/team-admin')}
@@ -747,18 +748,15 @@ export const Dashboard: React.FC = () => {
             <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1">Angemeldet</div>
             <div className="text-xs font-bold text-white">{profile?.display_name}</div>
           </div>
-          <div 
+          
+          <button 
             onClick={() => navigate('/profile')}
-            className="w-10 h-10 bg-zinc-900 rounded-full border border-white/10 overflow-hidden cursor-pointer hover:border-emerald-500 transition-all shadow-lg active:scale-95"
+            className="w-10 h-10 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+            title="Profil"
+            aria-label="Profil"
           >
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-zinc-500 font-bold uppercase text-xs">
-                {profile?.display_name?.[0]}
-              </div>
-            )}
-          </div>
+            <User className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
