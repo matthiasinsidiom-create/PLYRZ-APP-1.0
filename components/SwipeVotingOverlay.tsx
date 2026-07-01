@@ -1,0 +1,461 @@
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { 
+  ThumbsUp, 
+  ThumbsDown, 
+  X, 
+  CheckCircle2, 
+  Trophy,
+  Loader2,
+  AlertCircle,
+  Clock
+} from 'lucide-react';
+import { PlayerCard } from './PlayerCard';
+import { supabaseService } from '../services/supabaseService';
+
+interface SwipeVotingOverlayProps {
+  fixtureId: string;
+  userId: string;
+  lineup: any[];
+  userVotes: Record<string, 'up' | 'down' | 'neutral'>;
+  onVote: (playerId: string, vote: 'up' | 'down' | 'neutral') => Promise<void>;
+  onClose: () => void;
+  onViewResults: () => void;
+  votingCloseAt?: string | null;
+  resultsProcessedAt?: string | null;
+}
+
+const variants = {
+  enter: { opacity: 0, x: 0, scale: 0.95, y: 0 },
+  center: { opacity: 1, x: 0, scale: 1, y: 0 },
+  exit: (direction: number) => ({
+    x: direction,
+    y: direction === 0 ? -50 : 0,
+    opacity: 0,
+    scale: 0.9,
+    rotate: direction / 10
+  })
+};
+
+const SwipeablePlayerCard = ({
+  player,
+  currentPlayerEntry,
+  exitDirection,
+  onSwipe
+}: {
+  player: any;
+  currentPlayerEntry: any;
+  exitDirection: number;
+  onSwipe: (dir: 'left'|'right') => void;
+  key?: any;
+}) => {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 200], [-25, 25]);
+
+  const handleDragEnd = useCallback((_: any, info: any) => {
+    const threshold = 80;
+    if (info.offset.x > threshold) {
+      onSwipe('right');
+    } else if (info.offset.x < -threshold) {
+      onSwipe('left');
+    }
+  }, [onSwipe]);
+
+  return (
+    <motion.div
+      custom={exitDirection}
+      variants={variants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      style={{ x, rotate }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      onDragEnd={handleDragEnd}
+      transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+      className="cursor-grab active:cursor-grabbing z-10 w-full col-start-1 row-start-1"
+    >
+      <div className="relative rounded-[3rem] overflow-hidden shadow-2xl">
+        <PlayerCard 
+          player={player} 
+          jerseyNumber={currentPlayerEntry?.jersey_number}
+          lineupRole={currentPlayerEntry?.lineup_role}
+        />
+      </div>
+    </motion.div>
+  );
+};
+
+export const SwipeVotingOverlay: React.FC<SwipeVotingOverlayProps> = ({
+  fixtureId,
+  userId,
+  lineup,
+  userVotes,
+  onVote,
+  onClose,
+  onViewResults,
+  votingCloseAt,
+  resultsProcessedAt
+}) => {
+  const navigate = useNavigate();
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const firstUnvoted = lineup.findIndex(entry => !userVotes[entry.player_id]);
+    return firstUnvoted === -1 ? 0 : firstUnvoted;
+  });
+  
+  const [exitDirection, setExitDirection] = useState<number>(0);
+  const [completed, setCompleted] = useState(() => {
+    const hasPlayers = lineup.length > 0;
+    const allVoted = hasPlayers && lineup.every(entry => !!userVotes[entry.player_id]);
+    return allVoted;
+  });
+  
+  const [isCheckingCompletion, setIsCheckingCompletion] = useState(true);
+  const [hasCompletedBefore, setHasCompletedBefore] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+
+  // Anti-double-click protection
+  const isAnimatingRef = useRef(false);
+
+  const currentPlayerEntry = useMemo(() => lineup[currentIndex], [lineup, currentIndex]);
+  const totalPlayers = lineup.length;
+
+  // Preloading Assets
+  useEffect(() => {
+    const preloadImages = () => {
+      // PRELOAD FRAMES
+      ['bronze', 'silver', 'gold'].forEach(tier => {
+        const img = new Image();
+        img.src = `/assets/frames/card-frame-${tier}.png`;
+      });
+
+      // PRELOAD next few players
+      const maxPreload = Math.min(currentIndex + 4, lineup.length);
+      for (let i = currentIndex; i < maxPreload; i++) {
+        const player = lineup[i]?.players;
+        if (player) {
+          if (player.photo_url) {
+            const img = new Image();
+            img.src = player.photo_url;
+          }
+          const clubLogo = player.teams?.clubs?.logo_url;
+          if (clubLogo) {
+            const img = new Image();
+            img.src = clubLogo;
+          }
+          const flagCode = (player.nationality || 'de').toLowerCase();
+          const flagImg = new Image();
+          flagImg.src = `https://flagcdn.com/w80/${flagCode}.png`;
+        }
+      }
+    };
+
+    preloadImages();
+  }, [lineup, currentIndex]);
+
+  const markAsCompleted = useCallback(async () => {
+    if (!userId || !fixtureId) return;
+
+    try {
+      await supabaseService.markVoteAsCompleted(fixtureId, userId);
+      console.log(`DEBUG: [COMPLETION] Sync success for ${fixtureId}`);
+    } catch (err) {
+      console.error(`DEBUG: [COMPLETION] Sync error:`, err);
+    }
+  }, [fixtureId, userId]);
+
+  useEffect(() => {
+    const checkCompletion = async () => {
+      if (!userId || !fixtureId) {
+        setIsCheckingCompletion(false);
+        return;
+      }
+
+      try {
+        const isCompleted = await supabaseService.checkVoteCompletion(fixtureId, userId);
+        if (isCompleted) {
+          setHasCompletedBefore(true);
+          setCompleted(true);
+        }
+      } catch (err) {
+        console.error('Error checking vote completion:', err);
+      } finally {
+        setIsCheckingCompletion(false);
+      }
+    };
+
+    checkCompletion();
+  }, [userId, fixtureId]);
+
+  const handleVoteAction = useCallback((playerId: string, vote: 'up' | 'down' | 'neutral') => {
+    if (isAnimatingRef.current) return;
+    isAnimatingRef.current = true;
+
+    console.log(`DEBUG: [SWIPE] start ${playerId} -> ${vote}`);
+
+    // 1. Optimistic Background api call
+    onVote(playerId, vote).catch((err) => {
+      console.error(`DEBUG: [VOTE] Backend error for ${playerId}:`, err);
+    });
+
+    // 2. UI Update immediately
+    const nextIndex = currentIndex + 1;
+    
+    if (nextIndex < totalPlayers) {
+      setCurrentIndex(nextIndex);
+    } else {
+      setCompleted(true);
+      markAsCompleted();
+    }
+
+    // Free lock quickly
+    setTimeout(() => {
+      isAnimatingRef.current = false;
+    }, 50);
+  }, [currentIndex, totalPlayers, onVote, markAsCompleted]);
+
+  const handleSwipe = useCallback((direction: 'left' | 'right') => {
+    if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
+
+    if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
+      setCompleted(true);
+      return;
+    }
+    
+    const vote = direction === 'right' ? 'up' : 'down';
+    if (showHint) setShowHint(false);
+    
+    setExitDirection(direction === 'right' ? 800 : -800);
+
+    handleVoteAction(currentPlayerEntry.player_id, vote);
+  }, [completed, currentPlayerEntry, votingCloseAt, showHint, handleVoteAction]);
+
+  const handleNeutralVote = useCallback(() => {
+    if (isAnimatingRef.current || completed || !currentPlayerEntry?.players) return;
+    
+    if (votingCloseAt && new Date(votingCloseAt) <= new Date()) {
+      setCompleted(true);
+      return;
+    }
+
+    setExitDirection(0);
+
+    handleVoteAction(currentPlayerEntry.player_id, 'neutral');
+  }, [completed, currentPlayerEntry, votingCloseAt, handleVoteAction]);
+
+  if (totalPlayers === 0) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-6 text-center"
+      >
+        <AlertCircle className="w-12 h-12 text-zinc-800 mb-4" />
+        <h2 className="text-xl font-bold text-white mb-2">No players found</h2>
+        <button 
+          onClick={onClose}
+          className="text-emerald-500 font-bold uppercase tracking-widest text-xs"
+        >
+          Back to Match
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (isCheckingCompletion) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-6 text-center"
+      >
+        <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mb-4" />
+        <p className="text-zinc-500 font-black uppercase tracking-widest text-[10px]">Lade Status...</p>
+      </motion.div>
+    );
+  }
+
+  if (completed) {
+    const isProcessed = !!resultsProcessedAt;
+    const isVotingEnded = votingCloseAt ? new Date(votingCloseAt) <= new Date() : true;
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center"
+      >
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/5 blur-[120px] rounded-full" />
+        </div>
+
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className="relative z-10 flex flex-col items-center"
+        >
+          <div className="w-24 h-24 bg-emerald-500/10 rounded-[2.5rem] flex items-center justify-center mb-8 border border-emerald-500/20 relative">
+            <div className="absolute inset-0 bg-emerald-500/20 blur-2xl rounded-full animate-pulse" />
+            <CheckCircle2 className="w-12 h-12 text-emerald-500 relative z-10" />
+          </div>
+          
+          <h2 className="text-4xl font-black italic uppercase tracking-tighter mb-2 text-white">
+            Voting abgeschlossen
+          </h2>
+          <p className="text-emerald-500 font-black italic uppercase tracking-widest text-xs mb-8">
+            {hasCompletedBefore ? "Du hast für dieses Spiel bereits abgestimmt." : "Deine Stimme wurde gespeichert"}
+          </p>
+
+          <div className="bg-zinc-900/50 border border-white/5 p-6 rounded-3xl mb-12 max-w-xs">
+            <p className="text-zinc-400 font-medium text-sm leading-relaxed">
+              {isProcessed 
+                ? "Die Ergebnisse sind jetzt verfügbar! Schau dir an, wie die Community abgestimmt hat."
+                : "Danke für dein Voting! Die offiziellen Ergebnisse sind verfügbar, sobald das Voting-Fenster geschlossen wurde."}
+            </p>
+            {!isProcessed && !isVotingEnded && (
+              <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                <Clock className="w-3 h-3" />
+                Ergebnisse nach Voting-Ende
+              </div>
+            )}
+          </div>
+
+          <div className="w-full max-w-xs space-y-3">
+            <button
+              onClick={onClose}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black italic uppercase tracking-tighter py-5 rounded-2xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Trophy className="w-5 h-5" /> Zurück zum Match
+            </button>
+            
+            <button
+              onClick={() => navigate('/matches')}
+              className="w-full bg-zinc-900 hover:bg-zinc-800 text-white font-black italic uppercase tracking-tighter py-5 rounded-2xl transition-all border border-white/5 flex items-center justify-center gap-2 active:scale-95"
+            >
+              Zur Übersicht
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  }
+
+  const currentPlayer = currentPlayerEntry?.players;
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col overflow-hidden"
+    >
+      {/* Header */}
+      <div className="p-6 flex items-center justify-between relative z-10">
+        <button 
+          onClick={onClose}
+          className="p-3 bg-zinc-900 border border-white/5 rounded-2xl text-zinc-500 hover:text-white transition-colors"
+        >
+          <X className="w-6 h-6" />
+        </button>
+        
+        <div className="text-center">
+          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 mb-2">Fortschritt</div>
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-32 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${((currentIndex + 1) / totalPlayers) * 100}%` }}
+                className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+              />
+            </div>
+            <span className="text-sm font-black italic text-emerald-500 tabular-nums">
+              {currentIndex + 1} <span className="text-zinc-700 mx-0.5">/</span> {totalPlayers}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+        </div>
+      </div>
+
+      {/* Main Swipe Area */}
+      <div className="flex-1 relative flex flex-col items-center justify-center p-6">
+        <div className="absolute inset-x-6 top-0 flex justify-between pointer-events-none z-10">
+          <div className="flex flex-col items-center gap-1 opacity-20">
+            <ThumbsDown className="w-6 h-6 text-red-500" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-red-500">Schwach</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 opacity-20">
+            <ThumbsUp className="w-6 h-6 text-emerald-500" />
+            <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Stark</span>
+          </div>
+        </div>
+
+        <div className="relative grid place-items-center w-[350px]">
+            {/* CURRENT CARD ONLY */}
+            <AnimatePresence custom={exitDirection}>
+                {currentPlayer && (
+                  <SwipeablePlayerCard
+                    key={currentPlayer.id}
+                    player={currentPlayer}
+                    currentPlayerEntry={currentPlayerEntry}
+                    exitDirection={exitDirection}
+                    onSwipe={handleSwipe}
+                  />
+                )}
+            </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Footer Controls */}
+      <div className="p-10 pb-16 flex flex-col items-center gap-8 relative z-10">
+        <div className="text-center space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-3xl font-black italic uppercase tracking-tighter text-white">
+              {currentPlayer?.full_name}
+            </h3>
+            <p className="text-zinc-500 text-[11px] font-black uppercase tracking-[0.3em]">
+              <span className={currentPlayerEntry?.lineup_role === 'starter' ? 'text-emerald-500' : 'text-amber-500'}>
+                {currentPlayerEntry?.lineup_role === 'starter' ? 'STARTER' : 'SUBSTITUTE'}
+              </span>
+              <span className="mx-3 text-zinc-800">•</span>
+              {currentPlayerEntry?.teams?.name}
+            </p>
+          </div>
+
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            onClick={handleNeutralVote}
+            className="flex flex-col items-center gap-1.5 group transition-all active:scale-95 mx-auto"
+          >
+            <span className="text-zinc-400 group-hover:text-zinc-200 font-black italic uppercase tracking-[0.3em] text-[10px] py-2.5 px-10 bg-zinc-900/80 border border-white/20 rounded-full transition-colors">
+              Neutral
+            </span>
+            <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-widest opacity-60">
+              (keine Bewertung)
+            </span>
+          </motion.button>
+        </div>
+
+        <div className="flex items-center gap-8">
+          <button
+            onClick={() => handleSwipe('left')}
+            className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/50 transition-all active:scale-90 shadow-2xl"
+          >
+            <ThumbsDown className="w-8 h-8" />
+          </button>
+          
+          <button
+            onClick={() => handleSwipe('right')}
+            className="w-20 h-20 bg-zinc-900 border-2 border-zinc-800 rounded-[2.5rem] flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all active:scale-90 shadow-2xl"
+          >
+            <ThumbsUp className="w-8 h-8" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
