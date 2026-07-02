@@ -9,7 +9,12 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   isAdmin: boolean;
+  hasAdminAccess: boolean;
+  clubAdminLeagueIds: string[];
+  clubAdminClubIds: string[];
   profileError: any | null;
+  isPasswordRecovery: boolean;
+  clearPasswordRecovery: () => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -21,6 +26,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<any | null>(null);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [clubAdminLeagueIds, setClubAdminLeagueIds] = useState<string[]>([]);
+  const [clubAdminClubIds, setClubAdminClubIds] = useState<string[]>([]);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     console.log('AuthContext: Fetching initial session...');
@@ -72,7 +81,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initAuth = async () => {
       console.log('AuthContext: initAuth starting...');
       
-      // Check if we can access localStorage (important for iframes)
+      if (window.location.hash) {
+        if (window.location.hash.includes('type=recovery')) {
+          setIsPasswordRecovery(true);
+        }
+      }
+      
       try {
         localStorage.setItem('test', 'test');
         localStorage.removeItem('test');
@@ -111,7 +125,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             sessionError.status === 401
           ) {
             console.warn('AuthContext: Stale refresh token detected. Cleaning up...');
-            await supabase.auth.signOut();
+            localStorage.removeItem('sb-auth-token');
+            await supabase.auth.signOut().catch(() => {});
             setSession(null);
             setProfile(null);
             if (isMounted) setLoading(false);
@@ -149,6 +164,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('AuthContext: Auth state changed', { event: _event, session: !!session });
       
       if (!isMounted) return;
+
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+      }
 
       if (_event === 'INITIAL_SESSION' || _event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
         setSession(session);
@@ -189,6 +208,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('AuthContext: Supabase error fetching profile:', error);
+        
+        // Handle stale refresh token error being bubbled up through data fetch
+        if (
+          error.message?.includes('refresh_token') || 
+          error.message?.includes('Refresh Token') ||
+          error.code === '400' ||
+          error.code === '401'
+        ) {
+          console.warn('AuthContext: Stale refresh token detected during data fetch. Clearing session...');
+          // manually clear storage since signout might fail
+          localStorage.removeItem('sb-auth-token');
+          await supabase.auth.signOut().catch(() => {});
+          setSession(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
         setProfileError(error);
         setLoading(false);
         return;
@@ -197,7 +234,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!data) {
         console.warn('AuthContext: No profile found for user', userId, '- Attempting to create one...');
         // Try to create a profile automatically if it's missing
-        const isAdmin = session.user.email === "matthias.insidiom@gmail.com";
+      const isSuper = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
         
         // IMPORTANT: We use 'role' as the leading field now.
         // Default for new users is 'fan' unless it's the admin email.
@@ -206,7 +243,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .insert({
             id: userId,
             display_name: session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || 'New User',
-            role: isAdmin ? 'admin' : 'fan',
+            role: isSuper ? 'admin' : 'fan',
             onboarding_completed: false // Everyone starts with onboarding
           })
           .select()
@@ -220,19 +257,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           console.log('AuthContext: Profile created successfully', newProfile);
           setProfile(newProfile);
           setProfileError(null);
+          
+          // Check for club admin access
+          const { data: clubAdmins } = await supabase.from('club_admins').select('id, club_id, clubs(league_id)').eq('user_id', userId).eq('is_active', true);
+          setHasAdminAccess(isSuper || (clubAdmins && clubAdmins.length > 0) || false);
+          
+          if (clubAdmins) {
+            setClubAdminClubIds(clubAdmins.map(ca => ca.club_id));
+            setClubAdminLeagueIds(Array.from(new Set(clubAdmins.map(ca => (ca.clubs as any)?.league_id).filter(Boolean))));
+          }
         }
       } else {
         // Heal profile if role is missing or invalid
-        const isAdminEmail = session.user.email === "matthias.insidiom@gmail.com";
+        const isSuper = session.user.email?.toLowerCase() === "matthias.insidiom@gmail.com";
         
         // If role is missing or 'user' (legacy), or if it's admin email but role isn't admin
-        if (!data.role || data.role === 'user' || (isAdminEmail && data.role !== 'admin')) {
-          console.warn('AuthContext: Profile needs healing...', { role: data.role, isAdminEmail });
+        if (!data.role || data.role === 'user' || (isSuper && data.role !== 'admin')) {
+          console.warn('AuthContext: Profile needs healing...', { role: data.role, isSuper });
           const { data: healedProfile, error: healError } = await supabase
             .from('profiles')
             .update({ 
-              role: isAdminEmail ? 'admin' : (data.role && data.role !== 'user' ? data.role : 'fan'),
-              onboarding_completed: isAdminEmail ? true : data.onboarding_completed
+              role: isSuper ? 'admin' : (data.role && data.role !== 'user' ? data.role : 'fan'),
+              onboarding_completed: isSuper ? true : data.onboarding_completed
             })
             .eq('id', userId)
             .select()
@@ -250,9 +296,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(data);
         }
         setProfileError(null);
+        
+        // Check for club admin access
+        const { data: clubAdmins } = await supabase.from('club_admins').select('id, club_id, clubs(league_id)').eq('user_id', userId).eq('is_active', true);
+        setHasAdminAccess(isSuper || (clubAdmins && clubAdmins.length > 0) || data.role === 'admin' || false);
+        
+        if (clubAdmins) {
+          setClubAdminClubIds(clubAdmins.map(ca => ca.club_id));
+          setClubAdminLeagueIds(Array.from(new Set(clubAdmins.map(ca => (ca.clubs as any)?.league_id).filter(Boolean))));
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('AuthContext: Unexpected error fetching profile:', error);
+      
+      if (
+        error?.message?.includes('refresh_token') || 
+        error?.message?.includes('Refresh Token') ||
+        error?.code === '400' ||
+        error?.code === '401'
+      ) {
+        console.warn('AuthContext: Stale refresh token detected in catch block. Clearing session...');
+        localStorage.removeItem('sb-auth-token');
+        await supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
       setProfileError(error);
     } finally {
       setLoading(false);
@@ -267,8 +338,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('sb-auth-token');
+    await supabase.auth.signOut().catch(() => {});
+    setSession(null);
+    setProfile(null);
   };
+
+  const clearPasswordRecovery = () => setIsPasswordRecovery(false);
 
   return (
     <AuthContext.Provider value={{
@@ -276,8 +352,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user: session?.user ?? null,
       profile,
       loading,
-      isAdmin: (profile?.role === 'admin') || (session?.user?.email === "matthias.insidiom@gmail.com"),
+      isAdmin: (profile?.role === 'admin') || (session?.user?.email?.toLowerCase() === "matthias.insidiom@gmail.com"),
+      hasAdminAccess,
+      clubAdminLeagueIds,
+      clubAdminClubIds,
       profileError,
+      isPasswordRecovery,
+      clearPasswordRecovery,
       signOut,
       refreshProfile
     }}>

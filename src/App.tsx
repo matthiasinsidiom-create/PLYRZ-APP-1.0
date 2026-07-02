@@ -11,6 +11,7 @@ import AdminPlayers from './pages/admin/Players';
 import AdminFixtures from './pages/admin/Fixtures';
 import AdminMatchControl from './pages/admin/MatchControl';
 import AdminLineups from './pages/admin/Lineups';
+import AdminCardExport from './pages/admin/CardExport';
 import { Onboarding } from './pages/Onboarding';
 import { PlayerClaim } from './pages/PlayerClaim';
 import { MatchList } from './pages/fan/MatchList';
@@ -19,24 +20,32 @@ import MatchResult from './pages/fan/MatchResult';
 import PlayerList from './pages/fan/PlayerList';
 import PlayerDetail from './pages/fan/PlayerDetail';
 import { Leaderboard } from './pages/Leaderboard';
+import { SeasonTop3 } from './pages/fan/SeasonTop3';
 import { Profile } from './pages/fan/Profile';
+import { PremiumInfo } from './pages/fan/PremiumInfo';
+import { Table } from './pages/fan/Table';
 import { RatingLogicScreen } from './pages/fan/RatingLogicScreen';
 import { VoteList } from './pages/fan/VoteList';
 import { BottomNav } from './components/BottomNav';
 import { motion } from 'framer-motion';
 import { setupPushNotifications } from './lib/pushNotifications';
+import { supabaseService } from './services/supabaseService';
+
+import { ResetPassword } from './pages/ResetPassword';
+import { TeamAdminDashboard } from './pages/team-admin/Dashboard';
 
 const AppContent: React.FC = () => {
-  const { user, profile, loading, isAdmin, profileError, refreshProfile, signOut } = useAuth();
+  const { user, profile, loading, isAdmin, hasAdminAccess, profileError, refreshProfile, signOut, isPasswordRecovery } = useAuth();
   const location = useLocation();
   const [showForceStart, setShowForceStart] = React.useState(false);
-  
+
   React.useEffect(() => {
     console.log('AppContent: Auth state updated', { 
       hasUser: !!user, 
       hasProfile: !!profile, 
       loading, 
       isAdmin, 
+      isPasswordRecovery,
       hasProfileError: !!profileError 
     });
     
@@ -44,7 +53,7 @@ const AppContent: React.FC = () => {
     if (user && profile) {
       setupPushNotifications();
     }
-  }, [user, profile, loading, isAdmin, profileError]);
+  }, [user, profile, loading, isAdmin, profileError, isPasswordRecovery]);
   
   React.useEffect(() => {
     if (loading) {
@@ -52,6 +61,12 @@ const AppContent: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [loading]);
+
+  // If in password recovery flow, show reset password screen regardless of loading state 
+  // (unless it's checking initial auth)
+  if (isPasswordRecovery && !loading) {
+    return <ResetPassword />;
+  }
 
   // Root navigation logic
   // 1. Auth or Profile loading
@@ -184,6 +199,16 @@ const AppContent: React.FC = () => {
               <Route path="/admin/fixtures" element={<AdminFixtures />} />
               <Route path="/admin/fixtures/:id" element={<AdminMatchControl />} />
               <Route path="/admin/lineups" element={<AdminLineups />} />
+              <Route path="/admin/export-cards" element={<AdminCardExport />} />
+            </>
+          )}
+
+          {/* Team Admin Routes */}
+          {hasAdminAccess && (
+            <>
+              <Route path="/team-admin" element={<TeamAdminDashboard />} />
+              <Route path="/team-admin/fixtures/:id" element={<AdminMatchControl />} />
+              <Route path="/team-admin/lineup/:fixtureId" element={<AdminLineups />} />
             </>
           )}
           
@@ -194,7 +219,10 @@ const AppContent: React.FC = () => {
           <Route path="/players" element={<PlayerList />} />
           <Route path="/players/:id" element={<PlayerDetail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/table" element={<Table />} />
+          <Route path="/season-top3" element={<SeasonTop3 />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/premium" element={<PremiumInfo />} />
           <Route path="/rating-logic" element={<RatingLogicScreen />} />
           <Route path="/vote" element={<VoteList />} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -203,7 +231,7 @@ const AppContent: React.FC = () => {
       
       {/* Only show bottom nav for fan routes, not admin, login or onboarding */}
       {!location.pathname.startsWith('/admin') && location.pathname !== '/onboarding' && (
-        <BottomNav />
+        <BottomNav hasAdminAccess={hasAdminAccess} />
       )}
     </div>
   );

@@ -8,6 +8,7 @@ export interface Profile {
   role: 'admin' | 'player' | 'fan';
   is_admin?: boolean;
   onboarding_completed?: boolean;
+  selected_league_id?: string;
   favorite_club_id?: string;
   created_at: string;
   updated_at: string;
@@ -71,11 +72,24 @@ export interface Player {
   claimed_by_user_id?: string;
   nationality?: string;
   card_layout?: any;
+  is_premium?: boolean;
+  premium_until?: string;
   created_at: string;
   updated_at: string;
   teams?: { name: string, club_id: string, clubs?: Club };
   player_stats?: PlayerStats[];
   current_stats?: PlayerStats;
+}
+
+export interface PlayerPremiumRequest {
+  id: string;
+  user_id: string;
+  player_id: string;
+  club_id: string;
+  status: 'pending' | 'approved' | 'rejected' | 'done';
+  note?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Fixture {
@@ -96,6 +110,10 @@ export interface Fixture {
   voting_close_at?: string;
   results_processed_at?: string;
   match_type?: 'reserve' | 'kampfmannschaft';
+  match_sponsor_name?: string | null;
+  match_sponsor_logo_url?: string | null;
+  mvp_sponsor_name?: string | null;
+  mvp_sponsor_logo_url?: string | null;
   match_phase?: 'first_half' | 'halftime' | 'second_half' | 'full_time';
   first_half_started_at?: string;
   halftime_started_at?: string;
@@ -149,9 +167,9 @@ export interface PlayerRatingHistory {
   old_overall: number;
   new_overall: number;
   delta_overall: number;
-  votes_up: number;
-  votes_down: number;
-  votes_neutral?: number;
+  positive_votes: number;
+  negative_votes: number;
+  neutral_votes: number;
   expected_score?: number;
   actual_score?: number;
   participation_multiplier: number;
@@ -159,6 +177,7 @@ export interface PlayerRatingHistory {
   result_impact: number;
   event_impact: number;
   goal_count: number;
+  assists?: number;
   yellow_count: number;
   red_count: number;
   rating_version?: string;
@@ -167,18 +186,28 @@ export interface PlayerRatingHistory {
   is_mvp?: boolean;
   mvp_score?: number;
   vote_score?: number;
-  positive_votes?: number;
-  negative_votes?: number;
-  neutral_votes?: number;
   raw_delta?: number;
   final_delta?: number;
   mvp_bonus?: number;
+}
+
+export interface ClubAdmin {
+  id: string;
+  user_id: string;
+  club_id: string;
+  team_scope: 'kampfmannschaft' | 'reserve' | 'all';
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  clubs?: Club;
 }
 
 export interface MatchEvent {
   id: string;
   fixture_id: string;
   player_id: string | null;
+  assist_player_id?: string | null;
   team_id?: string | null;
   event_type: 'starting_xi' | 'sub_in' | 'sub_out' | 'goal' | 'assist' | 'yellow_card' | 'red_card' | 'clean_sheet' | 'penalty_saved' | 'penalty_missed' | 'opponent_goal';
   minute?: number | null;
