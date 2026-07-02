@@ -1,7 +1,7 @@
 import React from 'react';
 import { Player } from '../types';
 import { resolveLatestStats } from '../lib/stats';
-import { Check } from 'lucide-react';
+import { Check, ShieldCheck, Crown } from 'lucide-react';
 import { getPositionShort } from '../lib/positions';
 
 interface PlayerCardProps {
@@ -188,28 +188,27 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: '#fbbf24', // amber-400
     color: '#000000',
   },
-  claimedBadge: {
+  badgesContainer: {
     position: 'absolute',
     top: '12px',
-    right: '12px',
+    left: '12px',
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '6px',
+    zIndex: 30,
+  } as React.CSSProperties,
+  iconBadge: {
+    width: '28px',
+    height: '28px',
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     backdropFilter: 'blur(8px)',
-    padding: '4px 10px',
-    borderRadius: '999px',
+    borderRadius: '50%',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    justifyContent: 'center',
     border: '1px solid rgba(255, 255, 255, 0.2)',
-    zIndex: 30,
     boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-  },
-  claimedText: {
-    color: '#ffffff',
-    fontSize: '10px',
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
+  } as React.CSSProperties,
 };
 
 export const PlayerCard = React.memo(({ 
@@ -323,7 +322,8 @@ export const PlayerCard = React.memo(({
     }
   };
 
-  const lastName = player.full_name.split(' ').pop() || player.full_name;
+  const fullName = player.full_name || 'Unbekannt';
+  const lastName = fullName.split(' ').pop() || fullName;
   const displayName = lastName;
   
   // Use nationality flag from flagcdn
@@ -362,7 +362,10 @@ export const PlayerCard = React.memo(({
       onClick={onClick}
     >
       {/* BASE LAYER: FRAME */}
-      <div
+      <img
+        src={frameSrc}
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
         style={{
           ...styles.frame,
           width: `${100 * frameScale}%`,
@@ -371,13 +374,29 @@ export const PlayerCard = React.memo(({
           position: 'absolute',
           left: `${50 + frameX}%`,
           top: `${50 + frameY}%`,
-          backgroundImage: `url("${frameSrc}")`,
-          backgroundSize: '100% 100%',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
+          objectFit: 'fill',
+          filter: (player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()))
+            ? 'drop-shadow(0 0 20px rgba(251, 191, 36, 0.5)) drop-shadow(0 0 40px rgba(251, 191, 36, 0.2))'
+            : 'none',
         }} 
-        title={`${tier} card frame`} 
+        alt={`${tier} card frame`} 
       />
+
+      {/* PREMIUM SHINE OVERLAY */}
+      {player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()) && (
+        <div 
+          className="absolute inset-0 pointer-events-none z-20 opacity-40 mix-blend-screen"
+          style={{
+            background: 'linear-gradient(125deg, transparent 0%, transparent 40%, rgba(255, 230, 100, 0.4) 45%, rgba(255, 255, 255, 0.6) 50%, rgba(255, 230, 100, 0.4) 55%, transparent 60%, transparent 100%)',
+            backgroundSize: '200% 200%',
+            animation: 'shine 6s ease-in-out infinite',
+            WebkitMaskImage: `url(${frameSrc})`,
+            WebkitMaskSize: `${100 * frameScale}% ${100 * frameScale}%`,
+            WebkitMaskPosition: `${50 + frameX}% ${50 + frameY}%`,
+            WebkitMaskRepeat: 'no-repeat'
+          }}
+        />
+      )}
       
       {/* OVERALL & POSITION */}
       <div style={{ 
@@ -412,19 +431,30 @@ export const PlayerCard = React.memo(({
         </div>
       )}
       
-      {/* CLAIMED BADGE */}
-      {player.claimed_by_user_id && (
-        <div style={{
-          ...styles.claimedBadge,
-          // If jersey number is present, move the claimed badge down slightly to avoid overlap
-          top: (jerseyNumber !== undefined && jerseyNumber !== null) 
-            ? (isTopPerformer ? '128px' : '88px') 
-            : '12px'
-        }}>
-          <Check className="w-3 h-3 text-emerald-400" strokeWidth={4} />
-          <span style={styles.claimedText}>BEANSPRUCHT</span>
-        </div>
-      )}
+      {/* BADGES CONTAINER */}
+      <div style={styles.badgesContainer}>
+        {/* PREMIUM BADGE */}
+        {player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()) && (
+          <div 
+            style={styles.iconBadge} 
+            title="Premium"
+            aria-label="Premium"
+          >
+            <Crown className="w-4 h-4 text-amber-400" strokeWidth={2.5} />
+          </div>
+        )}
+        
+        {/* CLAIMED BADGE */}
+        {player.claimed_by_user_id && (
+          <div 
+            style={styles.iconBadge} 
+            title="Beansprucht"
+            aria-label="Beansprucht"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" strokeWidth={2.5} />
+          </div>
+        )}
+      </div>
 
       {lineupRole && (
         <div style={{

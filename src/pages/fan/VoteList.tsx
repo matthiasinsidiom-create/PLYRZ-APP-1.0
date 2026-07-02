@@ -4,7 +4,8 @@ import {
   Loader2,
   Trophy,
   ThumbsUp,
-  ChevronRight
+  ChevronRight,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../../services/supabaseService';
@@ -54,17 +55,19 @@ export const VoteList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))]">
+    <div className="min-h-screen bg-transparent text-white font-sans pb-28">
       {/* Header */}
-      <div className="p-6 pt-[calc(env(safe-area-inset-top)+10px)] flex items-center justify-between sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
+      <div className="p-6 pt-[10px] flex items-center justify-between sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
         <h1 className="text-xl font-black italic tracking-tighter uppercase">Offene Votings</h1>
-        <div className="flex items-center gap-2">
-          <img 
-            src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
-            alt="PLYRZ Logo" 
-            className="h-24 w-auto object-contain"
-            referrerPolicy="no-referrer"
-          />
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => navigate('/profile')}
+            className="w-10 h-10 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+            title="Profil"
+            aria-label="Profil"
+          >
+            <User className="w-5 h-5" />
+          </button>
         </div>
       </div>
 

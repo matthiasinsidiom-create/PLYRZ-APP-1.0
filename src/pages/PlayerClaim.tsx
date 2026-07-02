@@ -12,11 +12,13 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../services/supabaseService';
+import { useAuth } from '../context/AuthContext';
 import { Player, Team, Club } from '../types';
 import { getPositionShort } from '../lib/positions';
 
 export const PlayerClaim: React.FC = () => {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -26,16 +28,17 @@ export const PlayerClaim: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (profile) loadData();
+  }, [profile?.selected_league_id]);
 
   const loadData = async () => {
     setLoading(true);
     try {
+      const fetchLeagueId = profile?.selected_league_id;
       const [p, t, c] = await Promise.all([
-        supabaseService.getPlayers(),
-        supabaseService.getTeams(),
-        supabaseService.getClubs()
+        supabaseService.getPlayers(undefined, fetchLeagueId),
+        supabaseService.getTeams(undefined, fetchLeagueId),
+        supabaseService.getClubs(fetchLeagueId)
       ]);
       // Only show unclaimed players
       setPlayers(p.filter(player => !player.claimed_by_user_id));

@@ -15,20 +15,22 @@ import {
   X,
   ArrowLeft,
   CheckCircle2,
-  Settings
+  Settings,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import SafeAreaWrapper from '../components/SafeAreaWrapper';
 import { supabaseService } from '../services/supabaseService';
 import { Player, Fixture, Club, Team, PlayerStats, MatchEvent } from '../types';
 import { PlayerCard } from '../components/PlayerCard';
 import { MatchCard } from '../components/MatchCard';
-import { calculateMatchScore } from '../lib/score';
+import { calculateMatchScore, getLiveMatchMinute } from '../lib/score';
 
 // --- MAIN DASHBOARD ---
 
 export const Dashboard: React.FC = () => {
-  const { profile, isAdmin, signOut } = useAuth();
+  const { profile, isAdmin, hasAdminAccess, signOut } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [playerData, setPlayerData] = useState<Player | null>(null);
@@ -36,6 +38,7 @@ export const Dashboard: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [topPlayers, setTopPlayers] = useState<Player[]>([]);
+  const [seasonWinner, setSeasonWinner] = useState<any>(null);
   const [loadingTopPlayers, setLoadingTopPlayers] = useState(true);
   const [mvpKM, setMvpKM] = useState<Player | null>(null);
   const [mvpReserve, setMvpReserve] = useState<Player | null>(null);
@@ -43,8 +46,78 @@ export const Dashboard: React.FC = () => {
   const [fixtureReserve, setFixtureReserve] = useState<Fixture | null>(null);
   const [currentRound, setCurrentRound] = useState<number | null>(null);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
+  const [hasHistory, setHasHistory] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   
+  const [showSeasonTeaser, setShowSeasonTeaser] = useState(false);
+
+  useEffect(() => {
+    // Only show season teaser if we actually have history and all fixtures are finished/cancelled
+    if (fixtures.length > 0 && hasHistory && fixtures.every(f => f.status === 'finished' || f.status === 'cancelled')) {
+      setShowSeasonTeaser(true);
+    } else {
+      setShowSeasonTeaser(false);
+    }
+  }, [fixtures, hasHistory]);
+
+  const renderSeasonEndTeaser = () => {
+    const winner = seasonWinner || (topPlayers && topPlayers[0]) || null;
+    if (!winner) return null;
+
+    return (
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full bg-[#050505] backdrop-blur-3xl border border-amber-500/20 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 flex flex-col items-center justify-between relative overflow-hidden shadow-2xl"
+      >
+        {/* Glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[250px] h-[250px] sm:w-[350px] sm:h-[350px] bg-amber-500/15 blur-[80px] sm:blur-[100px] pointer-events-none rounded-full z-0" />
+        
+        {/* Vignette */}
+        <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.9)] z-0 pointer-events-none"></div>
+
+        {/* Header */}
+        <div className="text-center mb-8 relative z-10 w-full flex flex-col items-center">
+          <div className="inline-flex items-center justify-center p-3 sm:p-4 bg-gradient-to-br from-amber-500/20 to-yellow-600/10 border border-amber-500/30 rounded-full mb-4 shadow-[0_0_40px_rgba(245,158,11,0.2)]">
+            <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-amber-400 drop-shadow-md" />
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-transparent px-2 w-full truncate drop-shadow-lg">TOP 10 DER SAISON</h2>
+          <div className="text-[10px] sm:text-[11px] font-bold text-amber-500/80 uppercase tracking-[0.2em] mt-1">
+            PLYRZ Award
+          </div>
+        </div>
+
+        {/* Card & Details */}
+        <div className="flex flex-col items-center relative z-10 w-full mb-8">
+          <div className="relative w-[175px] h-[245px] sm:w-[210px] sm:h-[294px] drop-shadow-2xl z-10 mx-auto mb-6">
+            <div className="absolute inset-0 bg-amber-500/20 blur-[40px] rounded-full z-0"></div>
+            <div className="absolute top-0 left-0 w-[350px] h-[490px] origin-top-left scale-[0.5] sm:scale-[0.6] z-10">
+              <PlayerCard 
+                player={winner} 
+                clubLogo={teams.find(t => t.id === winner.team_id)?.clubs?.logo_url}
+              />
+            </div>
+          </div>
+          
+          <div className="text-center space-y-1 w-full">
+            <div className="text-xl sm:text-2xl font-black italic uppercase text-white tracking-widest drop-shadow-md truncate px-2">🥇 {winner.full_name}</div>
+            <div className="text-xs sm:text-sm font-black uppercase tracking-widest text-zinc-400">
+              OVR <span className="text-white italic">{winner.current_stats?.overall || '-'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Button */}
+        <button 
+          onClick={() => navigate('/season-top3')}
+          className="w-full relative z-10 bg-amber-500 text-black font-black italic uppercase tracking-widest py-4 rounded-full sm:rounded-2xl transition-all flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(245,158,11,0.3)] hover:scale-[1.02] active:scale-95 text-sm sm:text-base"
+        >
+          TOP 10 ANSEHEN
+        </button>
+      </motion.div>
+    );
+  };
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
     const scrollCenter = container.scrollLeft + container.clientWidth / 2;
@@ -110,9 +183,9 @@ export const Dashboard: React.FC = () => {
     try {
       // Load all necessary data
       const [f, t, p] = await Promise.all([
-        supabaseService.getFixtures(),
-        supabaseService.getTeams(),
-        supabaseService.getPlayers()
+        supabaseService.getFixtures(profile.selected_league_id),
+        supabaseService.getTeams(undefined, profile.selected_league_id),
+        supabaseService.getPlayers(undefined, profile.selected_league_id)
       ]);
       
       setFixtures(f); 
@@ -142,76 +215,154 @@ export const Dashboard: React.FC = () => {
 
       let status: 'live' | 'voting' | 'result' | 'none' = 'none';
 
-      // Load MVPs
-      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      
-      const processedMatches = f.filter(fixture => 
-        fixture.results_processed_at && new Date(fixture.results_processed_at) >= last24h
-      );
+      // Load MVPs - Get all processed matches within the last 24 hours to find the absolute latest for KM/Reserve
+      const cutoffTime = Date.now() - (24 * 60 * 60 * 1000);
+      const processedMatches = f.filter(fixture => {
+        if (fixture.status !== 'finished' || !fixture.results_processed_at) return false;
+        
+        // Strict rule: NOW() > results_processed_at + 24 Stunden -> hide
+        const processedTime = new Date(fixture.results_processed_at).getTime();
+        return processedTime > cutoffTime;
+      });
 
       // Try to identify "OUR" club to be more precise
       const ourClubId = profile.favorite_club_id;
       
+      const isReserveTeam = (name: string) => {
+        const n = name.toLowerCase();
+        return n.includes('reserve') || 
+               n.includes('1b') || 
+               n.includes('1.b') || 
+               n.includes(' ii') || 
+               n.includes('res.') || 
+               n.includes(' res') ||
+               n.includes('2.m') ||
+               n.includes('2. m') ||
+               n.includes('u23') ||
+               n.includes('u-23') ||
+               n.includes(' b ') ||
+               n.endsWith(' b') ||
+               n.includes(' 2. mannschaft');
+      };
+
+      const isKMTeam = (name: string) => {
+        const n = name.toLowerCase();
+        // If it's explicitly reserve, it's not KM
+        if (isReserveTeam(name)) return false;
+        
+        // If it has KM markers, definitely KM
+        if (n.includes('kampfmannschaft') || n.includes('km') || n.includes(' i ')) return true;
+        
+        // Default: If it's not a reserve team, assume it's the main (KM) team
+        return true; 
+      };
+
       const latestKM = processedMatches
         .filter(fixture => {
           const homeName = fixture.home_team?.name || '';
           const awayName = fixture.away_team?.name || '';
-          const homeIsKM = homeName.includes('Kampfmannschaft') || homeName.includes('KM');
-          const awayIsKM = awayName.includes('Kampfmannschaft') || awayName.includes('KM');
+          const homeIsRes = isReserveTeam(homeName);
+          const awayIsRes = isReserveTeam(awayName);
+
+          // If match_type is set and says reserve, it is NOT KM
+          if (fixture.match_type === 'reserve') return false;
+          // If team names match reserve, it is NOT KM
+          if (homeIsRes || awayIsRes) {
+            // But check if it's explicitly KM
+            if (fixture.match_type !== 'kampfmannschaft') return false;
+          }
           
           if (ourClubId) {
-            return (homeIsKM && (fixture.home_team as any)?.club_id === ourClubId) || 
-                   (awayIsKM && (fixture.away_team as any)?.club_id === ourClubId);
+            const homeClubId = (fixture.home_team as any)?.club_id;
+            const awayClubId = (fixture.away_team as any)?.club_id;
+            return homeClubId === ourClubId || awayClubId === ourClubId;
           }
-          return homeIsKM || awayIsKM;
+          return true;
         })
-        .sort((a, b) => new Date(b.results_processed_at!).getTime() - new Date(a.results_processed_at!).getTime())[0];
+        .sort((a, b) => new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime())[0];
       
       const latestReserve = processedMatches
         .filter(fixture => {
           const homeName = fixture.home_team?.name || '';
           const awayName = fixture.away_team?.name || '';
-          const homeIsRes = homeName.includes('Reserve') || homeName.includes('RES');
-          const awayIsRes = awayName.includes('Reserve') || awayName.includes('RES');
-          
-          if (ourClubId) {
-            return (homeIsRes && (fixture.home_team as any)?.club_id === ourClubId) || 
-                   (awayIsRes && (fixture.away_team as any)?.club_id === ourClubId);
+          const homeIsRes = isReserveTeam(homeName);
+          const awayIsRes = isReserveTeam(awayName);
+
+          // Priority: match_type
+          if (fixture.match_type === 'reserve') {
+            if (ourClubId) {
+               const homeClubId = (fixture.home_team as any)?.club_id;
+               const awayClubId = (fixture.away_team as any)?.club_id;
+               return homeClubId === ourClubId || awayClubId === ourClubId;
+            }
+            return true;
           }
-          return homeIsRes || awayIsRes;
+
+          // Fallback: keywords
+          if (homeIsRes || awayIsRes) {
+            if (ourClubId) {
+              const homeClubId = (fixture.home_team as any)?.club_id;
+              const awayClubId = (fixture.away_team as any)?.club_id;
+              return (homeIsRes && homeClubId === ourClubId) || (awayIsRes && awayClubId === ourClubId);
+            }
+            return true;
+          }
+
+          return false;
         })
-        .sort((a, b) => new Date(b.results_processed_at!).getTime() - new Date(a.results_processed_at!).getTime())[0];
+        .sort((a, b) => new Date(b.kickoff_at).getTime() - new Date(a.kickoff_at).getTime())[0];
+
+      console.log(`DEBUG: [MVP] Gefundene Fixtures - KM: ${latestKM?.id || 'null'}, RES: ${latestReserve?.id || 'null'}`);
 
       const fetchMVP = async (fixture: Fixture | undefined, targetType: 'KM' | 'RES') => {
         if (!fixture) return null;
         
-        const isKM = targetType === 'KM';
-        const isHomeMatch = (fixture.home_team as any)?.club_id === ourClubId;
-        const isAwayMatch = (fixture.away_team as any)?.club_id === ourClubId;
+        const isKMSearch = targetType === 'KM';
         
         console.log(`DEBUG: [MVP] Suche ${targetType} MVP für Fixture ${fixture.id}`);
         const history = await supabaseService.getFixtureRatingHistory(fixture.id);
         
         if (history.length > 0) {
-          const teamPlayers = history.filter(h => {
-             const pTeam = h.players?.teams;
-             const pTeamName = pTeam?.name || '';
-             const nameMatch = isKM 
-               ? (pTeamName.includes('Kampfmannschaft') || pTeamName.includes('KM'))
-               : (pTeamName.includes('Reserve') || pTeamName.includes('RES'));
-               
-             if (ourClubId && pTeam?.club_id) {
-               return nameMatch && pTeam.club_id === ourClubId;
-             }
-             return nameMatch;
+          // Rule: To show an MVP on OUR dashboard, we prioritize consistency with MatchResult.tsx
+          
+          const processedHistory = history.map((h: any) => {
+            const displayDelta = h.final_delta !== undefined && h.final_delta !== null 
+              ? h.final_delta 
+              : h.delta_overall;
+            
+            return {
+              ...h,
+              delta_overall: displayDelta
+            };
+          });
+
+          const clubPlayers = processedHistory.filter(h => {
+             const pTeam = (h as any).players?.teams;
+             if (!pTeam) return false;
+             if (ourClubId && pTeam.club_id !== ourClubId) return false;
+             return true;
           });
           
-          const source = teamPlayers.length > 0 ? teamPlayers : history;
+          // 1. Prioritize absolute match MVP (regardless of club) for consistency with MatchResult page
+          const absoluteMVP = processedHistory.find(h => (h as any).is_mvp);
+          
+          // 2. Fallback to our club's best or the whole match's best using identical sorting logic
+          const sortLogic = (a: any, b: any) => {
+            const bScore = b.mvp_score || b.delta_overall || 0;
+            const aScore = a.mvp_score || a.delta_overall || 0;
+            if (bScore !== aScore) return bScore - aScore;
+            
+            const bVotes = b.positive_votes || 0;
+            const aVotes = a.positive_votes || 0;
+            if (bVotes !== aVotes) return bVotes - aVotes;
+            
+            return (b.new_overall || 0) - (a.new_overall || 0);
+          };
 
-          // is_mvp = true oder höchster delta_overall
-          const mvpEntry = source.find(h => (h as any).is_mvp) || source.reduce((prev, current) => 
-            (prev.delta_overall > current.delta_overall) ? prev : current
-          );
+          const bestOfOurClub = clubPlayers.length > 0 ? [...clubPlayers].sort(sortLogic)[0] : null;
+          const bestOverall = [...processedHistory].sort(sortLogic)[0];
+
+          const mvpEntry = absoluteMVP || bestOfOurClub || bestOverall;
           
           const found = p.find(player => player.id === mvpEntry.player_id) || null;
           console.log(`DEBUG: [MVP] ${targetType} MVP gefunden: ${found?.full_name || 'none'} (${found?.id})`);
@@ -290,6 +441,11 @@ export const Dashboard: React.FC = () => {
   };
 
   const renderHeroBlock = () => {
+    // 0. Season Teaser OVERRIDES everything if season is over and no live/voting matches
+    if (showSeasonTeaser && heroStatus !== 'live' && heroStatus !== 'voting') {
+      return renderSeasonEndTeaser();
+    }
+
     // 1. Result Hero (KM + Reserve)
     if (heroStatus === 'result' && (mvpKM || mvpReserve)) {
       const renderMVPHero = (mvp: Player, fixture: Fixture, teamTitle: string) => (
@@ -336,9 +492,16 @@ export const Dashboard: React.FC = () => {
 
               <div className="flex items-center justify-center gap-3 py-3 bg-white/5 rounded-2xl border border-white/5 mx-auto max-w-[160px]">
                  <div className="flex items-center gap-3 whitespace-nowrap text-2xl font-black italic text-white tracking-tighter">
-                   <span>{fixture.home_score}</span>
-                   <span className="text-zinc-700">:</span>
-                   <span>{fixture.away_score}</span>
+                   {(() => {
+                     const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+                     return (
+                       <>
+                         <span>{homeScore}</span>
+                         <span className="text-zinc-700">:</span>
+                         <span>{awayScore}</span>
+                       </>
+                     );
+                   })()}
                  </div>
               </div>
 
@@ -466,7 +629,7 @@ export const Dashboard: React.FC = () => {
                     );
                   })()}
                 </div>
-                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{heroFixture.match_phase === 'halftime' ? 'HZ' : heroFixture.match_phase === 'first_half' ? '1. HZ' : '2. HZ'}</div>
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{getLiveMatchMinute(heroFixture, now) || '1. HZ'}</div>
               </div>
 
               <div className="flex-1 flex flex-col items-center gap-2">
@@ -519,8 +682,18 @@ export const Dashboard: React.FC = () => {
   const loadTopPlayers = async () => {
     setLoadingTopPlayers(true);
     try {
-      const top = await supabaseService.getTopPlayers(6);
-      setTopPlayers(top);
+      const historyExists = await supabaseService.hasRatingHistory();
+      setHasHistory(historyExists);
+
+      if (historyExists) {
+        const top = await supabaseService.getTopPlayers(6);
+        setTopPlayers(top);
+        
+        const top10 = await supabaseService.getSeasonTop10Players();
+        if (top10 && top10.length > 0) {
+          setSeasonWinner(top10[0]);
+        }
+      }
     } catch (err) {
       console.error('Error loading top players:', err);
     } finally {
@@ -537,24 +710,25 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen relative text-white font-sans overflow-x-hidden bg-transparent">
-      {/* Remove previous redundant dark overlay to restore App.tsx background */}
+    <SafeAreaWrapper>
+      <div className="min-h-screen relative text-white font-sans overflow-x-hidden bg-transparent">
+        {/* Remove previous redundant dark overlay to restore App.tsx background */}
 
-      {/* Header - Fixed Top Anchor */}
-      <div className="fixed top-0 left-0 right-0 pt-[calc(env(safe-area-inset-top)+10px)] pb-6 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
-        <div className="flex items-center">
+        {/* Header - Fixed Top Anchor */}
+        <div className="sticky top-0 pt-4 sm:pt-6 pb-4 sm:pb-6 px-4 sm:px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur-2xl z-50 border-b border-white/10">
+          <div className="flex items-center flex-shrink-0">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
             alt="PLYRZ" 
-            className="h-16 w-auto object-contain brightness-125 drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]"
+            className="h-10 sm:h-16 w-auto object-contain brightness-125 drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]"
             
           />
         </div>
         
-        <div className="flex items-center gap-5">
-          {isAdmin && (
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          {hasAdminAccess && (
             <button 
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate(isAdmin ? '/admin' : '/team-admin')}
               className="w-10 h-10 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
               title="Admin Panel"
             >
@@ -566,23 +740,20 @@ export const Dashboard: React.FC = () => {
             <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest leading-none mb-1">Angemeldet</div>
             <div className="text-xs font-bold text-white">{profile?.display_name}</div>
           </div>
-          <div 
+          
+          <button 
             onClick={() => navigate('/profile')}
-            className="w-10 h-10 bg-zinc-900 rounded-full border border-white/10 overflow-hidden cursor-pointer hover:border-emerald-500 transition-all shadow-lg active:scale-95"
+            className="w-10 h-10 bg-zinc-900 rounded-xl border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+            title="Profil"
+            aria-label="Profil"
           >
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-zinc-500 font-bold uppercase text-xs">
-                {profile?.display_name?.[0]}
-              </div>
-            )}
-          </div>
+            <User className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
       {/* Main Content Area - Top Aligned */}
-      <div className="relative z-10 w-full pt-[calc(env(safe-area-inset-top)+100px)] pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <div className="relative z-10 w-full pt-[100px] pb-28">
         <div className="max-w-xl mx-auto px-5 space-y-12">
           
           {/* A. HERO SECTION (ONLY ONE) */}
@@ -606,7 +777,16 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="space-y-8">
-              {currentRound && (
+              {showSeasonTeaser ? (
+                <div className="py-12 text-center space-y-4 bg-zinc-900/40 backdrop-blur-md rounded-[2rem] border border-dashed border-white/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none"></div>
+                  <Calendar className="w-8 h-8 text-amber-500/50 mx-auto relative z-10" strokeWidth={1} />
+                  <div className="relative z-10 space-y-1">
+                    <p className="text-white text-base font-black italic uppercase tracking-widest">Saison beendet</p>
+                    <p className="text-zinc-400 text-[11px] uppercase tracking-widest font-bold">Die Liga-Saison ist offiziell abgeschlossen.</p>
+                  </div>
+                </div>
+              ) : currentRound ? (
                 <div className="text-center space-y-4">
                   <div className="inline-flex flex-col items-center">
                     <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-500/50 mb-1">Aktuell</span>
@@ -627,9 +807,15 @@ export const Dashboard: React.FC = () => {
                     }
                   </div>
                 </div>
-              )}
-              
-              {(!currentRound || fixtures.filter(f => f.round_number === currentRound).length === 0) && (
+              ) : fixtures.length === 0 ? (
+                <div className="py-12 text-center space-y-4 bg-zinc-900/40 backdrop-blur-md rounded-[2rem] border border-dashed border-white/10 relative overflow-hidden">
+                  <Calendar className="w-8 h-8 text-zinc-600 mx-auto relative z-10" strokeWidth={1} />
+                  <div className="relative z-10 space-y-1">
+                    <p className="text-white text-base font-black italic uppercase tracking-widest">Keine Spiele</p>
+                    <p className="text-zinc-400 text-[11px] uppercase tracking-widest font-bold">Noch keine Spiele für die Saison 2026/2027 angelegt.</p>
+                  </div>
+                </div>
+              ) : (
                 <div className="py-12 text-center space-y-3 bg-zinc-900/10 rounded-[2rem] border border-dashed border-white/5">
                   <Calendar className="w-8 h-8 text-zinc-800 mx-auto" strokeWidth={1} />
                   <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Keine aktuellen Termine</p>
@@ -653,30 +839,39 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
             
-            <div 
-              ref={carouselRef}
-              onScroll={handleScroll}
-              className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar pb-12 pt-8 -mx-5 px-5"
-            >
-              {topPlayers.slice(0, 6).map((p, index) => {
-                const isActive = index === activeCardIndex;
-                return (
-                  <div 
-                    key={p.id} 
-                    className={`flex-shrink-0 w-[227px] h-[318px] relative transition-all duration-300 snap-center ${index > 0 ? '-ml-24' : ''} ${isActive ? 'scale-110 z-50 -translate-y-4' : 'scale-90 opacity-60'} hover:z-50 hover:opacity-100`}
-                    style={{ zIndex: isActive ? 50 : 10 - index }}
-                  >
-                     <div className="absolute top-0 left-0 scale-[0.65] origin-top-left drop-shadow-2xl cursor-pointer">
-                      <PlayerCard 
-                        player={p}
-                        clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
-                        onClick={() => navigate(`/players/${p.id}`)}
-                      />
+            {hasHistory && topPlayers.length > 0 ? (
+              <div 
+                ref={carouselRef}
+                onScroll={handleScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar pb-12 pt-8 -mx-5 px-5"
+              >
+                {topPlayers.slice(0, 6).map((p, index) => {
+                  const isActive = index === activeCardIndex;
+                  return (
+                    <div 
+                      key={p.id} 
+                      className={`flex-shrink-0 w-[227px] h-[318px] relative transition-all duration-300 snap-center ${index > 0 ? '-ml-24' : ''} ${isActive ? 'scale-110 z-50 -translate-y-4' : 'scale-90 opacity-60'} hover:z-50 hover:opacity-100`}
+                      style={{ zIndex: isActive ? 50 : 10 - index }}
+                    >
+                       <div className="absolute top-0 left-0 scale-[0.65] origin-top-left drop-shadow-2xl cursor-pointer">
+                        <PlayerCard 
+                          player={p}
+                          clubLogo={teams.find(t => t.id === p.team_id)?.clubs?.logo_url}
+                          onClick={() => navigate(`/players/${p.id}`)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-12 text-center space-y-3 bg-zinc-900/10 rounded-[2rem] border border-dashed border-white/5">
+                <Trophy className="w-8 h-8 text-zinc-800 mx-auto" strokeWidth={1} />
+                <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest px-4">
+                  Noch keine Ranking-Daten für die neue Saison verfügbar.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* D. OPTIONAL SECTIONS (BOTTOM ONLY) */}
@@ -718,6 +913,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
     </div>
+    </SafeAreaWrapper>
   );
 };
 

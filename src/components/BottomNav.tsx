@@ -1,23 +1,60 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { 
   Home, 
   Calendar, 
   ThumbsUp, 
   Trophy, 
-  User 
+  ListOrdered,
+  User,
+  ShieldAlert
 } from 'lucide-react';
+import { supabaseService } from '../services/supabaseService';
 
-export const BottomNav: React.FC = () => {
+interface BottomNavProps {
+  hasAdminAccess?: boolean;
+}
+
+export const BottomNav: React.FC<BottomNavProps> = ({ hasAdminAccess: externalHasAdminAccess }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAdmin: isSuperAdmin } = useAuth();
+  const [internalHasAdminAccess, setInternalHasAdminAccess] = useState(false);
+
+  useEffect(() => {
+    // If external prop is provided, we use it directly
+    if (externalHasAdminAccess !== undefined) {
+      setInternalHasAdminAccess(externalHasAdminAccess);
+      return;
+    }
+
+    const checkAccess = async () => {
+      if (!user) {
+        setInternalHasAdminAccess(false);
+        return;
+      }
+      try {
+        const [isAdminResult, clubAccess] = await Promise.all([
+          supabaseService.isUserAdmin(),
+          supabaseService.getClubAdminAccess()
+        ]);
+        setInternalHasAdminAccess(isAdminResult || clubAccess.length > 0);
+      } catch (err) {
+        setInternalHasAdminAccess(false);
+      }
+    };
+    checkAccess();
+  }, [user, externalHasAdminAccess]);
+
+  const hasAccess = internalHasAdminAccess;
 
   const tabs = [
-    { id: 'home', label: 'Start', icon: Home, path: '/' },
+    { id: 'home', label: 'Home', icon: Home, path: '/' },
     { id: 'matches', label: 'Spiele', icon: Calendar, path: '/matches' },
-    { id: 'vote', label: 'Voten', icon: ThumbsUp, path: '/vote' },
+    { id: 'vote', label: 'Voting', icon: ThumbsUp, path: '/vote' },
     { id: 'leaderboard', label: 'Ranking', icon: Trophy, path: '/leaderboard' },
-    { id: 'profile', label: 'Profil', icon: User, path: '/profile' },
+    { id: 'table', label: 'Tabelle', icon: ListOrdered, path: '/table' },
   ];
 
   const isActive = (path: string) => {

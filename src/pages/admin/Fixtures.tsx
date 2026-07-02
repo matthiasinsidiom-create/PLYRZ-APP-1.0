@@ -21,7 +21,9 @@ import {
   Star
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
+import { supabase } from '../../lib/supabase';
 import { getPositionShort } from '../../lib/positions';
+import { calculateMatchScore } from '../../lib/score';
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal';
 
 const AdminFixtures: React.FC = () => {
@@ -46,7 +48,11 @@ const AdminFixtures: React.FC = () => {
     away_score: '',
     checkin_code: '',
     checkin_opens_at: '',
-    checkin_closes_at: ''
+    checkin_closes_at: '',
+    match_sponsor_name: '',
+    match_sponsor_logo_url: '',
+    mvp_sponsor_name: '',
+    mvp_sponsor_logo_url: ''
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -69,6 +75,36 @@ const AdminFixtures: React.FC = () => {
   const [lineupForEvents, setLineupForEvents] = useState<any[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [savingEvents, setSavingEvents] = useState(false);
+  const [uploadingMatchSponsor, setUploadingMatchSponsor] = useState(false);
+  const [uploadingMvpSponsor, setUploadingMvpSponsor] = useState(false);
+
+  const handleMatchSponsorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setUploadingMatchSponsor(true);
+    try {
+      const publicUrl = await supabaseService.uploadSponsorLogo(file);
+      setFormData(prev => ({ ...prev, match_sponsor_logo_url: publicUrl }));
+    } catch (err: any) {
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploadingMatchSponsor(false);
+    }
+  };
+
+  const handleMvpSponsorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setUploadingMvpSponsor(true);
+    try {
+      const publicUrl = await supabaseService.uploadSponsorLogo(file);
+      setFormData(prev => ({ ...prev, mvp_sponsor_logo_url: publicUrl }));
+    } catch (err: any) {
+      alert('Upload failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setUploadingMvpSponsor(false);
+    }
+  };
 
   const [statusModal, setStatusModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' }>({
     isOpen: false,
@@ -212,7 +248,11 @@ const AdminFixtures: React.FC = () => {
         away_score: fixture.away_score?.toString() || '',
         checkin_code: fixture.checkin_code || '',
         checkin_opens_at: fixture.checkin_opens_at ? new Date(fixture.checkin_opens_at).toISOString().slice(0, 16) : '',
-        checkin_closes_at: fixture.checkin_closes_at ? new Date(fixture.checkin_closes_at).toISOString().slice(0, 16) : ''
+        checkin_closes_at: fixture.checkin_closes_at ? new Date(fixture.checkin_closes_at).toISOString().slice(0, 16) : '',
+        match_sponsor_name: fixture.match_sponsor_name || '',
+        match_sponsor_logo_url: fixture.match_sponsor_logo_url || '',
+        mvp_sponsor_name: fixture.mvp_sponsor_name || '',
+        mvp_sponsor_logo_url: fixture.mvp_sponsor_logo_url || ''
       });
     } else {
       setEditingFixture(null);
@@ -228,7 +268,11 @@ const AdminFixtures: React.FC = () => {
         away_score: '',
         checkin_code: Math.random().toString(36).substring(2, 8).toUpperCase(),
         checkin_opens_at: '',
-        checkin_closes_at: ''
+        checkin_closes_at: '',
+        match_sponsor_name: '',
+        match_sponsor_logo_url: '',
+        mvp_sponsor_name: '',
+        mvp_sponsor_logo_url: ''
       });
     }
     setIsModalOpen(true);
@@ -259,7 +303,14 @@ const AdminFixtures: React.FC = () => {
       }
 
       const selectedHomeTeam = teams.find(t => t.id === formData.home_team_id);
-      const isReserve = selectedHomeTeam?.name.toLowerCase().includes('reserve');
+      const homeName = (selectedHomeTeam?.name || '').toLowerCase();
+      const isReserve = homeName.includes('reserve') || 
+                       homeName.includes(' 1b') || 
+                       homeName.includes(' 1.b') || 
+                       homeName.includes(' ii') || 
+                       homeName.includes(' res') ||
+                       homeName.includes(' 2. mannschaft');
+
       const payload: any = {
         league_id: formData.league_id,
         home_team_id: formData.home_team_id,
@@ -273,7 +324,11 @@ const AdminFixtures: React.FC = () => {
         away_score: formData.away_score !== '' ? parseInt(formData.away_score) : null,
         checkin_code: formData.checkin_code || null,
         checkin_opens_at: formData.checkin_opens_at ? new Date(formData.checkin_opens_at).toISOString() : null,
-        checkin_closes_at: formData.checkin_closes_at ? new Date(formData.checkin_closes_at).toISOString() : null
+        checkin_closes_at: formData.checkin_closes_at ? new Date(formData.checkin_closes_at).toISOString() : null,
+        match_sponsor_name: formData.match_sponsor_name || null,
+        match_sponsor_logo_url: formData.match_sponsor_logo_url || null,
+        mvp_sponsor_name: formData.mvp_sponsor_name || null,
+        mvp_sponsor_logo_url: formData.mvp_sponsor_logo_url || null
       };
 
       if (editingFixture) {
@@ -344,27 +399,63 @@ const AdminFixtures: React.FC = () => {
     
     console.log('DEBUG: [FRONTEND] Starting rating processing flow for fixture:', targetId);
     
+    let originalError: any = null;
+    
     try {
-      const result = await supabaseService.processFixtureRatings(targetId);
-      console.log('DEBUG: [FRONTEND] Rating processing successful. Result:', result);
-      
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Complete',
-        message: result.message || `Successfully processed ratings for ${result.processedCount} players. Player stats have been updated.`,
-        type: 'success'
-      });
-      
-      setIsModalOpen(false);
-      await loadData();
+      await supabaseService.processFixtureRatings(targetId);
     } catch (err: any) {
-      console.error('DEBUG: [FRONTEND] Rating processing failed:', err);
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Failed',
-        message: err.message || 'An unexpected error occurred while processing ratings.',
-        type: 'error'
-      });
+      console.warn('DEBUG: [FRONTEND] Rating processing threw an error, verifying if results exist anyway:', err);
+      originalError = err;
+    }
+    
+    try {
+      // Add a small delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const updatedFixture = await supabaseService.getFixtureById(targetId);
+      let resultsExist = !!updatedFixture.results_processed_at;
+      
+      if (!resultsExist) {
+        const { data, error } = await supabase
+          .from('player_rating_history')
+          .select('id')
+          .eq('fixture_id', targetId)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          resultsExist = true;
+        }
+      }
+
+      if (resultsExist) {
+        console.log('DEBUG: [FRONTEND] Rating processing successful verified in DB.');
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Complete',
+          message: 'Successfully processed ratings for players. Player stats have been updated.',
+          type: 'success'
+        });
+        
+        setIsModalOpen(false);
+        await loadData();
+      } else {
+        console.error('DEBUG: [FRONTEND] Rating processing failed:', originalError);
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'An unexpected error occurred while processing ratings.',
+          type: 'error'
+        });
+      }
+    } catch (refreshErr) {
+      console.error('DEBUG: [FRONTEND] Error checking processing status:', refreshErr);
+      if (originalError) {
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'An unexpected error occurred while processing ratings.',
+          type: 'error'
+        });
+      }
     } finally {
       setProcessingRatings(false);
     }
@@ -473,13 +564,16 @@ const AdminFixtures: React.FC = () => {
                   </div>
                   
                   <div className="flex flex-col items-center gap-1">
-                    {fixture.status === 'finished' ? (
-                      <div className="text-3xl font-black italic tracking-tighter flex items-center gap-3">
-                        <span>{fixture.home_score}</span>
-                        <span className="text-zinc-700">-</span>
-                        <span>{fixture.away_score}</span>
-                      </div>
-                    ) : (
+                    {fixture.status === 'finished' || fixture.status === 'live' ? (() => {
+                      const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+                      return (
+                        <div className="text-3xl font-black italic tracking-tighter flex items-center gap-3">
+                          <span>{homeScore}</span>
+                          <span className="text-zinc-700">-</span>
+                          <span>{awayScore}</span>
+                        </div>
+                      );
+                    })() : (
                       <div className="px-3 py-1 bg-zinc-800 rounded-lg text-xs font-bold text-zinc-400">
                         VS
                       </div>
@@ -533,76 +627,82 @@ const AdminFixtures: React.FC = () => {
 
         {/* Create/Edit Modal */}
         <AnimatePresence>
-          {isModalOpen && (
-            <div className="fixed inset-0 z-50 flex justify-center p-4 bg-black/60 backdrop-blur-md overflow-y-auto">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl my-auto"
-              >
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-2xl font-black italic tracking-tighter uppercase">
-                    {editingFixture ? 'SPIEL BEARBEITEN' : 'NEUES SPIEL'}
-                  </h2>
-                  <button 
-                    onClick={() => setIsModalOpen(false)}
-                    className="p-2 text-zinc-500 hover:text-white transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
+          {isModalOpen && (() => {
+            const availableHomeTeams = teams.filter(t => t.clubs?.league_id === formData.league_id && t.id !== formData.away_team_id);
+            const availableAwayTeams = teams.filter(t => t.clubs?.league_id === formData.league_id && t.id !== formData.home_team_id);
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga</label>
-                    <select
-                      required
-                      value={formData.league_id}
-                      onChange={(e) => setFormData({ ...formData, league_id: e.target.value })}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+            return (
+              <div className="fixed inset-0 z-50 flex justify-center p-4 bg-black/60 backdrop-blur-md overflow-y-auto">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl my-auto"
+                >
+                  <div className="flex items-center justify-between mb-8">
+                    <h2 className="text-2xl font-black italic tracking-tighter uppercase">
+                      {editingFixture ? 'SPIEL BEARBEITEN' : 'NEUES SPIEL'}
+                    </h2>
+                    <button 
+                      onClick={() => setIsModalOpen(false)}
+                      className="p-2 text-zinc-500 hover:text-white transition-colors"
                     >
-                      <option value="">Liga auswählen</option>
-                      {leagues.map(l => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
-                      ))}
-                    </select>
+                      <X className="w-6 h-6" />
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Heimteam</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Liga</label>
                       <select
                         required
-                        value={formData.home_team_id}
-                        onChange={(e) => setFormData({ ...formData, home_team_id: e.target.value })}
+                        value={formData.league_id}
+                        onChange={(e) => setFormData({ ...formData, league_id: e.target.value, home_team_id: '', away_team_id: '' })}
                         className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
                       >
-                        <option value="">Heimteam auswählen</option>
-                        {teams.map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.clubs?.name} – {t.name}
-                          </option>
+                        <option value="">Liga auswählen</option>
+                        {leagues.map(l => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
                         ))}
                       </select>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Auswärtsteam</label>
-                      <select
-                        required
-                        value={formData.away_team_id}
-                        onChange={(e) => setFormData({ ...formData, away_team_id: e.target.value })}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
-                      >
-                        <option value="">Auswärtsteam auswählen</option>
-                        {teams.map(t => (
-                          <option key={t.id} value={t.id}>
-                            {t.clubs?.name} – {t.name}
-                          </option>
-                        ))}
-                      </select>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Heimteam</label>
+                        <select
+                          required
+                          value={formData.home_team_id}
+                          disabled={!formData.league_id}
+                          onChange={(e) => setFormData({ ...formData, home_team_id: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors disabled:opacity-50"
+                        >
+                          <option value="">{formData.league_id ? (availableHomeTeams.length === 0 ? "Kein Team verfügbar" : "Heimteam auswählen") : "Zuerst Liga wählen"}</option>
+                          {availableHomeTeams.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.clubs?.name} – {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Auswärtsteam</label>
+                        <select
+                          required
+                          value={formData.away_team_id}
+                          disabled={!formData.league_id}
+                          onChange={(e) => setFormData({ ...formData, away_team_id: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors disabled:opacity-50"
+                        >
+                          <option value="">{formData.league_id ? (availableAwayTeams.length === 0 ? "Kein Team verfügbar" : "Auswärtsteam auswählen") : "Zuerst Liga wählen"}</option>
+                          {availableAwayTeams.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.clubs?.name} – {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                  </div>
 
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Spieltag</label>
@@ -628,6 +728,84 @@ const AdminFixtures: React.FC = () => {
                     />
                   </div>
 
+                  <div className="space-y-4 pt-4 border-t border-zinc-800">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">Sponsoren (Optional)</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Match Sponsor Name</label>
+                        <input 
+                          type="text"
+                          value={formData.match_sponsor_name}
+                          onChange={(e) => setFormData({ ...formData, match_sponsor_name: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+                          placeholder="e.g. Intersport"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Match Sponsor Logo URL</label>
+                        <div className="flex flex-col gap-2">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleMatchSponsorUpload}
+                            className="hidden"
+                            id="match-logo-upload"
+                          />
+                          <label 
+                            htmlFor="match-logo-upload"
+                            className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
+                          >
+                            {uploadingMatchSponsor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {formData.match_sponsor_logo_url ? 'LOGO ÄNDERN' : 'LOGO HOCHLADEN'}
+                          </label>
+                          <input 
+                            type="url"
+                            value={formData.match_sponsor_logo_url}
+                            onChange={(e) => setFormData({ ...formData, match_sponsor_logo_url: e.target.value })}
+                            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-red-500/50 transition-colors"
+                            placeholder="Oder URL eingegeben..."
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">MVP Sponsor Name</label>
+                        <input 
+                          type="text"
+                          value={formData.mvp_sponsor_name}
+                          onChange={(e) => setFormData({ ...formData, mvp_sponsor_name: e.target.value })}
+                          className="w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-red-500/50 transition-colors"
+                          placeholder="e.g. Raiffeisen"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">MVP Sponsor Logo URL</label>
+                        <div className="flex flex-col gap-2">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleMvpSponsorUpload}
+                            className="hidden"
+                            id="mvp-logo-upload"
+                          />
+                          <label 
+                            htmlFor="mvp-logo-upload"
+                            className="flex items-center justify-center gap-2 w-full bg-zinc-800 border border-zinc-700 rounded-xl py-3 px-4 text-xs font-bold text-white cursor-pointer hover:bg-zinc-700 transition-colors"
+                          >
+                            {uploadingMvpSponsor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            {formData.mvp_sponsor_logo_url ? 'LOGO ÄNDERN' : 'LOGO HOCHLADEN'}
+                          </label>
+                          <input 
+                            type="url"
+                            value={formData.mvp_sponsor_logo_url}
+                            onChange={(e) => setFormData({ ...formData, mvp_sponsor_logo_url: e.target.value })}
+                            className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl py-2 px-4 text-[10px] text-zinc-400 focus:outline-none focus:border-red-500/50 transition-colors"
+                            placeholder="Oder URL eingegeben..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="pt-6">
                     <button
                       type="submit"
@@ -641,7 +819,8 @@ const AdminFixtures: React.FC = () => {
                 </form>
               </motion.div>
             </div>
-          )}
+            );
+          })()}
         </AnimatePresence>
 
         {/* Fixture Events Modal */}

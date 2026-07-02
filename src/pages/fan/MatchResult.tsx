@@ -20,12 +20,18 @@ import {
   Star,
   Minus,
   Zap,
-  Square
+  Square,
+  RefreshCw,
+  Share2
 } from 'lucide-react';
+import * as htmlToImage from 'html-to-image';
+import SafeAreaWrapper from '../../components/SafeAreaWrapper';
 import { supabaseService } from '../../services/supabaseService';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture, Player, PlayerStats, Team, Club, PlayerRatingHistory, MatchEvent } from '../../types';
 import { PlayerCard } from '../../components/PlayerCard';
+import { SponsorBox } from '../../components/SponsorBox';
 import { VotingCountdown } from '../../components/VotingCountdown';
 import { calculateMatchScore } from '../../lib/score';
 
@@ -66,11 +72,12 @@ const DeltaBadge: React.FC<{ delta: number }> = ({ delta }) => {
 
 const EventBadges: React.FC<{ 
   goals: number; 
+  assists?: number;
   yellows: number; 
   reds: number; 
   size?: 'sm' | 'md' 
-}> = ({ goals, yellows, reds, size = 'md' }) => {
-  if (goals === 0 && yellows === 0 && reds === 0) return null;
+}> = ({ goals, assists = 0, yellows, reds, size = 'md' }) => {
+  if (goals === 0 && assists === 0 && yellows === 0 && reds === 0) return null;
   const textSize = size === 'sm' ? 'text-[9px]' : 'text-[11px]';
   const gap = size === 'sm' ? 'gap-2' : 'gap-3';
   return (
@@ -79,6 +86,12 @@ const EventBadges: React.FC<{
         <div className="flex items-center gap-1">
           <span className={size === 'sm' ? 'text-[10px]' : 'text-sm'}>⚽</span>
           <span className={`${textSize} font-black italic text-white tabular-nums`}>{goals}</span>
+        </div>
+      )}
+      {assists > 0 && (
+        <div className="flex items-center gap-1">
+          <span className={size === 'sm' ? 'text-[10px]' : 'text-sm'}>🎯</span>
+          <span className={`${textSize} font-black italic text-white tabular-nums`}>{assists}</span>
         </div>
       )}
       {yellows > 0 && (
@@ -113,19 +126,19 @@ const RankingRow: React.FC<{ entry: RatingHistoryEntry; rank?: number }> = ({ en
         )}
         <div className="w-8 h-8 rounded-full overflow-hidden border border-white/10 bg-zinc-800">
           <img 
-            src={entry.players.photo_url || "/assets/players/default.png"} 
-            alt="" 
+            src={entry.players?.photo_url || "/assets/players/default.png"} 
+            alt={entry.players?.full_name || "Player"} 
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
         </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players.name}</span>
-          <EventBadges goals={entry.goal_count} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
+          <span className="text-[10px] font-black italic text-white uppercase tracking-tight leading-none mb-1.5">{entry.players?.full_name || 'Unbekannter Spieler'}</span>
+          <EventBadges goals={entry.goal_count || 0} assists={entry.assists || 0} yellows={entry.yellow_count || 0} reds={entry.red_count || 0} size="sm" />
         </div>
       </div>
-      <div className={`text-xs font-black italic tabular-nums ${entry.delta_overall > 0 ? 'text-emerald-400' : entry.delta_overall < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
-        {entry.delta_overall > 0 ? '+' : ''}{safeFixed(entry.delta_overall)}
+      <div className={`text-xs font-black italic tabular-nums ${(entry.delta_overall || 0) > 0 ? 'text-emerald-400' : (entry.delta_overall || 0) < 0 ? 'text-red-400' : 'text-zinc-500'}`}>
+        {(entry.delta_overall || 0) > 0 ? '+' : ''}{safeFixed(entry.delta_overall)}
       </div>
     </motion.div>
   );
@@ -193,18 +206,18 @@ const PerformancePanel: React.FC<{ entry: any }> = ({ entry }) => {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" title="Upvotes">
             <ThumbsUp className="w-3 h-3 text-emerald-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_up || entry.positive_votes || 0}</span>
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.positive_votes || 0}</span>
           </div>
           <div className="flex items-center gap-1.5" title="Neutral Votes">
             <div className="w-3 h-3 rounded-full bg-zinc-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_neutral || entry.neutral_votes || 0}</span>
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.neutral_votes || 0}</span>
           </div>
           <div className="flex items-center gap-1.5" title="Downvotes">
             <ThumbsDown className="w-3 h-3 text-red-500" />
-            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.votes_down || entry.negative_votes || 0}</span>
+            <span className="text-[10px] font-black italic text-zinc-400 tabular-nums">{entry.negative_votes || 0}</span>
           </div>
         </div>
-        <EventBadges goals={entry.goal_count} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
+        <EventBadges goals={entry.goal_count} assists={entry.assists} yellows={entry.yellow_count} reds={entry.red_count} size="sm" />
       </div>
     </div>
   );
@@ -219,6 +232,104 @@ const MatchResult: React.FC = () => {
   const [results, setResults] = useState<RatingHistoryEntry[]>([]);
   const [lineup, setLineup] = useState<any[]>([]);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [autoProcessed, setAutoProcessed] = useState(false);
+  const [sharingMVP, setSharingMVP] = useState(false);
+  const mvpExportRef = React.useRef<HTMLDivElement>(null);
+
+  const handleShareMVP = async () => {
+    if (!mvpExportRef.current || !fixture) return;
+    setSharingMVP(true);
+    try {
+      // Very small delay to ensure React has flushed DOM (avoid eating into 1s user gesture window)
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      let dataUrl: string;
+      try {
+        dataUrl = await htmlToImage.toPng(mvpExportRef.current, {
+          pixelRatio: 3,
+          backgroundColor: '#09090b', // zinc-950
+        });
+      } catch (firstErr) {
+        console.warn('First export failed, likely due to CORS. Retrying without external images...', firstErr);
+        // Retry without external images
+        dataUrl = await htmlToImage.toPng(mvpExportRef.current, {
+          pixelRatio: 3,
+          backgroundColor: '#09090b',
+          filter: (node: HTMLElement) => {
+            if (node.tagName === 'IMG') {
+              const src = (node as HTMLImageElement).src;
+              // Allow local assets, filter out external ones
+              if (src && (src.startsWith('http://') || src.startsWith('https://')) && !src.includes(window.location.origin)) {
+                return false; // Skip external images
+              }
+            }
+            return true;
+          }
+        });
+      }
+
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      const file = new File([blob], `mvp_${fixture.id.substring(0,8)}.png`, { type: 'image/png' });
+
+      const downloadFallback = () => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+      };
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `MVP: ${(fixture as any).home_team?.name || ''} vs ${(fixture as any).away_team?.name || ''}`,
+            text: `Schau dir den MVP des Spiels an!`
+          });
+        } catch (shareErr: any) {
+          console.warn('navigator.share failed:', shareErr);
+          if (shareErr.name === 'NotAllowedError') {
+             // Fallback to download if gesture token expired
+             downloadFallback();
+          } else if (shareErr.name !== 'AbortError') { // AbortError means user cancelled
+             throw shareErr;
+          }
+        }
+      } else {
+        downloadFallback();
+      }
+    } catch (err) {
+      console.error('Error sharing MVP:', err);
+      alert('Bildexport fehlgeschlagen. Versuche es ggf. in einem anderen Browser.');
+    } finally {
+      setSharingMVP(false);
+    }
+  };
+
+  // Auto-process for admins if voting is closed but results are missing
+  useEffect(() => {
+    const shouldAutoProcess = 
+      id && 
+      isAdmin && 
+      fixture && 
+      fixture.status === 'finished' && 
+      !fixture.results_processed_at && 
+      !processing && 
+      !autoProcessed;
+
+    if (shouldAutoProcess) {
+      const closeAt = fixture.voting_close_at ? new Date(fixture.voting_close_at) : null;
+      if (!closeAt || new Date() >= closeAt) {
+        console.log(`DEBUG: [UI] Admin detected on finished result page. Auto-triggering calculation for ${id}...`);
+        setAutoProcessed(true);
+        handleManualProcess();
+      }
+    }
+  }, [id, isAdmin, fixture?.status, fixture?.results_processed_at, processing, autoProcessed]);
 
   useEffect(() => {
     if (id) {
@@ -239,6 +350,13 @@ const MatchResult: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      try {
+        await supabase.auth.getSession();
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 500));
+        await supabase.auth.getSession().catch(() => {});
+      }
+      
       const [fixtureData, resultsData, lineupData, eventsData] = await Promise.all([
         supabaseService.getFixtureById(id!),
         supabaseService.getFixtureRatingHistory(id!),
@@ -275,16 +393,32 @@ const MatchResult: React.FC = () => {
 
   const mvp = useMemo(() => {
     if (results.length === 0) return null;
+    
+    // Prioritize marked is_mvp from DB
+    const markedMVP = results.find(r => r.is_mvp);
+    if (markedMVP) return markedMVP;
+
+    // Fallback to sorting logic
     return [...results].sort((a, b) => {
-      if (b.delta_overall !== a.delta_overall) return b.delta_overall - a.delta_overall;
-      if (b.votes_up !== a.votes_up) return b.votes_up - a.votes_up;
-      return b.new_overall - a.new_overall;
+      const bScore = b.mvp_score || b.delta_overall || 0;
+      const aScore = a.mvp_score || a.delta_overall || 0;
+      if (bScore !== aScore) return bScore - aScore;
+      
+      const bVotes = b.positive_votes || 0;
+      const aVotes = a.positive_votes || 0;
+      if (bVotes !== aVotes) return bVotes - aVotes;
+      
+      return (b.new_overall || 0) - (a.new_overall || 0);
     })[0];
   }, [results]);
 
   const top5 = useMemo(() => {
     return [...results]
-      .sort((a, b) => b.delta_overall - a.delta_overall)
+      .sort((a, b) => {
+        const bScore = b.mvp_score || b.delta_overall || 0;
+        const aScore = a.mvp_score || a.delta_overall || 0;
+        return bScore - aScore;
+      })
       .slice(0, 5);
   }, [results]);
 
@@ -357,7 +491,20 @@ const MatchResult: React.FC = () => {
   }
 
   // Prioritize results and skip pending state if results exist
-  const showResults = results.length > 0 && fixture?.results_processed_at;
+  const showResults = (results.length > 0 || (fixture?.results_processed_at && lineup.length === 0)) && fixture?.results_processed_at;
+
+  const handleManualProcess = async () => {
+    if (!id || processing) return;
+    setProcessing(true);
+    try {
+      await supabaseService.processFixtureRatings(id);
+      await loadData();
+    } catch (err) {
+      console.error('Manual processing failed:', err);
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   if (!fixture || !showResults) {
     const now = new Date();
@@ -383,6 +530,30 @@ const MatchResult: React.FC = () => {
             <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">
               {isVotingOpen ? 'Voting läuft' : 'Ergebnisse ausstehend'}
             </h2>
+            
+            {/* Show Current Score even if results are pending */}
+            {fixture && (
+              <div className="flex flex-col items-center gap-2 py-4">
+                <div className="text-3xl font-black italic tracking-tighter flex items-center gap-3 text-white opacity-80">
+                  {(() => {
+                    const { homeScore, awayScore } = calculateMatchScore(fixture, (fixture as any).match_events || []);
+                    return (
+                      <>
+                        <span>{homeScore}</span>
+                        <span className="text-zinc-800">:</span>
+                        <span>{awayScore}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-2 opacity-60">
+                   <span className="text-[10px] font-black italic uppercase tracking-tight text-zinc-400">{(fixture as any).home_team?.clubs?.name}</span>
+                   <span className="text-zinc-700 text-[8px] font-black uppercase">VS</span>
+                   <span className="text-[10px] font-black italic uppercase tracking-tight text-zinc-400">{(fixture as any).away_team?.clubs?.name}</span>
+                </div>
+              </div>
+            )}
+
             <p className="text-zinc-500 leading-relaxed text-sm">
               {isVotingOpen 
                 ? 'Die Community stimmt derzeit über dieses Spiel ab. Die Ergebnisse werden automatisch berechnet, sobald das Voting-Fenster schließt.'
@@ -410,13 +581,47 @@ const MatchResult: React.FC = () => {
               </button>
             )}
 
+            {!isVotingOpen && !fixture?.results_processed_at && isAdmin && (
+              <button 
+                onClick={handleManualProcess}
+                disabled={processing}
+                className="w-full bg-zinc-800 text-white font-bold py-5 rounded-2xl hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-white/5 active:scale-[0.98]"
+              >
+                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
+                {processing ? 'Wird berechnet...' : 'Ergebnisse manuell berechnen'}
+              </button>
+            )}
+
             <button 
-              onClick={() => navigate(-1)}
-              className="w-full bg-zinc-900 text-white font-black italic uppercase tracking-tighter py-5 rounded-2xl border border-white/5 hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+              onClick={() => navigate('/matches')}
+              className="w-full bg-zinc-900/50 text-zinc-400 font-bold py-5 rounded-2xl hover:bg-zinc-900 transition-all border border-white/5 active:scale-[0.98]"
             >
-              <ArrowLeft className="w-5 h-5" /> Zurück zum Spiel
+              ZUR ÜBERSICHT
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If we reach here, we have results or it's processed with no lineup
+  if (fixture?.results_processed_at && results.length === 0) {
+    return (
+      <div className="min-h-screen bg-transparent text-white p-6 flex flex-col items-center justify-center">
+        <div className="max-w-md w-full space-y-8 text-center bg-zinc-900/40 backdrop-blur-xl border border-white/5 p-12 rounded-[3rem]">
+          <div className="w-20 h-20 bg-zinc-800 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <Info className="w-10 h-10 text-zinc-600" />
+          </div>
+          <div className="space-y-4">
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">Keine Daten</h2>
+            <p className="text-zinc-500 font-medium">Für dieses Spiel wurden keine Bewertungen oder Statistiken erfasst.</p>
+          </div>
+          <button 
+            onClick={() => navigate('/matches')}
+            className="w-full bg-emerald-500 text-black font-black italic uppercase tracking-tight py-5 rounded-2xl hover:bg-emerald-400 transition-all"
+          >
+            ZUR ÜBERSICHT
+          </button>
         </div>
       </div>
     );
@@ -426,9 +631,10 @@ const MatchResult: React.FC = () => {
   const awayWinner = (fixture.away_score || 0) > (fixture.home_score || 0);
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-[calc(7rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
+    <SafeAreaWrapper>
+    <div className="min-h-screen bg-transparent text-white font-sans pb-28 selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
       {/* Premium Header */}
-      <div className="relative pt-[calc(env(safe-area-inset-top)+10px)] pb-10 overflow-hidden">
+      <div className="relative pt-3 pb-10 overflow-hidden">
         <div className="relative z-10 max-w-xl mx-auto px-4 flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <button 
@@ -550,8 +756,8 @@ const MatchResult: React.FC = () => {
                   >
                     <div className="relative flex items-center justify-center origin-top scale-[0.8] sm:scale-[0.9] md:scale-100 -mb-[98px] sm:-mb-[49px] md:mb-0">
                       <PlayerCard 
-                        player={mvp.players} 
-                        clubLogo={mvp.players.teams?.clubs?.logo_url}
+                        player={mvp.players || { full_name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' } as any} 
+                        clubLogo={mvp.players?.teams?.clubs?.logo_url}
                         jerseyNumber={mvp.jersey_number}
                         lineupRole={mvp.lineup_role}
                         isTopPerformer={true}
@@ -571,14 +777,14 @@ const MatchResult: React.FC = () => {
                       </motion.div>
 
                       {/* MVP Event Badges */}
-                      {(mvp.goal_count > 0 || mvp.yellow_count > 0 || mvp.red_count > 0) && (
+                      {(mvp.goal_count > 0 || (mvp.assists || 0) > 0 || mvp.yellow_count > 0 || mvp.red_count > 0) && (
                         <motion.div 
                           initial={{ opacity: 0, y: 10 }}
                           whileInView={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.8 }}
                           className="absolute -bottom-[80px] left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-5 py-2.5 bg-zinc-900 border border-white/10 rounded-full shadow-2xl"
                         >
-                          <EventBadges goals={mvp.goal_count} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
+                          <EventBadges goals={mvp.goal_count} assists={mvp.assists} yellows={mvp.yellow_count} reds={mvp.red_count} size="md" />
                         </motion.div>
                       )}
                     </div>
@@ -604,7 +810,7 @@ const MatchResult: React.FC = () => {
                           <ThumbsUp className="w-3 h-3 text-emerald-500" />
                           <span className="text-[8px] font-black italic text-zinc-500 uppercase tracking-widest">Votes</span>
                         </div>
-                        <span className="text-lg font-black italic text-white">{mvp.votes_up}</span>
+                        <span className="text-lg font-black italic text-white">{mvp.positive_votes || 0}</span>
                       </div>
                       <div className="text-[10px] font-black italic text-zinc-500">
                         Impact: +{safeFixed(mvp.vote_impact, 2)}
@@ -624,9 +830,153 @@ const MatchResult: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* MVP Sponsor */}
+                <div className="mt-8 flex justify-center w-full max-w-[360px]">
+                  <SponsorBox 
+                    type="MVP" 
+                    sponsorName={(fixture as any).mvp_sponsor_name || "PLYRZ"} 
+                    sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
+                  />
+                </div>
+
+                <button 
+                  onClick={handleShareMVP}
+                  disabled={sharingMVP}
+                  className="mt-8 w-full max-w-sm bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all text-white font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                >
+                  <Share2 className="w-5 h-5 text-amber-500" />
+                  {sharingMVP ? 'Wird verarbeitet...' : 'MVP teilen'}
+                </button>
               </div>
             </div>
           </motion.section>
+        )}
+
+        {/* Hidden MVP Share Container */}
+        {mvp && fixture && (
+          <div className="absolute -left-[9999px] top-0 pointer-events-none flex opacity-0">
+            <div ref={mvpExportRef} className="w-[1080px] h-[1920px] bg-zinc-950 flex flex-col items-center justify-between font-sans tracking-tight relative overflow-hidden">
+              
+              {/* Background Accents */}
+              <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-amber-500/10 rounded-full blur-[120px]" />
+                <div className="absolute bottom-[-10%] right-[-20%] w-[1000px] h-[1000px] bg-zinc-800/50 rounded-full blur-[150px]" />
+              </div>
+
+              {/* TOP SECTION: Header & Match Info */}
+              <div className="w-full pt-32 px-16 flex flex-col items-center relative z-10">
+                <div className="inline-flex items-center gap-4 px-10 py-4 bg-gradient-to-r from-amber-300 to-amber-600 text-black rounded-full shadow-[0_0_50px_rgba(251,191,36,0.4)] border-4 border-amber-200/50">
+                  <Star className="w-12 h-12 fill-black" />
+                  <span className="text-4xl font-black italic uppercase tracking-[0.3em]">MVP DES SPIELS</span>
+                </div>
+                
+                {/* Match Info */}
+                <div className="mt-12 w-full flex flex-col items-center gap-8 text-white text-center">
+                  <div className="flex items-center justify-center gap-6 w-full font-black italic uppercase">
+                    <div className="flex-1 flex flex-col items-center justify-end gap-4 text-center">
+                      {((fixture as any).home_team?.clubs?.logo_url) && (
+                        <img src={(fixture as any).home_team.clubs.logo_url} className="w-24 h-24 object-contain drop-shadow-xl" alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+                      )}
+                      <span className="text-4xl leading-tight text-balance">{(fixture as any).home_team?.clubs?.name || (fixture as any).home_team?.name}</span>
+                    </div>
+                    <div className="px-8 py-4 mx-4 bg-white/10 rounded-2xl border border-white/5 whitespace-nowrap text-5xl shadow-2xl">
+                       {(() => {
+                          const { homeScore, awayScore } = calculateMatchScore(fixture, matchEvents);
+                          return `${homeScore}:${awayScore}`;
+                       })()}
+                    </div>
+                    <div className="flex-1 flex flex-col items-center justify-start gap-4 text-center">
+                      {((fixture as any).away_team?.clubs?.logo_url) && (
+                        <img src={(fixture as any).away_team.clubs.logo_url} className="w-24 h-24 object-contain drop-shadow-xl" alt="" crossOrigin="anonymous" referrerPolicy="no-referrer" />
+                      )}
+                      <span className="text-4xl leading-tight text-balance">{(fixture as any).away_team?.clubs?.name || (fixture as any).away_team?.name}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-center gap-6 mt-4 opacity-80 text-2xl font-bold tracking-widest uppercase">
+                    {fixture.match_type && (
+                      <span className="text-amber-500">
+                         {fixture.match_type === 'reserve' ? 'Reserve' : 'KAMPFMANNSCHAFT'}
+                      </span>
+                    )}
+                    {fixture.match_type && <span className="w-2 h-2 rounded-full bg-white/20" />}
+                    {fixture.round_number && <span>Runde {fixture.round_number}</span>}
+                    {fixture.round_number && <span className="w-2 h-2 rounded-full bg-white/20" />}
+                    {fixture.kickoff_at && <span>{new Date(fixture.kickoff_at).toLocaleDateString('de-DE')}</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* CENTER SECTION: Player Card */}
+              <div className="flex-1 flex flex-col items-center justify-center relative w-full z-10 my-10">
+                 <div className="flex flex-col items-center gap-10" style={{ transform: 'scale(1.5)', transformOrigin: 'center center' }}>
+                   <div className="shadow-[0_40px_100px_rgba(251,191,36,0.3)] rounded-[32px]">
+                     <PlayerCard 
+                       player={{ ...(mvp.players || { full_name: 'Unbekannt', id: mvp.player_id, photo_url: null, position: 'Abwehr' }), claimed_by_user_id: null } as any} 
+                       clubLogo={mvp.players?.teams?.clubs?.logo_url}
+                       jerseyNumber={null}
+                     />
+                   </div>
+                   {mvp.lineup_role && (
+                     <div className={`px-10 py-3 rounded-full font-black text-sm italic uppercase tracking-[0.2em] text-[#09090b] shadow-2xl ${mvp.lineup_role === 'starter' ? 'bg-[#34d399]' : 'bg-[#fbbf24]'}`}>
+                       {mvp.lineup_role === 'starter' ? 'STARTELF' : 'EINGEWECHSELT'}
+                     </div>
+                   )}
+                 </div>
+              </div>
+
+              {/* BOTTOM SECTION: Stats & Sponsor */}
+              <div className="w-full pb-20 px-16 flex flex-col items-center gap-8 relative z-10 text-white">
+                 <div className="flex flex-col items-center gap-8 w-full max-w-[900px]">
+                   {/* Match Stats Row */}
+                   <div className="flex items-center justify-center gap-16 bg-zinc-900 border border-white/10 rounded-[3rem] px-16 py-10 w-full shadow-2xl">
+                     <div className="flex flex-col items-center gap-4">
+                        <span className="text-6xl">⚽</span>
+                        <div className="flex flex-col items-center">
+                           <span className="text-5xl font-black italic">{mvp.goal_count || 0}</span>
+                           <span className="text-zinc-500 text-lg font-black uppercase tracking-widest mt-1">Tore</span>
+                        </div>
+                     </div>
+                     <div className="w-px h-24 bg-white/10" />
+                     <div className="flex flex-col items-center gap-4">
+                        <span className="text-6xl">👟</span>
+                        <div className="flex flex-col items-center">
+                           <span className="text-5xl font-black italic">{mvp.assists || 0}</span>
+                           <span className="text-zinc-500 text-lg font-black uppercase tracking-widest mt-1">Assists</span>
+                        </div>
+                     </div>
+                     <div className="w-px h-24 bg-white/10" />
+                     <div className="flex flex-col items-center gap-3">
+                        <div className="text-emerald-500"><ThumbsUp className="w-16 h-16" strokeWidth={2.5} /></div>
+                        <div className="flex flex-col items-center">
+                           <span className="text-5xl font-black italic text-emerald-500">{mvp.positive_votes || 0}</span>
+                           <span className="text-zinc-500 text-lg font-black uppercase tracking-widest mt-1">Upvotes</span>
+                        </div>
+                     </div>
+                   </div>
+
+                   {/* Row below stats: Rating */}
+                   <div className="flex flex-col items-center justify-center bg-zinc-900 border border-white/10 rounded-[3rem] p-8 w-full shadow-2xl">
+                     <span className="text-zinc-500 font-black uppercase text-2xl tracking-[0.3em] mb-4">Neues Rating</span>
+                     <div className="text-7xl font-black italic flex items-center gap-4 text-white">
+                       {mvp.new_overall} <span className="text-3xl text-zinc-500">OVR</span>
+                       <span className="text-4xl text-emerald-500 font-bold tracking-tight">+{safeFixed(mvp.delta_overall)}</span>
+                     </div>
+                   </div>
+                 </div>
+
+                {/* MVP Sponsor Inline */}
+                <div className="mt-20 w-[360px] origin-bottom scale-[2.7] flex justify-center pb-8">
+                  <SponsorBox 
+                    type="MVP" 
+                    sponsorName={(fixture as any).mvp_sponsor_name || "PLYRZ"} 
+                    sponsorLogoUrl={(fixture as any).mvp_sponsor_logo_url} 
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* RANKINGS SECTION */}
@@ -700,8 +1050,8 @@ const MatchResult: React.FC = () => {
                   <div className="w-full flex justify-center items-center">
                     <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
                       <PlayerCard 
-                        player={entry.players} 
-                        clubLogo={entry.players.teams?.clubs?.logo_url}
+                        player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
+                        clubLogo={entry.players?.teams?.clubs?.logo_url}
                         jerseyNumber={entry.jersey_number}
                         lineupRole={entry.lineup_role}
                         onClick={() => navigate(`/players/${entry.player_id}`)}
@@ -756,8 +1106,8 @@ const MatchResult: React.FC = () => {
                   <div className="w-full flex justify-center items-center">
                     <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
                       <PlayerCard 
-                        player={entry.players} 
-                        clubLogo={entry.players.teams?.clubs?.logo_url}
+                        player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
+                        clubLogo={entry.players?.teams?.clubs?.logo_url}
                         jerseyNumber={entry.jersey_number}
                         lineupRole={entry.lineup_role}
                         onClick={() => navigate(`/players/${entry.player_id}`)}
@@ -776,6 +1126,20 @@ const MatchResult: React.FC = () => {
         </div>
       </div>
     </div>
+    
+    {/* Admin Debug Section for MVP Data */}
+    {isAdmin && mvp && (
+      <div className="mt-8 p-4 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-400">
+        <h4 className="font-bold text-white mb-2">MVP Share Data (Debug):</h4>
+        <div>fixtureId: {fixture?.id}</div>
+        <div>playerId: {mvp.player_id}</div>
+        <div>votesUp: {mvp.positive_votes || 0}</div>
+        <div>votesDown: {mvp.negative_votes || 0}</div>
+        <div>votesNeutral: {mvp.neutral_votes || 0}</div>
+        <div>Quelle: player_rating_history</div>
+      </div>
+    )}
+    </SafeAreaWrapper>
   );
 };
 

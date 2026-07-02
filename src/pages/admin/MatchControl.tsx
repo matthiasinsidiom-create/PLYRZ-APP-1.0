@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -30,6 +30,7 @@ import { supabase } from '../../lib/supabase';
 import { getPositionShort } from '../../lib/positions';
 import { Fixture, FixtureLineup, MatchEvent } from '../../types';
 import { calculateMatchScore } from '../../lib/score';
+import { useAuth } from '../../context/AuthContext';
 
 interface LineupEntryState {
   player_id: string;
@@ -40,6 +41,11 @@ interface LineupEntryState {
 const AdminMatchControl: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAdmin: isSuperAdmin, clubAdminClubIds } = useAuth();
+  
+  const isTeamAdminView = location.pathname.startsWith('/team-admin');
+  const backPath = isTeamAdminView ? '/team-admin' : '/admin/fixtures';
   
   const [fixture, setFixture] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +80,11 @@ const AdminMatchControl: React.FC = () => {
   const [opponentMinute, setOpponentMinute] = useState('');
   
   // UI State
+  const [canManageHome, setCanManageHome] = useState(true);
+  const [canManageAway, setCanManageAway] = useState(true);
+  const [homeHasAdmins, setHomeHasAdmins] = useState(false);
+  const [awayHasAdmins, setAwayHasAdmins] = useState(false);
+  
   const [activeSection, setActiveSection] = useState<'live' | 'lineups' | 'events' | 'votes' | 'processing'>(() => {
     // Default to lineups if not live, or events/live if live
     return 'lineups';
@@ -81,6 +92,8 @@ const AdminMatchControl: React.FC = () => {
   const [showLiveGoalModal, setShowLiveGoalModal] = useState(false);
   const [liveGoalTeam, setLiveGoalTeam] = useState<'home' | 'away' | null>(null);
   const [liveGoalFormType, setLiveGoalFormType] = useState<'player' | 'opponent' | null>(null);
+  const [assistSelectionPhase, setAssistSelectionPhase] = useState<'scorer' | 'assist'>('scorer');
+  const [selectedGoalScorerId, setSelectedGoalScorerId] = useState<string | null>(null);
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [showConfirmProcess, setShowConfirmProcess] = useState(false);
   const [statusModal, setStatusModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' }>({
@@ -89,6 +102,27 @@ const AdminMatchControl: React.FC = () => {
     message: '',
     type: 'success'
   });
+  
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const handleStatusChangeClick = (newStatus: string) => {
+    if (newStatus === 'finished' || newStatus === 'cancelled') {
+      setPendingStatus(newStatus);
+    } else {
+      handleUpdateFixture({ status: newStatus as any });
+    }
+  };
+
+  const confirmStatusChange = () => {
+    if (pendingStatus) {
+      handleUpdateFixture({ status: pendingStatus as any });
+      setPendingStatus(null);
+    }
+  };
+
+  const cancelStatusChange = () => {
+    setPendingStatus(null);
+  };
 
   useEffect(() => {
     if (id) {
@@ -130,28 +164,54 @@ const AdminMatchControl: React.FC = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const fixtures = await supabaseService.getFixtures();
-      const currentFixture = fixtures.find(f => f.id === id);
+      const currentFixture = await supabaseService.getFixtureById(id);
       
       if (!currentFixture) {
-        navigate('/admin/fixtures');
+        navigate(backPath);
         return;
       }
       
       setFixture(currentFixture);
       
-      // Load Lineups
-      const currentLineup = await supabaseService.getFixtureLineup(id);
+      // Check permission if it's the team admin view
+      if (isTeamAdminView && !isSuperAdmin) {
+        const canManage = await supabaseService.canManageFixture(id);
+        if (!canManage) {
+          navigate('/team-admin');
+          return;
+        }
+      }
+      
+      // Load Lineups with Players to ensure all lineup players are available
+      const currentLineup = await supabaseService.getFixtureLineupWithPlayers(id);
       
       // Load Players for both clubs
       const homeClubId = currentFixture.home_team?.club_id;
       const awayClubId = currentFixture.away_team?.club_id;
       
       if (homeClubId && awayClubId) {
+        setCanManageHome(isSuperAdmin || clubAdminClubIds.includes(homeClubId));
+        setCanManageAway(isSuperAdmin || clubAdminClubIds.includes(awayClubId));
+        
+        const homeAdmins = await supabaseService.hasClubAdmins(homeClubId);
+        const awayAdmins = await supabaseService.hasClubAdmins(awayClubId);
+        setHomeHasAdmins(homeAdmins);
+        setAwayHasAdmins(awayAdmins);
+
         const allPlayers = await supabaseService.getPlayersByClubs([homeClubId, awayClubId]);
         
-        const homeClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === homeClubId);
-        const awayClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === awayClubId);
+        // Combine allPlayers with players from currentLineup to ensure lineup players are always available
+        const lineupPlayers = currentLineup.map(l => (l as any).players).filter(Boolean);
+        const mergedPlayers = [...allPlayers];
+        
+        lineupPlayers.forEach(lp => {
+          if (!mergedPlayers.find(p => p.id === lp.id)) {
+            mergedPlayers.push(lp);
+          }
+        });
+        
+        const homeClubPlayers = mergedPlayers.filter(p => (p as any).teams?.club_id === homeClubId || (p as any).team_id === currentFixture.home_team_id);
+        const awayClubPlayers = mergedPlayers.filter(p => (p as any).teams?.club_id === awayClubId || (p as any).team_id === currentFixture.away_team_id);
         
         setHomePlayers(homeClubPlayers);
         setAwayPlayers(awayClubPlayers);
@@ -162,6 +222,7 @@ const AdminMatchControl: React.FC = () => {
             const player = homeClubPlayers.find(p => p.id === l.player_id);
             return {
               player_id: l.player_id,
+              player_name: (l as any).players?.full_name || player?.full_name,
               jersey_number: (l.jersey_number || player?.jersey_number || '').toString(),
               lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter'
             };
@@ -172,6 +233,7 @@ const AdminMatchControl: React.FC = () => {
             const player = awayClubPlayers.find(p => p.id === l.player_id);
             return {
               player_id: l.player_id,
+              player_name: (l as any).players?.full_name || player?.full_name,
               jersey_number: (l.jersey_number || player?.jersey_number || '').toString(),
               lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter'
             };
@@ -218,6 +280,12 @@ const AdminMatchControl: React.FC = () => {
       const { homeScore, awayScore } = calculateMatchScore(fixture, events);
       fixtureUpdates.home_score = homeScore;
       fixtureUpdates.away_score = awayScore;
+      
+      // Auto-start first half if not already started
+      if (!fixture.match_phase || fixture.match_phase === 'upcoming') {
+        fixtureUpdates.match_phase = 'first_half';
+        fixtureUpdates.first_half_started_at = new Date().toISOString();
+      }
     }
 
     try {
@@ -282,13 +350,24 @@ const AdminMatchControl: React.FC = () => {
     }
   };
 
-  const handleAddEvent = async (playerId: string, type: string, relatedPlayerId?: string) => {
+  const handleAddEvent = async (playerId: string, type: string, relatedPlayerId?: string | null, assistPlayerId?: string | null) => {
     if (!id || !fixture) return;
     
     // Handle Substitution Flow
     if (type === 'sub_out' && !relatedPlayerId) {
       console.log(`DEBUG: Substitution gestartet (player_out_id: ${playerId})`);
       setSubbingOutPlayerId(playerId);
+      return;
+    }
+
+    // Handle Goal without assist selected yet
+    if (type === 'goal' && assistPlayerId === undefined) {
+      const isHomeTeam = lineup.home.some(e => e.player_id === playerId);
+      setLiveGoalTeam(isHomeTeam ? 'home' : 'away');
+      setLiveGoalFormType('player');
+      setSelectedGoalScorerId(playerId);
+      setAssistSelectionPhase('assist');
+      setShowLiveGoalModal(true);
       return;
     }
 
@@ -308,6 +387,7 @@ const AdminMatchControl: React.FC = () => {
       player_id: playerId,
       event_type: eventType,
       related_player_id: relatedPlayerId,
+      assist_player_id: assistPlayerId,
       created_at: new Date().toISOString()
     };
     
@@ -338,7 +418,8 @@ const AdminMatchControl: React.FC = () => {
         team_id: teamId,
         player_id: playerId,
         event_type: eventType,
-        related_player_id: relatedPlayerId
+        related_player_id: relatedPlayerId,
+        assist_player_id: assistPlayerId
       });
       setEvents(prev => prev.map(e => e.id === tempId ? created : e));
       
@@ -417,23 +498,60 @@ const AdminMatchControl: React.FC = () => {
   const handleProcessResults = async () => {
     if (!id) return;
     setSaving(true);
+    let originalError: any = null;
+    
     try {
-      const result = await supabaseService.processFixtureRatings(id);
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Complete',
-        message: result.message || 'Ratings processed successfully.',
-        type: 'success'
-      });
-      await loadMatchData();
+      await supabaseService.processFixtureRatings(id);
     } catch (err: any) {
-      console.error('Error processing ratings:', err);
-      setStatusModal({
-        isOpen: true,
-        title: 'Processing Failed',
-        message: err.message || 'Failed to process ratings.',
-        type: 'error'
-      });
+      console.warn('Error processing ratings, verifying if results exist anyway:', err);
+      originalError = err;
+    }
+    
+    try {
+      // Add a small delay to allow DB processing to finish if API timed out but started
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const updatedFixture = await supabaseService.getFixtureById(id);
+      let resultsExist = !!updatedFixture.results_processed_at;
+      
+      if (!resultsExist) {
+        const { data, error } = await supabase
+          .from('player_rating_history')
+          .select('id')
+          .eq('fixture_id', id)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          resultsExist = true;
+        }
+      }
+
+      if (resultsExist) {
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Complete',
+          message: 'Ratings processed successfully.',
+          type: 'success'
+        });
+        await loadMatchData();
+      } else {
+        console.error('Error processing ratings:', originalError);
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'Failed to process ratings.',
+          type: 'error'
+        });
+      }
+    } catch (refreshErr) {
+      console.error('Error checking processing status:', refreshErr);
+      if (originalError) {
+        setStatusModal({
+          isOpen: true,
+          title: 'Processing Failed',
+          message: originalError?.message || 'Failed to process ratings.',
+          type: 'error'
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -555,7 +673,7 @@ const AdminMatchControl: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <button 
-            onClick={() => navigate('/admin/fixtures')}
+            onClick={() => navigate(backPath)}
             className="p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl"
           >
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
@@ -658,6 +776,8 @@ const AdminMatchControl: React.FC = () => {
                   console.log('Live own-team goal button clicked');
                   setLiveGoalTeam('home');
                   setLiveGoalFormType('player');
+                  setAssistSelectionPhase('scorer');
+                  setSelectedGoalScorerId(null);
                   setShowLiveGoalModal(true);
                 }}
                 className="p-6 bg-emerald-500 hover:bg-emerald-400 text-black rounded-3xl flex items-center gap-4 transition-all active:scale-[0.98] shadow-xl shadow-emerald-500/10 group overflow-hidden relative"
@@ -726,16 +846,34 @@ const AdminMatchControl: React.FC = () => {
                               <span className="text-emerald-500">Ein:</span> {getPlayerName(event.related_player_id)}
                             </span>
                           ) : (
-                            getPlayerName(event.player_id)
+                            <span className="flex items-center gap-1">
+                              {getPlayerName(event.player_id)}
+                              {event.assist_player_id && (
+                                <span className="text-zinc-500 font-bold ml-1 text-[8px]">(Assist: {getPlayerName(event.assist_player_id)})</span>
+                              )}
+                            </span>
                           )}
                         </span>
                       </div>
-                      <button 
-                        onClick={() => event.event_type === 'opponent_goal' ? handleRemoveOpponentGoal(event.team_id === fixture.home_team_id ? 'home' : 'away', event.id) : handleRemoveEvent(event.player_id, event.event_type)}
-                        className="p-1 hover:bg-red-500/10 rounded group transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-zinc-700 group-hover:text-red-500" />
-                      </button>
+                      {(() => {
+                        const isOpponentGoalFallback = event.event_type === 'opponent_goal' && !event.player_id;
+                        const canManageEvent = isSuperAdmin || isOpponentGoalFallback ||
+                          (event.team_id === fixture.home_team_id ? (canManageHome || (!canManageHome && !homeHasAdmins)) : 
+                          event.team_id === fixture.away_team_id ? (canManageAway || (!canManageAway && !awayHasAdmins)) : false);
+                        
+                        return canManageEvent ? (
+                          <button 
+                            onClick={() => event.event_type === 'opponent_goal' ? handleRemoveOpponentGoal(event.team_id === fixture.home_team_id ? 'home' : 'away', event.id) : handleRemoveEvent(event.player_id, event.event_type)}
+                            className="p-1 hover:bg-red-500/10 rounded group transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-zinc-700 group-hover:text-red-500" />
+                          </button>
+                        ) : (
+                          <div className="p-1 px-2 bg-zinc-800/50 rounded-lg" title="Dieses Ereignis gehört zur gegnerischen Mannschaft und kann nur vom zuständigen Clubadmin bearbeitet werden.">
+                            <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Nur Lesezugriff</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -755,7 +893,7 @@ const AdminMatchControl: React.FC = () => {
             onClick={() => setActiveSection('lineups')}
           >
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <TeamLineupSelector 
                   teamName={fixture.home_team?.name}
                   players={homePlayers}
@@ -801,8 +939,11 @@ const AdminMatchControl: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {lineup.home.map(entry => {
-                    const player = homePlayers.find(p => p.id === entry.player_id);
-                    if (!player) return null;
+                    const player = homePlayers.find(p => p.id === entry.player_id) || {
+                      id: entry.player_id,
+                      full_name: (entry as any).player_name || 'Spieler unbekannt',
+                      position: 'Unbekannt'
+                    };
                     const currentlyOnPitch = isPlayerOnPitch(player.id);
                     
                     if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
@@ -817,11 +958,19 @@ const AdminMatchControl: React.FC = () => {
                         currentlyOnPitch={currentlyOnPitch}
                         isSubbingMode={!!subbingOutPlayerId}
                         subbingOutPlayerId={subbingOutPlayerId}
+                        readOnly={!canManageHome}
                       />
                     );
                   })}
 
                   {/* Opponent Goal Actions for Home */}
+                  {!canManageHome && homeHasAdmins && (
+                    <div className="p-2 mb-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <p className="text-[9px] text-blue-400 text-center leading-relaxed font-bold">
+                        Gegner nutzt PLYRZ. Gegner-Tore werden hier als Teamtore ohne Spielerwertung als Fallback erfasst.
+                      </p>
+                    </div>
+                  )}
                   <OpponentGoalSection 
                     teamType="home"
                     isAdding={isAddingOpponentGoal === 'home'}
@@ -846,8 +995,11 @@ const AdminMatchControl: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {lineup.away.map(entry => {
-                    const player = awayPlayers.find(p => p.id === entry.player_id);
-                    if (!player) return null;
+                    const player = awayPlayers.find(p => p.id === entry.player_id) || {
+                      id: entry.player_id,
+                      full_name: (entry as any).player_name || 'Spieler unbekannt',
+                      position: 'Unbekannt'
+                    };
                     const currentlyOnPitch = isPlayerOnPitch(player.id);
 
                     if (subbingOutPlayerId && currentlyOnPitch && subbingOutPlayerId !== player.id) return null;
@@ -862,11 +1014,19 @@ const AdminMatchControl: React.FC = () => {
                         currentlyOnPitch={currentlyOnPitch}
                         isSubbingMode={!!subbingOutPlayerId}
                         subbingOutPlayerId={subbingOutPlayerId}
+                        readOnly={!canManageAway}
                       />
                     );
                   })}
                   
                   {/* Opponent Goal Actions for Away */}
+                  {!canManageAway && awayHasAdmins && (
+                    <div className="p-2 mb-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <p className="text-[9px] text-blue-400 text-center leading-relaxed font-bold">
+                        Gegner nutzt PLYRZ. Gegner-Tore werden hier als Teamtore ohne Spielerwertung als Fallback erfasst.
+                      </p>
+                    </div>
+                  )}
                   <OpponentGoalSection 
                     teamType="away"
                     isAdding={isAddingOpponentGoal === 'away'}
@@ -899,7 +1059,7 @@ const AdminMatchControl: React.FC = () => {
                   <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Spielstatus</p>
                   <select 
                     value={fixture.status}
-                    onChange={(e) => handleUpdateFixture({ status: e.target.value as any })}
+                    onChange={(e) => handleStatusChangeClick(e.target.value)}
                     className="w-full bg-transparent font-black italic uppercase tracking-tighter text-lg outline-none"
                   >
                     <option value="upcoming">Anstehend</option>
@@ -1031,7 +1191,9 @@ const AdminMatchControl: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-lg font-black italic uppercase tracking-tighter">
-                      {liveGoalFormType === 'player' ? 'Tor Heimteam' : 'Tor Gegner'}
+                      {liveGoalFormType === 'player' 
+                        ? (assistSelectionPhase === 'scorer' ? 'Torschütze' : 'Assistgeber')
+                        : 'Tor Gegner'}
                     </h3>
                     <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">
                       {liveGoalTeam === 'home' ? fixture.home_team?.clubs?.name : fixture.away_team?.clubs?.name}
@@ -1042,6 +1204,8 @@ const AdminMatchControl: React.FC = () => {
                   onClick={() => {
                     setShowLiveGoalModal(false);
                     setIsAddingOpponentGoal(null);
+                    setAssistSelectionPhase('scorer');
+                    setSelectedGoalScorerId(null);
                   }}
                   className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
                 >
@@ -1099,17 +1263,43 @@ const AdminMatchControl: React.FC = () => {
                     </div>
 
                     <div className="max-h-[350px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                      {assistSelectionPhase === 'assist' && (
+                        <button
+                          onClick={() => {
+                            handleAddEvent(selectedGoalScorerId!, 'goal', null, null);
+                            setShowLiveGoalModal(false);
+                            setAssistSelectionPhase('scorer');
+                            setSelectedGoalScorerId(null);
+                          }}
+                          className="w-full mb-4 flex items-center justify-center p-4 bg-zinc-800 hover:bg-zinc-700 border border-white/10 rounded-2xl transition-all group active:scale-[0.98]"
+                        >
+                          <span className="text-[12px] font-black uppercase italic text-zinc-300 group-hover:text-white transition-colors">Kein Assist</span>
+                        </button>
+                      )}
+
                       {(liveGoalTeam === 'home' ? lineup.home : lineup.away).map(entry => {
-                        const player = (liveGoalTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === entry.player_id);
-                        if (!player) return null;
+                        const player = (liveGoalTeam === 'home' ? homePlayers : awayPlayers).find(p => p.id === entry.player_id) || {
+                          id: entry.player_id,
+                          full_name: (entry as any).player_name || 'Spieler unbekannt',
+                          position: 'Unbekannt'
+                        };
                         if (playerSearchQuery && !player.full_name.toLowerCase().includes(playerSearchQuery.toLowerCase())) return null;
+                        if (assistSelectionPhase === 'assist' && player.id === selectedGoalScorerId) return null;
 
                         return (
                           <button
                             key={player.id}
                             onClick={() => {
-                              handleAddEvent(player.id, 'goal');
-                              setShowLiveGoalModal(false);
+                              if (assistSelectionPhase === 'scorer') {
+                                setSelectedGoalScorerId(player.id);
+                                setAssistSelectionPhase('assist');
+                                setPlayerSearchQuery('');
+                              } else {
+                                handleAddEvent(selectedGoalScorerId!, 'goal', null, player.id);
+                                setShowLiveGoalModal(false);
+                                setAssistSelectionPhase('scorer');
+                                setSelectedGoalScorerId(null);
+                              }
                             }}
                             className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-emerald-500/10 border border-white/5 hover:border-emerald-500/30 rounded-2xl transition-all group active:scale-[0.98]"
                           >
@@ -1159,6 +1349,49 @@ const AdminMatchControl: React.FC = () => {
               >
                 WEITER
               </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Status Confirmation Modal */}
+      <AnimatePresence>
+        {pendingStatus && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-zinc-950 border border-white/10 rounded-[2.5rem] p-8 max-w-sm w-full relative overflow-hidden shadow-2xl"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent pointer-events-none" />
+              
+              <div className="relative flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-3xl bg-blue-500/20 flex items-center justify-center mb-6">
+                  <AlertCircle className="w-8 h-8 text-blue-500" />
+                </div>
+                
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-2">Spielstatus ändern?</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed mb-8">
+                  Möchtest du den Status wirklich auf <span className="text-white font-bold">{pendingStatus === 'finished' ? 'Beendet' : 'Abgebrochen'}</span> setzen? 
+                  {pendingStatus === 'finished' ? ' Die Abstimmung für Spieler des Spiels kann dann nicht mehr verändert werden.' : ' Keine Ergebnisse werden gewertet.'}
+                </p>
+                
+                <div className="flex flex-col gap-3 w-full">
+                  <button 
+                    onClick={confirmStatusChange}
+                    className="w-full h-12 bg-blue-500 text-white font-black uppercase tracking-widest text-xs rounded-xl hover:bg-blue-600 transition-colors"
+                  >
+                    Bestätigen
+                  </button>
+                  <button 
+                    onClick={cancelStatusChange}
+                    className="w-full h-12 bg-white/5 text-white font-bold uppercase tracking-widest text-xs rounded-xl hover:bg-white/10 transition-colors"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
@@ -1287,60 +1520,60 @@ const TeamLineupSelector: React.FC<{
   
   return (
     <div className="space-y-4">
-      <div className="flex flex-col">
-        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">{teamName}</span>
-        <span className={`text-xs font-black uppercase italic ${colorClass}`}>
+      <div className="flex flex-col mb-4">
+        <span className="text-sm font-black text-zinc-300 uppercase tracking-widest leading-none mb-1">{teamName}</span>
+        <span className={`text-xs font-bold uppercase italic ${colorClass}`}>
           {selectedLineup.filter(l => l.lineup_role === 'starter').length}/11 Startelf
         </span>
       </div>
       
-      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
         {players.map(player => {
           const entry = selectedLineup.find(l => l.player_id === player.id);
           const isSelected = !!entry;
           
           return (
-            <div key={player.id} className="space-y-1">
-              <div className={`w-full p-2 rounded-xl border text-left transition-all flex items-center justify-between ${
+            <div key={player.id} className="space-y-2">
+              <div className={`w-full p-3 rounded-xl border text-left transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                 isSelected 
                   ? `bg-${color}-500/10 border-${color}-500/30` 
                   : 'bg-zinc-900 border-zinc-800 text-zinc-500'
               }`}>
                 <div 
-                  className="flex items-center gap-2 flex-1 cursor-pointer"
+                  className="flex items-center gap-3 flex-1 cursor-pointer min-w-0"
                   onClick={() => onToggle(player.id)}
                 >
-                  <div className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                  <div className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
                     isSelected ? `${bgClass} text-black` : 'bg-zinc-800 text-zinc-600'
                   }`}>
-                    {isSelected ? <Check className="w-4 h-4" /> : <Plus className="w-3 h-3" />}
+                    {isSelected ? <Check className="w-5 h-5" /> : <Plus className="w-4 h-4" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-[10px] font-bold truncate ${isSelected ? 'text-white' : ''}`}>{player.full_name}</p>
-                    <p className="text-[7px] uppercase tracking-widest opacity-60">{getPositionShort(player.position)}</p>
+                    <p className={`text-sm md:text-base font-bold truncate ${isSelected ? 'text-white' : ''}`}>{player.full_name}</p>
+                    <p className="text-[10px] sm:text-xs uppercase tracking-widest opacity-60 font-medium">{getPositionShort(player.position)}</p>
                   </div>
                 </div>
 
                 {isSelected && (
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-10">
+                  <div className="flex items-center gap-2 sm:shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-zinc-800">
+                    <div className="relative w-12">
                       <input
                         type="text"
                         placeholder="#"
                         value={entry.jersey_number}
                         onChange={(e) => onUpdateDetail(player.id, { jersey_number: e.target.value })}
-                        className="w-full h-7 bg-black border border-zinc-700 rounded text-center text-[10px] text-white font-black italic focus:border-emerald-500 outline-none transition-all"
+                        className="w-full h-9 bg-black border border-zinc-700 rounded-lg text-center text-xs text-white font-black italic focus:border-emerald-500 outline-none transition-all placeholder:text-zinc-600"
                       />
                     </div>
                     <select
                       value={entry.lineup_role}
                       onChange={(e) => onUpdateDetail(player.id, { lineup_role: e.target.value as 'starter' | 'sub' })}
-                      className={`h-7 bg-black border rounded text-[8px] font-black uppercase px-1 outline-none transition-all ${
+                      className={`h-9 bg-black border rounded-lg text-[10px] font-black uppercase px-2 outline-none transition-all cursor-pointer ${
                         entry.lineup_role === 'starter' ? 'border-emerald-500/50 text-emerald-500' : 'border-zinc-700 text-zinc-500'
                       }`}
                     >
-                      <option value="starter">STR</option>
-                      <option value="sub">BANK</option>
+                      <option value="starter">Startelf</option>
+                      <option value="sub">Bank</option>
                     </select>
                   </div>
                 )}
@@ -1372,7 +1605,8 @@ const PlayerEventRow: React.FC<{
   currentlyOnPitch?: boolean;
   isSubbingMode?: boolean;
   subbingOutPlayerId?: string | null;
-}> = ({ player, events, onAdd, onRemove, currentlyOnPitch = true, isSubbingMode = false, subbingOutPlayerId }) => {
+  readOnly?: boolean;
+}> = ({ player, events, onAdd, onRemove, currentlyOnPitch = true, isSubbingMode = false, subbingOutPlayerId, readOnly = false }) => {
   const goalCount = events.filter(e => e.event_type === 'goal' && e.player_id === player.id).length;
   const hasYellow = events.some(e => e.event_type === 'yellow_card');
   const hasRed = events.some(e => e.event_type === 'red_card');
@@ -1387,17 +1621,18 @@ const PlayerEventRow: React.FC<{
       </div>
       
       <div className="flex items-center gap-3">
-        {isSubbingMode ? (
-          !currentlyOnPitch && (
-            <button 
-              onClick={() => onAdd(subbingOutPlayerId!, 'sub_out', player.id)}
-              className="px-4 h-9 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-tighter animate-pulse shadow-lg shadow-emerald-500/20"
-            >
-              Einwechseln
-            </button>
-          )
-        ) : currentlyOnPitch && (
-          <>
+        {!readOnly && (
+          isSubbingMode ? (
+            !currentlyOnPitch && (
+              <button 
+                onClick={() => onAdd(subbingOutPlayerId!, 'sub_out', player.id)}
+                className="px-4 h-9 rounded-xl bg-emerald-500 text-black text-[10px] font-black uppercase tracking-tighter animate-pulse shadow-lg shadow-emerald-500/20"
+              >
+                Einwechseln
+              </button>
+            )
+          ) : currentlyOnPitch && (
+            <>
             {/* Goal Controls */}
             <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl border border-white/5">
               <button 
@@ -1451,7 +1686,7 @@ const PlayerEventRow: React.FC<{
               <span className="text-xs">🔄</span>
             </button>
           </>
-        )}
+        ))}
       </div>
     </div>
   );

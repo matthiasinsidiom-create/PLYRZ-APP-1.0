@@ -16,8 +16,13 @@ import {
   Activity,
   ChevronRight,
   Star,
-  Users
+  Users,
+  Share2,
+  Crown,
+  ShieldCheck
 } from 'lucide-react';
+import * as htmlToImage from 'html-to-image';
+import { useAuth } from '../../context/AuthContext';
 import { 
   LineChart, 
   Line, 
@@ -45,9 +50,52 @@ type ExtendedHistory = PlayerRatingHistory & {
 export const PlayerDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [player, setPlayer] = useState<(Player & { teams: Team & { clubs: Club }, player_stats: PlayerStats[] }) | null>(null);
   const [history, setHistory] = useState<ExtendedHistory[]>([]);
+  const [sharing, setSharing] = useState(false);
+  const exportRef = React.useRef<HTMLDivElement>(null);
+
+  const handleShare = async () => {
+    if (!exportRef.current || !player) return;
+    setSharing(true);
+    try {
+      // Add slight delay to ensure fonts/images are ready
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const dataUrl = await htmlToImage.toPng(exportRef.current, {
+        pixelRatio: 3,
+        backgroundColor: 'transparent',
+      });
+
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      const file = new File([blob], `plyrz_card_${player.full_name?.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Meine PLYRZ Karte: ${player.full_name}`,
+          text: `Schau dir meine aktuelle PLYRZ Karte an!`
+        });
+      } else {
+        // Fallback to download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Error sharing card:', err);
+      alert('Fehler beim Teilen der Karte. Ggf. blockieren externe Bilder den Export.');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -142,7 +190,7 @@ export const PlayerDetail: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans pb-24 overflow-x-hidden w-full max-w-full">
       {/* Header */}
-      <div className="p-6 pt-[calc(env(safe-area-inset-top)+10px)] sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
+      <div className="p-6 pt-[10px] sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate(-1)}
@@ -175,13 +223,47 @@ export const PlayerDetail: React.FC = () => {
               className="absolute -inset-8 blur-3xl rounded-full opacity-30 animate-pulse"
               style={{ backgroundColor: glowColor }}
             />
-            <div className="relative z-10">
-              <PlayerCard 
-                player={player} 
-                clubLogo={clubLogo}
-                jerseyNumber={player.jersey_number}
-                onClick={() => navigate(`/players/${player.id}`)}
-              />
+            
+            <div className="absolute -left-[9999px] top-0 pointer-events-none opacity-0 flex">
+               <div ref={exportRef} className="bg-transparent w-[350px] h-[490px]">
+                   <PlayerCard 
+                     player={{ ...player, claimed_by_user_id: null } as any} 
+                     clubLogo={clubLogo}
+                     jerseyNumber={null}
+                   />
+               </div>
+            </div>
+
+            <div className="relative z-10 w-fit mx-auto">
+                <PlayerCard 
+                  player={player} 
+                  clubLogo={clubLogo}
+                  jerseyNumber={player.jersey_number}
+                  onClick={() => navigate(`/players/${player.id}`)}
+                />
+            </div>
+
+            <div className="relative z-10 flex flex-col gap-3 mt-6">
+              {player.claimed_by_user_id === user?.id && (
+                <button 
+                  onClick={handleShare}
+                  disabled={sharing}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all text-white font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                >
+                  <Share2 className="w-5 h-5 text-emerald-500" />
+                  {sharing ? 'Wird verarbeitet...' : 'Meine Karte teilen'}
+                </button>
+              )}
+
+              {player.claimed_by_user_id === user?.id && !(player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now())) && (
+                <button 
+                  onClick={() => navigate('/premium')}
+                  className="w-full bg-[#18181b] border border-amber-500/20 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-amber-500 font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl"
+                >
+                  <Crown className="w-5 h-5" />
+                  Premium entdecken
+                </button>
+              )}
             </div>
           </motion.div>
 
@@ -193,13 +275,23 @@ export const PlayerDetail: React.FC = () => {
                   animate={{ opacity: 1, x: 0 }}
                   className="text-6xl md:text-7xl font-black italic uppercase tracking-tighter leading-none text-white drop-shadow-2xl"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col md:flex-row md:items-center gap-4">
                     {player.full_name}
-                    {player.claimed_by_user_id && (
-                      <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-black uppercase tracking-widest border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
-                        BEANSPRUCHT
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2 mt-2 md:mt-0">
+                      {player.claimed_by_user_id && (
+                        <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-black uppercase tracking-widest border border-emerald-500/20 shadow-lg shadow-emerald-500/10 flex items-center gap-1.5">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          VERIFIZIERT
+                        </span>
+                      )}
+                      
+                      {player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()) ? (
+                        <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-xs font-black uppercase tracking-widest border border-amber-500/20 shadow-lg shadow-amber-500/10 flex items-center gap-1.5">
+                          <Crown className="w-3.5 h-3.5" />
+                          PREMIUM
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
                 </motion.h2>
                 <motion.div 

@@ -147,18 +147,12 @@ export const MatchCard: React.FC<MatchCardProps> = ({
         </div>
       </div>
 
-      {/* Location & Checkin */}
+      {/* Location */}
       <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-zinc-600 text-[9px] font-bold uppercase tracking-wider">
           <MapPin className="w-3 h-3 text-zinc-700" />
           <span className="line-clamp-1">{fixture.venue_name}</span>
         </div>
-        {hasCheckedIn && (
-          <div className="flex items-center gap-1 text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-            <CheckCircle2 className="w-2.5 h-2.5" />
-            <span className="text-[7px] font-black">EINGECHECKT</span>
-          </div>
-        )}
       </div>
 
       {children && (

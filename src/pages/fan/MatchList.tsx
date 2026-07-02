@@ -11,12 +11,14 @@ import {
   Trophy,
   ArrowLeft,
   CheckCircle2,
-  Timer
+  Timer,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabaseService } from '../../services/supabaseService';
 import { useAuth } from '../../context/AuthContext';
 import { Fixture } from '../../types';
+import { calculateMatchScore, getLiveMatchMinute } from '../../lib/score';
 
 export const MatchList: React.FC = () => {
   const navigate = useNavigate();
@@ -34,13 +36,15 @@ export const MatchList: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadFixtures();
-  }, []);
+    if (profile) {
+      loadFixtures();
+    }
+  }, [profile?.selected_league_id]);
 
   const loadFixtures = async () => {
     try {
       console.log('DEBUG: [MATCHES] Loading fixtures...');
-      const f = await supabaseService.getFixtures();
+      const f = await supabaseService.getFixtures(profile?.selected_league_id);
       setFixtures(f);
       
       if (f.length > 0) {
@@ -77,14 +81,6 @@ export const MatchList: React.FC = () => {
     }
   };
 
-  const getMatchMinute = (kickoffAt: string) => {
-    const kickoff = new Date(kickoffAt).getTime();
-    const diff = Math.floor((now.getTime() - kickoff) / (1000 * 60));
-    if (diff <= 0) return '1\'';
-    if (diff > 90) return '90+\'';
-    return `${diff}'`;
-  };
-
   const filteredFixtures = fixtures
     .filter(f => (f.round_number || 1) === selectedRound)
     .sort((a, b) => new Date(a.kickoff_at).getTime() - new Date(b.kickoff_at).getTime());
@@ -106,7 +102,7 @@ export const MatchList: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent text-white font-sans pb-24">
       {/* Round Header */}
-      <div className="sticky top-0 pt-[calc(env(safe-area-inset-top)+10px)] bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-2xl">
+      <div className="sticky top-0 pt-[10px] bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-2xl">
         <div className="p-4 flex items-center justify-between max-w-2xl mx-auto">
           <img 
             src="https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/logo/Logo1024.png" 
@@ -138,7 +134,14 @@ export const MatchList: React.FC = () => {
             </button>
           </div>
 
-          <div className="w-6" /> {/* Spacer */}
+          <button 
+            onClick={() => navigate('/profile')}
+            className="w-8 h-8 bg-zinc-900 rounded-lg border border-white/10 flex items-center justify-center hover:border-emerald-500 hover:text-emerald-500 transition-all shadow-lg active:scale-95"
+            title="Profil"
+            aria-label="Profil"
+          >
+            <User className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -154,9 +157,10 @@ export const MatchList: React.FC = () => {
           >
             {filteredFixtures.length > 0 ? (
               filteredFixtures.map((fixture) => {
-                const isLive = fixture.status === 'live';
+                const kickoffDate = new Date(fixture.kickoff_at);
+                const isLive = fixture.status === 'live' || (fixture.status === 'upcoming' && now >= kickoffDate);
                 const isFinished = fixture.status === 'finished';
-                const isUpcoming = fixture.status === 'upcoming';
+                const isUpcoming = fixture.status === 'upcoming' && !isLive;
                 const isCancelled = fixture.status === 'cancelled';
                 const isVoting = isFinished && !fixture.results_processed_at && fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
 
@@ -185,9 +189,18 @@ export const MatchList: React.FC = () => {
                           ) : <Shield className="w-4 h-4 text-zinc-600" />}
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">
-                            {(fixture as any).home_team?.name}
-                          </span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none">
+                              {(fixture as any).home_team?.name}
+                            </span>
+                            {fixture.match_type && (
+                              <span className={`text-[7px] font-black uppercase px-1 py-0.5 rounded border ${
+                                fixture.match_type === 'reserve' ? 'text-blue-400 border-blue-400/20 bg-blue-400/5' : 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5'
+                              }`}>
+                                {fixture.match_type === 'reserve' ? 'RES' : 'KM'}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-sm font-black italic uppercase tracking-tight text-zinc-100 truncate">
                             {(fixture as any).home_team?.clubs?.name}
                           </span>
@@ -221,12 +234,22 @@ export const MatchList: React.FC = () => {
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center gap-1 bg-red-500 px-2 py-0.5 rounded-full">
                             <Timer className="w-3 h-3 text-white" />
-                            <span className="text-[10px] font-black text-white">{getMatchMinute(fixture.kickoff_at)}</span>
+                            <span className="text-[10px] font-black text-white">{getLiveMatchMinute(fixture, now) || '1\''}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-2xl font-black italic tracking-tighter text-white">{fixture.home_score}</span>
-                            <span className="text-zinc-600 font-bold">-</span>
-                            <span className="text-2xl font-black italic tracking-tighter text-white">{fixture.away_score}</span>
+                            {(() => {
+                              const { homeScore, awayScore, isOwnTeamHome } = calculateMatchScore(fixture, (fixture as any).match_events || []) as any;
+                              const goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='goal').length;
+                              const opponent_goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='opponent_goal').length;
+                              console.log(`DEBUG [SCORE LIVE]: fixture_id=${fixture.id}, match_type=${(fixture as any).leagues?.name || 'unknown'}, home_team=${(fixture as any).home_team?.name}, away_team=${(fixture as any).away_team?.name}, isOwnTeamHome=${isOwnTeamHome}, goal_count=${goal_count}, opponent_goal_count=${opponent_goal_count}, displayedHomeScore=${homeScore}, displayedAwayScore=${awayScore}`);
+                              return (
+                                <>
+                                  <span className="text-2xl font-black italic tracking-tighter text-white">{homeScore}</span>
+                                  <span className="text-zinc-600 font-bold">-</span>
+                                  <span className="text-2xl font-black italic tracking-tighter text-white">{awayScore}</span>
+                                </>
+                              );
+                            })()}
                           </div>
                           <span className="text-[8px] font-black uppercase tracking-[0.2em] text-red-500 animate-pulse">Live</span>
                         </div>
@@ -242,9 +265,19 @@ export const MatchList: React.FC = () => {
                       ) : (
                         <div className="flex flex-col items-end gap-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-xl font-black italic tracking-tighter text-zinc-300">{fixture.home_score}</span>
-                            <span className="text-zinc-700 font-bold">-</span>
-                            <span className="text-xl font-black italic tracking-tighter text-zinc-300">{fixture.away_score}</span>
+                            {(() => {
+                              const { homeScore, awayScore, isOwnTeamHome } = calculateMatchScore(fixture, (fixture as any).match_events || []) as any;
+                              const goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='goal').length;
+                              const opponent_goal_count = ((fixture as any).match_events||[]).filter((e: any) => e.event_type==='opponent_goal').length;
+                              console.log(`DEBUG [SCORE FINISHED]: fixture_id=${fixture.id}, match_type=${(fixture as any).leagues?.name || 'unknown'}, home_team=${(fixture as any).home_team?.name}, away_team=${(fixture as any).away_team?.name}, isOwnTeamHome=${isOwnTeamHome}, goal_count=${goal_count}, opponent_goal_count=${opponent_goal_count}, displayedHomeScore=${homeScore}, displayedAwayScore=${awayScore}`);
+                              return (
+                                <>
+                                  <span className="text-xl font-black italic tracking-tighter text-zinc-300">{homeScore}</span>
+                                  <span className="text-zinc-700 font-bold">-</span>
+                                  <span className="text-xl font-black italic tracking-tighter text-zinc-300">{awayScore}</span>
+                                </>
+                              );
+                            })()}
                           </div>
                           <span className={`text-[8px] font-black uppercase tracking-widest ${isVoting ? 'text-emerald-500 animate-pulse' : 'text-zinc-600'}`}>
                             {isVoting ? 'Voten' : 'Beendet'}

@@ -1,4 +1,4 @@
-import { Player, PlayerStats } from '../types';
+import type { Player, PlayerStats } from '../types.ts';
 
 export const DEFAULT_STATS: Omit<PlayerStats, 'player_id' | 'updated_at'> = {
   overall: 50,

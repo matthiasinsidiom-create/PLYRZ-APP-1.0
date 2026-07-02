@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { 
   ListOrdered, 
   ArrowLeft,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { getPositionShort } from '../../lib/positions';
+import { useAuth } from '../../context/AuthContext';
 
 interface LineupEntryState {
   player_id: string;
@@ -134,10 +135,20 @@ const PlayerRow = React.memo(({
 
 const AdminLineups: React.FC = () => {
   const navigate = useNavigate();
+  const { fixtureId } = useParams<{ fixtureId: string }>();
+  const location = useLocation();
+  const { isAdmin: isSuperAdmin, clubAdminClubIds } = useAuth();
+
+  const isTeamAdminView = location.pathname.startsWith('/team-admin');
+  const backPath = isTeamAdminView ? '/team-admin' : '/admin';
+
   const [fixtures, setFixtures] = useState<any[]>([]);
   const [selectedFixture, setSelectedFixture] = useState<any>(null);
   const [homePlayers, setHomePlayers] = useState<any[]>([]);
   const [awayPlayers, setAwayPlayers] = useState<any[]>([]);
+  
+  const [canManageHome, setCanManageHome] = useState(true);
+  const [canManageAway, setCanManageAway] = useState(true);
   const [lineup, setLineup] = useState<{ home: LineupEntryState[], away: LineupEntryState[] }>({ home: [], away: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -170,13 +181,32 @@ const AdminLineups: React.FC = () => {
     setLoading(true);
     try {
       console.log('DEBUG: Loading fixtures for appearances...');
-      const data = await supabaseService.getFixtures();
-      console.log('DEBUG: Raw fixtures received:', data.length);
-      const uniqueStatuses = Array.from(new Set(data.map(f => f.status)));
-      console.log('DEBUG: Unique statuses in database:', uniqueStatuses);
+      let data = await supabaseService.getFixtures();
       
-      // Store all fixtures, but we'll filter them in the render logic
+      // Filter for Team Admin
+      if (isTeamAdminView && !isSuperAdmin) {
+        const clubAccess = await supabaseService.getClubAdminAccess();
+        data = data.filter(f => {
+          const hClubId = f.home_team?.club_id;
+          const aClubId = f.away_team?.club_id;
+          return clubAccess.some(a => 
+            (a.club_id === hClubId || a.club_id === aClubId) &&
+            (a.team_scope === 'all' || a.team_scope === f.match_type)
+          );
+        });
+      }
+
+      console.log('DEBUG: Raw fixtures received:', data.length);
+      
       setFixtures(data);
+
+      // Auto-select fixture if ID provided in URL
+      if (fixtureId) {
+        const fixture = data.find(f => f.id === fixtureId);
+        if (fixture) {
+          handleSelectFixture(fixture);
+        }
+      }
       
       const liveCount = data.filter(f => f.status === 'live').length;
       const finishedCount = data.filter(f => f.status === 'finished').length;
@@ -211,36 +241,53 @@ const AdminLineups: React.FC = () => {
         console.error('DEBUG: Club IDs missing!', { homeClubId, awayClubId });
         throw new Error('Club IDs missing for this fixture');
       }
+      
+      const isHomeAdmin = isSuperAdmin || clubAdminClubIds.includes(homeClubId);
+      const isAwayAdmin = isSuperAdmin || clubAdminClubIds.includes(awayClubId);
+      
+      setCanManageHome(isHomeAdmin);
+      setCanManageAway(isAwayAdmin);
 
       console.log('DEBUG: Fetching players for clubs:', [homeClubId, awayClubId]);
       const [allPlayers, currentLineup] = await Promise.all([
         supabaseService.getPlayersByClubs([homeClubId, awayClubId]),
-        supabaseService.getFixtureLineup(fixture.id)
+        supabaseService.getFixtureLineupWithPlayers(fixture.id)
       ]);
 
-      console.log('DEBUG: Eligible players full result array:', allPlayers);
-      allPlayers.forEach(p => {
+      const lineupPlayers = currentLineup.map(l => (l as any).players).filter(Boolean);
+      const mergedPlayers = [...allPlayers];
+      lineupPlayers.forEach(lp => {
+        if (!mergedPlayers.find(p => p.id === lp.id)) {
+          mergedPlayers.push(lp);
+        }
+      });
+
+      console.log('DEBUG: Eligible players full result array:', mergedPlayers);
+      mergedPlayers.forEach(p => {
         console.log(`DEBUG: Player: ${p.id} | Name: ${p.full_name} | Base Team ID: ${p.team_id} | Base Team Name: ${p.teams?.name} | Club ID: ${p.teams?.club_id} | Club Name: ${p.teams?.clubs?.name}`);
       });
 
       console.log('DEBUG: Existing lineup entries:', currentLineup.length);
 
-      // Filter players by their club
-      const homeClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === homeClubId);
-      const awayClubPlayers = allPlayers.filter(p => (p as any).teams?.club_id === awayClubId);
+      // Filter players strictly by their team_id to match fixture exactly
+      const homeTeamPlayers = mergedPlayers.filter(p => p.team_id === fixture.home_team_id);
+      const awayTeamPlayers = mergedPlayers.filter(p => p.team_id === fixture.away_team_id);
       
-      console.log('DEBUG: Eligible players count for home club:', homeClubPlayers.length);
-      console.log('DEBUG: Eligible players count for away club:', awayClubPlayers.length);
+      console.log('DEBUG: Eligible players count for home team:', homeTeamPlayers.length);
+      console.log('DEBUG: Eligible players count for away team:', awayTeamPlayers.length);
 
-      setHomePlayers(homeClubPlayers);
-      setAwayPlayers(awayClubPlayers);
+      // If user is not superadmin and cannot manage home, hide home players from selection
+      setHomePlayers(isHomeAdmin ? homeTeamPlayers : []);
+      // If user is not superadmin and cannot manage away, hide away players from selection
+      setAwayPlayers(isAwayAdmin ? awayTeamPlayers : []);
       
       const homeEntries = currentLineup
         .filter(l => l.team_id === fixture.home_team_id)
         .map(l => {
-          const player = homeClubPlayers.find(p => p.id === l.player_id);
+          const player = homeTeamPlayers.find(p => p.id === l.player_id);
           return { 
-            player_id: l.player_id, 
+            player_id: l.player_id,
+            player_name: (l as any).players?.full_name || player?.full_name,
             jersey_number: (l.jersey_number || player?.jersey_number || '').toString(), 
             lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter' 
           };
@@ -248,9 +295,10 @@ const AdminLineups: React.FC = () => {
       const awayEntries = currentLineup
         .filter(l => l.team_id === fixture.away_team_id)
         .map(l => {
-          const player = awayClubPlayers.find(p => p.id === l.player_id);
+          const player = awayTeamPlayers.find(p => p.id === l.player_id);
           return { 
             player_id: l.player_id, 
+            player_name: (l as any).players?.full_name || player?.full_name,
             jersey_number: (l.jersey_number || player?.jersey_number || '').toString(), 
             lineup_role: (l.lineup_role as 'starter' | 'sub') || 'starter' 
           };
@@ -398,27 +446,31 @@ const AdminLineups: React.FC = () => {
 
   if (selectedFixture) {
     return (
-      <div className="min-h-screen bg-transparent p-6 text-white font-sans">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+      <div className="min-h-screen bg-transparent p-4 sm:p-6 pb-32 text-white font-sans">
+        <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 w-full">
                   <button 
-                    onClick={() => setSelectedFixture(null)}
-                    className="p-3 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
+                    onClick={() => {
+                      if (fixtureId) {
+                        navigate(backPath);
+                      } else {
+                        setSelectedFixture(null);
+                      }
+                    }}
+                    className="p-3 shrink-0 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/5 transition-colors"
                   >
                     <ArrowLeft className="w-5 h-5 text-zinc-400" />
                   </button>
-              <div>
-                <h1 className="text-2xl font-black italic tracking-tighter uppercase">AUFSTELLUNGEN</h1>
-                <div className="flex items-center gap-2 text-zinc-500 font-medium text-sm">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">{selectedFixture.home_team?.clubs?.name}</span>
-                    <span className="font-bold text-white">{selectedFixture.home_team?.name}</span>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-xl sm:text-2xl font-black italic tracking-tighter uppercase whitespace-normal leading-tight">AUFSTELLUNGEN</h1>
+                <div className="flex items-center gap-2 text-zinc-500 font-medium text-sm mt-1">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest text-zinc-600 font-bold truncate">{selectedFixture.home_team?.clubs?.name}</span>
                   </div>
-                  <span className="mx-2 text-zinc-700">VS</span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold">{selectedFixture.away_team?.clubs?.name}</span>
-                    <span className="font-bold text-white">{selectedFixture.away_team?.name}</span>
+                  <span className="text-[10px] sm:text-xs text-zinc-700 font-black italic">VS</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[10px] sm:text-xs uppercase tracking-widest text-zinc-600 font-bold truncate">{selectedFixture.away_team?.clubs?.name}</span>
                   </div>
                 </div>
               </div>
@@ -426,7 +478,7 @@ const AdminLineups: React.FC = () => {
               <button
                 disabled={saving}
                 onClick={handleSaveLineup}
-                className="bg-emerald-500 hover:bg-emerald-600 text-black font-black py-3 px-8 rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                className="hidden md:flex bg-emerald-500 hover:bg-emerald-600 text-black font-black py-3 px-8 rounded-xl transition-all disabled:opacity-50 items-center gap-2 whitespace-nowrap"
               >
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
                 AUFSTELLUNG SPEICHERN
@@ -434,7 +486,17 @@ const AdminLineups: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {homePlayers.length === 0 && awayPlayers.length === 0 ? (
+            {(!canManageHome && !canManageAway) ? (
+              <div className="lg:col-span-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
+                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-8 h-8 text-zinc-600" />
+                </div>
+                <h3 className="text-xl font-black italic uppercase tracking-tight text-white mb-2">Keine Berechtigung</h3>
+                <p className="text-zinc-500 max-w-md mx-auto text-sm">
+                  Du hast keine Berechtigung, die Aufstellung für dieses Spiel zu bearbeiten.
+                </p>
+              </div>
+            ) : homePlayers.length === 0 && awayPlayers.length === 0 ? (
               <div className="lg:col-span-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center">
                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Users className="w-8 h-8 text-zinc-600" />
@@ -448,6 +510,7 @@ const AdminLineups: React.FC = () => {
             ) : (
               <>
                 {/* Home Team */}
+                {canManageHome && (
             <div className="space-y-4">
               <div className="flex flex-col gap-1 p-4 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl">
                 <div className="flex items-center gap-3">
@@ -471,8 +534,11 @@ const AdminLineups: React.FC = () => {
                   <div className="space-y-1 mb-4">
                     <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest px-2 mb-2">Startelf</p>
                     {lineup.home.filter(e => e.lineup_role === 'starter').map(entry => {
-                      const player = homePlayers.find(p => p.id === entry.player_id);
-                      if (!player) return null;
+                      const player = homePlayers.find(p => p.id === entry.player_id) || {
+                        id: entry.player_id,
+                        full_name: (entry as any).player_name || 'Spieler unbekannt',
+                        position: 'Unbekannt'
+                      };
                       return (
                         <PlayerRow 
                           key={player.id}
@@ -492,8 +558,11 @@ const AdminLineups: React.FC = () => {
                   <div className="space-y-1 mb-4">
                     <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Auswechselspieler</p>
                     {lineup.home.filter(e => e.lineup_role === 'sub').map(entry => {
-                      const player = homePlayers.find(p => p.id === entry.player_id);
-                      if (!player) return null;
+                      const player = homePlayers.find(p => p.id === entry.player_id) || {
+                        id: entry.player_id,
+                        full_name: (entry as any).player_name || 'Spieler unbekannt',
+                        position: 'Unbekannt'
+                      };
                       return (
                         <PlayerRow 
                           key={player.id}
@@ -524,8 +593,10 @@ const AdminLineups: React.FC = () => {
                 </div>
               </div>
             </div>
+                )}
 
                 {/* Away Team */}
+                {canManageAway && (
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl">
                     <div className="flex items-center gap-3">
@@ -554,8 +625,11 @@ const AdminLineups: React.FC = () => {
                       <div className="space-y-1 mb-4">
                         <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest px-2 mb-2">Startelf</p>
                         {lineup.away.filter(e => e.lineup_role === 'starter').map(entry => {
-                          const player = awayPlayers.find(p => p.id === entry.player_id);
-                          if (!player) return null;
+                          const player = awayPlayers.find(p => p.id === entry.player_id) || {
+                            id: entry.player_id,
+                            full_name: (entry as any).player_name || 'Spieler unbekannt',
+                            position: 'Unbekannt'
+                          };
                           return (
                             <PlayerRow 
                               key={player.id}
@@ -575,8 +649,11 @@ const AdminLineups: React.FC = () => {
                       <div className="space-y-1 mb-4">
                         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-2 mb-2">Auswechselspieler</p>
                         {lineup.away.filter(e => e.lineup_role === 'sub').map(entry => {
-                          const player = awayPlayers.find(p => p.id === entry.player_id);
-                          if (!player) return null;
+                          const player = awayPlayers.find(p => p.id === entry.player_id) || {
+                            id: entry.player_id,
+                            full_name: (entry as any).player_name || 'Spieler unbekannt',
+                            position: 'Unbekannt'
+                          };
                           return (
                             <PlayerRow 
                               key={player.id}
@@ -608,9 +685,22 @@ const AdminLineups: React.FC = () => {
                   </div>
                   )}
                 </div>
+                )}
               </>
             )}
           </div>
+        </div>
+
+        {/* Mobile Sticky Save Bar */}
+        <div className="md:hidden fixed bottom-24 sm:bottom-0 left-0 right-0 p-4 bg-black/80 backdrop-blur-xl border-t border-white/10 z-50">
+          <button
+            disabled={saving}
+            onClick={handleSaveLineup}
+            className="w-full justify-center bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-black font-black py-4 px-8 rounded-2xl transition-all disabled:opacity-50 flex items-center gap-2 text-sm uppercase tracking-widest shadow-[0_0_40px_rgba(16,185,129,0.3)]"
+          >
+            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+            AUFSTELLUNG SPEICHERN
+          </button>
         </div>
       </div>
     );
@@ -621,7 +711,7 @@ const AdminLineups: React.FC = () => {
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => navigate('/admin')}
+            onClick={() => navigate(backPath)}
             className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl hover:bg-zinc-800 transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-zinc-400" />
