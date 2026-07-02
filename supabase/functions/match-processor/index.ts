@@ -74,7 +74,14 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       .eq('fixture_id', fixtureId);
     
     if (lineupError) throw new Error(`Lineup fetch failed: ${lineupError.message}`);
-    if (!lineupData || lineupData.length === 0) throw new Error('No players in lineup for this fixture.');
+    if (!lineupData || lineupData.length === 0) {
+      console.log(`[PROCESSOR] No players in lineup for ${fixtureId}. Marking as processed and skipping.`);
+      await supabase
+        .from('fixtures')
+        .update({ results_processed_at: now })
+        .eq('id', fixtureId);
+      return;
+    }
 
     // 3. Load Player Stats
     const playerIds = lineupData.map((e: any) => e.player_id).filter(Boolean);
@@ -156,7 +163,8 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       if (!playerId) continue;
 
       const wasStarter = entry.lineup_role === 'starter';
-      const playerEventsForSubIn = matchEvents.filter((e: any) => e.event_type === 'sub_out' && e.related_player_id === playerId);
+      // Check if player was subbed in (they are the related_player_id in a sub_out event)
+      const playerEventsForSubIn = matchEvents.filter((e: any) => (e.event_type === 'substitution' || e.event_type === 'sub_out') && e.related_player_id === playerId);
       const wasSubbedIn = playerEventsForSubIn.length > 0;
       const played = wasStarter || wasSubbedIn;
 
@@ -219,10 +227,12 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       const rawDelta = voteImpact + resultImpact + eventImpact;
       const finalDeltaBase = Math.max(-2, Math.min(2, rawDelta));
 
-      console.log(`[PROCESSOR DEBUG PLAYER] player_id: ${playerId}, full_name: ${entry.players?.full_name || 'Unknown'}, lineup_role: ${entry.lineup_role}, played: ${played}, wasStarter: ${wasStarter}, wasSubbedIn: ${wasSubbedIn}, vote_impact: ${voteImpact}, event_impact: ${eventImpact}, result_impact: ${resultImpact}, final_delta: ${finalDeltaBase}`);
+      console.log(`[PROCESSOR DEBUG PLAYER] player_id: ${playerId}, full_name: ${entry.players?.full_name || 'Unknown'}, lineup_role: ${entry.lineup_role}, played: ${played}, vote_impact: ${voteImpact}, event_impact: ${eventImpact}, result_impact: ${resultImpact}, final_delta: ${finalDeltaBase}`);
 
       const voteRatio = (upVotes + downVotes) > 0 ? (upVotes / (upVotes + downVotes)) : 0;
-      const mvpScore = played ? (voteScore * 100 + upVotes * 10 + voteRatio * 5 + rawDelta) : -9999; // Ensure unplayed players are not MVP
+      
+      // Calculate a robust MVP score: Goal = 1000, Assist = 500, VoteScore = 100, RawDelta = 10
+      const mvpScore = played ? (goalCount * 1000 + assistCount * 500 + voteScore * 100 + rawDelta * 10) : -9999; 
 
       playerCalcs.push({
         playerId, oldOverall, posGroup, rawPos, isHome, participationMultiplier,
@@ -236,15 +246,16 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
 
     // 7. MVP Selection
     let mvpId: string | null = null;
-    const potentialMVPs = playerCalcs.filter((p: any) => p.voteScore > 0 && p.played);
+    // Filter for potential MVPs: must have played and either have a positive vote score, goal, or assist
+    const potentialMVPs = playerCalcs.filter((p: any) => p.played && (p.voteScore > 0 || p.goalCount > 0 || p.assistCount > 0));
     
     if (potentialMVPs.length > 0) {
       potentialMVPs.sort((a: any, b: any) => {
-        if (b.finalDeltaBase !== a.finalDeltaBase) return b.finalDeltaBase - a.finalDeltaBase;
-        if (b.voteScore !== a.voteScore) return b.voteScore - a.voteScore;
-        if (b.upVotes !== a.upVotes) return b.upVotes - a.upVotes;
-        if (b.voteRatio !== a.voteRatio) return b.voteRatio - a.voteRatio;
+        // Primary: Higher MVP Score (Goal weight is heavy here)
+        if (b.mvpScore !== a.mvpScore) return b.mvpScore - a.mvpScore;
+        // Secondary: raw performance (uncapped)
         if (b.rawDelta !== a.rawDelta) return b.rawDelta - a.rawDelta;
+        // Tertiary: Starter priority
         if (b.isStarter !== a.isStarter) return b.isStarter ? 1 : -1;
         return b.oldOverall - a.oldOverall;
       });
@@ -316,7 +327,7 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
         red_count: p.redCount,
         participation_multiplier: p.participationMultiplier,
         expected_score: p.expectedScore, 
-        actual_score: p.actual_score,
+        actual_score: Number((p.actual_score || 0).toFixed(4)),
         raw_delta: Number((p.rawDelta || 0).toFixed(4)), 
         final_delta: Number((finalDelta || 0).toFixed(4)),
         is_mvp: isMvp, 
@@ -357,6 +368,7 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
             'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
           },
           body: JSON.stringify({
