@@ -1,6 +1,6 @@
 // Format: international, no '+', no spaces, no leading 0
 // Example Austria: 0664 1234567 -> 436641234567
-export const WHATSAPP_BUSINESS_PHONE = "HIER_DEINE_NUMMER_EINTRAGEN";
+export const WHATSAPP_BUSINESS_PHONE = "4369010027978";
 
 export function createWhatsAppPremiumLink(playerName?: string, clubName?: string, playerId?: string): string {
   let message = 'Hallo, ich interessiere mich für PLYRZ Premium für meine Spielerkarte. Bitte schickt mir weitere Infos.';
