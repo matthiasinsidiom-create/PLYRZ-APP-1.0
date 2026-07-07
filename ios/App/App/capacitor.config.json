@@ -8,5 +8,7 @@
 	"plugins": {
 		"Geolocation": {}
 	},
-	"packageClassList": []
+	"packageClassList": [
+		"PushNotificationsPlugin"
+	]
 }
