@@ -2447,6 +2447,12 @@ export const supabaseService = {
           };
         });
         
+        mappedData.sort((a, b) => {
+          const timeA = a.kickoff_at ? new Date(a.kickoff_at).getTime() : 0;
+          const timeB = b.kickoff_at ? new Date(b.kickoff_at).getTime() : 0;
+          return timeA - timeB;
+        });
+        
         return mappedData as any[];
       }
     } catch (e) {
@@ -2504,6 +2510,12 @@ export const supabaseService = {
         leagues: resolveLeague(f.league_id),
         lineup_count
       };
+    });
+    
+    mappedData.sort((a, b) => {
+      const timeA = a.kickoff_at ? new Date(a.kickoff_at).getTime() : 0;
+      const timeB = b.kickoff_at ? new Date(b.kickoff_at).getTime() : 0;
+      return timeA - timeB;
     });
     
     return mappedData as any[];

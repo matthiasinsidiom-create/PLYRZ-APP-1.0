@@ -5,8 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { supabaseService } from '../../services/supabaseService';
 import type { Player, Club, Team } from '../../types';
-
-const WHATSAPP_BUSINESS_PHONE = '436641234567';
+import { createWhatsAppPremiumLink } from '../../config/contact';
 
 export const PremiumInfo: React.FC = () => {
   const navigate = useNavigate();
@@ -77,9 +76,7 @@ export const PremiumInfo: React.FC = () => {
     }
 
     const clubName = claimedPlayer.teams?.clubs?.name || 'Unbekannter Verein';
-    const message = `Hallo, ich interessiere mich für PLYRZ Premium.\nSpieler: ${claimedPlayer.full_name}\nVerein: ${clubName}\nPlayer-ID: ${claimedPlayer.id}\nBitte schickt mir weitere Infos.`;
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${WHATSAPP_BUSINESS_PHONE}?text=${encodedMessage}`;
+    const whatsappUrl = createWhatsAppPremiumLink(claimedPlayer.full_name, clubName, claimedPlayer.id);
     
     window.open(whatsappUrl, '_blank');
   };
@@ -112,30 +109,37 @@ export const PremiumInfo: React.FC = () => {
             PLYRZ Premium
           </h1>
           <p className="text-zinc-400 font-medium max-w-sm mx-auto relative z-10">
-            Mehr Sichtbarkeit für deine Spielerkarte in der Saison 2026/2027.
+            Mehr aus deiner Spielerkarte für die Saison 2026/2027.
           </p>
         </div>
 
         <div className="p-8 space-y-8">
-          <div className="bg-black/30 rounded-2xl p-6 border border-white/5">
+          <div className="bg-black/30 rounded-2xl p-6 border border-white/5 space-y-4">
             <p className="text-zinc-300 text-sm leading-relaxed">
-              PLYRZ Premium ist ein optionaler Saisonstatus für Spieler. Premium wird aktuell manuell freigeschaltet und ist bis zum Saisonende gültig.
+              PLYRZ Premium ist ein optionaler Saisonstatus für Spieler, die mehr aus ihrer Karte und ihrer Saison herausholen möchten.
             </p>
+            <div>
+              <h4 className="text-white font-bold text-sm mb-1">Was ist PLYRZ Premium?</h4>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                Mit PLYRZ Premium erhältst du zusätzliche Vorteile rund um deine Spielerkarte. Dazu gehören eine besondere Kennzeichnung in der App, exklusive Darstellungen und physische Spielerkarten als hochwertige Erinnerung an deine Saison.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
               <Star className="w-4 h-4 text-amber-500" />
-              Deine Vorteile
+              Deine Vorteile mit Premium
             </h3>
             
             <ul className="space-y-4">
               {[
                 { icon: Crown, text: 'Premium-Badge auf deiner Spielerkarte' },
-                { icon: ShieldCheck, text: 'Bessere Sichtbarkeit deiner Karte' },
-                { icon: Share2, text: 'Besondere Share-Grafiken' },
-                { icon: Star, text: 'Erweiterte persönliche Saisonstatistiken, sobald verfügbar' },
-                { icon: ShieldCheck, text: 'Optionale physische Saisonkarte, falls vom Verein/PLYRZ angeboten' },
+                { icon: ShieldCheck, text: 'Exklusive Darstellung deiner Karte in der App' },
+                { icon: Star, text: 'Besondere Sichtbarkeit deiner Karte' },
+                { icon: Share2, text: 'Exklusive Share-Grafiken' },
+                { icon: Star, text: 'Erweiterte persönliche Statistiken, sobald verfügbar' },
+                { icon: ShieldCheck, text: 'Zwei physische Spielerkarten pro Saison' },
                 { icon: Crown, text: 'Premium-Status bis Saisonende' }
               ].map((benefit, i) => (
                 <li key={i} className="flex items-start gap-3">
@@ -148,6 +152,35 @@ export const PremiumInfo: React.FC = () => {
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="bg-black/30 rounded-2xl p-6 border border-amber-500/20 space-y-6">
+            <div>
+              <h3 className="text-lg font-bold text-white uppercase tracking-tight italic mb-2">
+                Deine physischen Premium-Karten
+              </h3>
+              <p className="text-zinc-300 text-sm leading-relaxed">
+                Als Premium-Spieler erhältst du zwei physische Spielerkarten pro Saison:
+              </p>
+              <ul className="list-disc list-inside text-zinc-400 text-sm mt-2 space-y-1">
+                <li>eine Karte nach der Herbstsaison</li>
+                <li>eine Karte nach Saisonende</li>
+              </ul>
+            </div>
+            
+            <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-zinc-800 flex items-center justify-center min-h-[12rem]">
+              <img 
+                src="/mockup.png" 
+                alt="Physische Premium-Karte" 
+                className="w-full h-auto object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
+            <p className="text-xs text-zinc-500 text-center italic">
+              Beispielhafte Darstellung deiner physischen Premium-Karte im Plexiglas-Look mit Holzsockel.
+            </p>
           </div>
 
           <div className="border-t border-white/10 pt-8">

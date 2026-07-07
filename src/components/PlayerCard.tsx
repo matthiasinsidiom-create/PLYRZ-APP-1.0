@@ -71,12 +71,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     pointerEvents: 'none',
     filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
   },
+  photoContainer: {
+    position: 'absolute',
+    overflow: 'hidden',
+    clipPath: 'inset(0)',
+    WebkitClipPath: 'inset(0)',
+    contain: 'paint',
+    transform: 'translateZ(0)',
+    isolation: 'isolate',
+    zIndex: 5,
+    pointerEvents: 'none',
+  },
   playerImage: {
     position: 'absolute',
-    transform: 'translateX(-50%)',
-    objectFit: 'contain',
-    objectPosition: 'bottom',
-    zIndex: 5,
+    objectFit: 'cover',
+    maxWidth: 'none',
+    maxHeight: 'none',
     display: 'block',
     pointerEvents: 'none',
   },
@@ -273,9 +283,51 @@ export const PlayerCard = React.memo(({
     return merged;
   })();
 
+  const getPhotoContainerStyle = (): React.CSSProperties => {
+    let x = 30, y = 18, width = 55, height = 34;
+
+    if (layout.player) {
+      if (layout.player.width !== undefined) {
+        x = layout.player.x ?? 30;
+        y = layout.player.y ?? 18;
+        width = layout.player.width;
+        height = layout.player.height ?? 34;
+      } else if (layout.player.left !== undefined) {
+        x = layout.player.left;
+        y = layout.player.top ?? 12;
+        width = 100 - layout.player.left - (layout.player.right ?? 10);
+        height = 100 - (layout.player.top ?? 12) - (layout.player.bottom ?? 46);
+      }
+    }
+
+    return {
+      ...styles.photoContainer,
+      left: `${x}%`,
+      top: `${y}%`,
+      width: `${width}%`,
+      height: `${height}%`,
+    };
+  };
+
+  const getPlayerImageStyle = (): React.CSSProperties => {
+    const scale = layout.player?.scale ?? 1.15;
+    const focusX = layout.player?.focusX ?? 50;
+    const focusY = layout.player?.focusY ?? 20;
+
+    return {
+      ...styles.playerImage,
+      width: `${100 * scale}%`,
+      height: `${100 * scale}%`,
+      left: `${focusX}%`,
+      top: `${focusY}%`,
+      transform: `translate(-${focusX}%, -${focusY}%)`,
+      transformOrigin: `${focusX}% ${focusY}%`,
+    };
+  };
   const frameScale = layout.frame?.scale || 1;
   const frameX = layout.frame?.x || 0;
   const frameY = layout.frame?.y || 0;
+
   const baseWidth = 350;
   const baseHeight = 490;
 
@@ -374,10 +426,29 @@ export const PlayerCard = React.memo(({
           position: 'absolute',
           left: `${50 + frameX}%`,
           top: `${50 + frameY}%`,
-          objectFit: 'fill'
+          objectFit: 'fill',
+          filter: (player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()))
+            ? 'drop-shadow(0 0 20px rgba(251, 191, 36, 0.5)) drop-shadow(0 0 40px rgba(251, 191, 36, 0.2))'
+            : 'none',
         }} 
         alt={`${tier} card frame`} 
       />
+
+      {/* PREMIUM SHINE OVERLAY */}
+      {player.is_premium && (!player.premium_until || new Date(player.premium_until).getTime() + 86400000 > Date.now()) && (
+        <div 
+          className="absolute inset-0 pointer-events-none z-20 opacity-40 mix-blend-screen"
+          style={{
+            background: 'linear-gradient(125deg, transparent 0%, transparent 40%, rgba(255, 230, 100, 0.4) 45%, rgba(255, 255, 255, 0.6) 50%, rgba(255, 230, 100, 0.4) 55%, transparent 60%, transparent 100%)',
+            backgroundSize: '200% 200%',
+            animation: 'shine 6s ease-in-out infinite',
+            WebkitMaskImage: `url(${frameSrc})`,
+            WebkitMaskSize: `${100 * frameScale}% ${100 * frameScale}%`,
+            WebkitMaskPosition: `${50 + frameX}% ${50 + frameY}%`,
+            WebkitMaskRepeat: 'no-repeat'
+          }}
+        />
+      )}
       
       {/* OVERALL & POSITION */}
       <div style={{ 
@@ -475,18 +546,15 @@ export const PlayerCard = React.memo(({
       />
       
       {/* PLAYER IMAGE */}
-      <img 
-        src={player.photo_url || "/assets/players/mueller.png"} 
-        referrerPolicy="no-referrer"
-        crossOrigin="anonymous"
-        style={{ 
-          ...styles.playerImage, 
-          left: `${layout.player.x}%`, 
-          top: `${layout.player.y}%`,
-          width: `${(layout.player.scale || 0.95) * 100}%`
-        }} 
-        alt={player.full_name} 
-      />
+      <div style={getPhotoContainerStyle()}>
+        <img 
+          src={player.photo_url || "/assets/players/mueller.png"} 
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+          style={getPlayerImageStyle()} 
+          alt={player.full_name} 
+        />
+      </div>
       
       {/* NAME BANNER */}
       <div style={{ ...styles.nameContainer, top: `${layout.name.y}%`, left: `${layout.name.x - 50}%` }}>

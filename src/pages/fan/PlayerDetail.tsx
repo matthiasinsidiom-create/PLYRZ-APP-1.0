@@ -261,7 +261,7 @@ export const PlayerDetail: React.FC = () => {
                   className="w-full bg-[#18181b] border border-amber-500/20 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-amber-500 font-black italic uppercase tracking-tighter py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xl"
                 >
                   <Crown className="w-5 h-5" />
-                  Was ist PLYRZ Premium?
+                  Premium entdecken
                 </button>
               )}
             </div>
