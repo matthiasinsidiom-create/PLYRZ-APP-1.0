@@ -77,7 +77,7 @@ const DEFAULT_TIER_LAYOUT = {
   position: { x: 18, y: 18, fontSize: 24, ...DEFAULT_COLOR_CONFIG },
   flag: { x: 18, y: 28, width: 52, height: 32 },
   club: { x: 18, y: 38, width: 56, height: 56 },
-  player: { x: 50, y: 5, scale: 0.95 },
+  player: { x: 30, y: 18, width: 55, height: 34, scale: 1.15, focusX: 50, focusY: 20 },
   name: { x: 50, y: 53, fontSize: 28, ...DEFAULT_COLOR_CONFIG },
   statsLeft: { x: 24, y: 74, fontSize: 18, ...DEFAULT_COLOR_CONFIG },
   statsRight: { x: 58, y: 74, fontSize: 18, ...DEFAULT_COLOR_CONFIG },
@@ -1376,22 +1376,70 @@ const AdminPlayers: React.FC = () => {
                                   <Users className="w-5 h-5 text-orange-500" />
                                   <label className="text-xs font-black text-white uppercase tracking-widest">Spielerbild</label>
                                 </div>
-                                <button type="button" onClick={() => updateLayout('player', DEFAULT_TIER_LAYOUT.player)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors" title="Reset Player">
-                                  <RotateCcw className="w-4 h-4 text-zinc-500" />
+                                <button type="button" onClick={() => updateLayout('player', DEFAULT_TIER_LAYOUT.player)} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-bold text-zinc-400 hover:text-white" title="Reset Player">
+                                  <RotateCcw className="w-4 h-4" />
+                                  <span>Foto-Layout zurücksetzen</span>
                                 </button>
                               </div>
-                              <div className="grid grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                  <label className="text-[11px] font-bold text-orange-500/80 uppercase tracking-tighter">X (%)</label>
-                                  <input type="number" value={currentLayout.player.x} onChange={(e) => updateLayout('player', { x: parseInt(e.target.value) || 0 })} className="w-full h-10 bg-zinc-950 border border-zinc-800 focus:border-orange-500 rounded-xl px-3 text-sm text-white font-mono transition-all" />
+                              
+                              <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-6">
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-zinc-300">Foto nach links/rechts</label>
+                                      <span className="text-xs text-orange-500 font-mono bg-orange-500/10 px-2 py-0.5 rounded">{currentLayout.player.x ?? 30}%</span>
+                                    </div>
+                                    <input type="range" min="0" max="100" value={currentLayout.player.x ?? 30} onChange={(e) => updateLayout('player', { x: parseInt(e.target.value) })} className="w-full accent-orange-500" />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-zinc-300">Foto nach oben/unten</label>
+                                      <span className="text-xs text-orange-500 font-mono bg-orange-500/10 px-2 py-0.5 rounded">{currentLayout.player.y ?? 18}%</span>
+                                    </div>
+                                    <input type="range" min="0" max="100" value={currentLayout.player.y ?? 18} onChange={(e) => updateLayout('player', { y: parseInt(e.target.value) })} className="w-full accent-orange-500" />
+                                  </div>
                                 </div>
-                                <div className="space-y-2">
-                                  <label className="text-[11px] font-bold text-orange-500/80 uppercase tracking-tighter">Y (%)</label>
-                                  <input type="number" value={currentLayout.player.y} onChange={(e) => updateLayout('player', { y: parseInt(e.target.value) || 0 })} className="w-full h-10 bg-zinc-950 border border-zinc-800 focus:border-orange-500 rounded-xl px-3 text-sm text-white font-mono transition-all" />
+                                
+                                <div className="grid grid-cols-2 gap-6">
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-zinc-300">Foto-Bereich Breite</label>
+                                      <span className="text-xs text-orange-500 font-mono bg-orange-500/10 px-2 py-0.5 rounded">{currentLayout.player.width ?? 55}%</span>
+                                    </div>
+                                    <input type="range" min="10" max="100" value={currentLayout.player.width ?? 55} onChange={(e) => updateLayout('player', { width: parseInt(e.target.value) })} className="w-full accent-orange-500" />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-zinc-300">Foto-Bereich Höhe</label>
+                                      <span className="text-xs text-orange-500 font-mono bg-orange-500/10 px-2 py-0.5 rounded">{currentLayout.player.height ?? 34}%</span>
+                                    </div>
+                                    <input type="range" min="10" max="100" value={currentLayout.player.height ?? 34} onChange={(e) => updateLayout('player', { height: parseInt(e.target.value) })} className="w-full accent-orange-500" />
+                                  </div>
                                 </div>
-                                <div className="space-y-2">
-                                  <label className="text-[11px] font-bold text-orange-500/80 uppercase tracking-tighter">Scale</label>
-                                  <input type="number" step="0.01" value={currentLayout.player.scale} onChange={(e) => updateLayout('player', { scale: parseFloat(e.target.value) || 1 })} className="w-full h-10 bg-zinc-950 border border-zinc-800 focus:border-orange-500 rounded-xl px-3 text-sm text-orange-500 font-mono transition-all" />
+
+                                <div className="space-y-2 pt-2 border-t border-zinc-800/50">
+                                  <div className="flex justify-between items-center">
+                                    <label className="text-xs font-bold text-amber-500">Foto-Zoom</label>
+                                    <span className="text-xs text-amber-500 font-mono bg-amber-500/10 px-2 py-0.5 rounded">{currentLayout.player.scale ?? 1.15}x</span>
+                                  </div>
+                                  <input type="range" min="0.5" max="3" step="0.05" value={currentLayout.player.scale ?? 1.15} onChange={(e) => updateLayout('player', { scale: parseFloat(e.target.value) })} className="w-full accent-amber-500" />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6 pt-2 border-t border-zinc-800/50">
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-zinc-400">Bildfokus horizontal</label>
+                                      <span className="text-xs text-zinc-400 font-mono bg-zinc-800 px-2 py-0.5 rounded">{currentLayout.player.focusX ?? 50}%</span>
+                                    </div>
+                                    <input type="range" min="0" max="100" value={currentLayout.player.focusX ?? 50} onChange={(e) => updateLayout('player', { focusX: parseInt(e.target.value) })} className="w-full accent-zinc-500" />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-xs font-bold text-zinc-400">Bildfokus vertikal</label>
+                                      <span className="text-xs text-zinc-400 font-mono bg-zinc-800 px-2 py-0.5 rounded">{currentLayout.player.focusY ?? 20}%</span>
+                                    </div>
+                                    <input type="range" min="0" max="100" value={currentLayout.player.focusY ?? 20} onChange={(e) => updateLayout('player', { focusY: parseInt(e.target.value) })} className="w-full accent-zinc-500" />
+                                  </div>
                                 </div>
                               </div>
                             </div>

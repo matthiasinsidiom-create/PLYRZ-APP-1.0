@@ -46,7 +46,7 @@ export const TeamAdminDashboard: React.FC = () => {
         const { data, error: fetchError } = await supabase
           .from('fixtures')
           .select('*, home_team:home_team_id(id, name, club_id, clubs(name, logo_url)), away_team:away_team_id(id, name, club_id, clubs(name, logo_url)), leagues(name)')
-          .order('kickoff_at', { ascending: false })
+          .order('kickoff_at', { ascending: true })
           .limit(50);
 
           if (fetchError) throw fetchError;
