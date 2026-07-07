@@ -359,7 +359,9 @@ async function startServer() {
     res.download(backupPath, 'update-backup.zip', (err) => {
       if (err) {
         console.error("Error downloading file:", err);
-        res.status(500).json({ error: "File not found or could not be downloaded." });
+        if (!res.headersSent) {
+          res.status(500).json({ error: "File not found or could not be downloaded." });
+        }
       }
     });
   });
@@ -369,7 +371,9 @@ async function startServer() {
     res.download(backupPath, 'update-backup.zip', (err) => {
       if (err) {
         console.error("Error downloading file:", err);
-        res.status(404).send("File not found");
+        if (!res.headersSent) {
+          res.status(404).send("File not found");
+        }
       }
     });
   });
