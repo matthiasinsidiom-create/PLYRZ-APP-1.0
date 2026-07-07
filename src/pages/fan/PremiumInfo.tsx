@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { supabaseService } from '../../services/supabaseService';
 import type { Player, Club, Team } from '../../types';
 import { createWhatsAppPremiumLink } from '../../config/contact';
+import premiumMockup from '../../assets/premium-mockup.png';
 
 export const PremiumInfo: React.FC = () => {
   const navigate = useNavigate();
@@ -168,15 +169,13 @@ export const PremiumInfo: React.FC = () => {
               </ul>
             </div>
             
-            <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-zinc-800">
+            <div className="relative rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-zinc-800 flex items-center justify-center min-h-[12rem]">
               <img 
-                src="/mockup.png" 
+                src={premiumMockup} 
                 alt="Physische Premium-Karte" 
                 className="w-full h-auto object-cover"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
-                  (e.target as HTMLImageElement).parentElement?.classList.add('flex', 'items-center', 'justify-center', 'h-48');
-                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-zinc-500 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-8 h-8 mb-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg><span class="text-sm">Mockup-Bild (public/mockup.png)</span></div>';
                 }}
               />
             </div>
