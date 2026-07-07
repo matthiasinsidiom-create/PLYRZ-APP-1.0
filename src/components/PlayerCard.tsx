@@ -74,13 +74,19 @@ const styles: { [key: string]: React.CSSProperties } = {
   photoContainer: {
     position: 'absolute',
     overflow: 'hidden',
+    clipPath: 'inset(0)',
+    WebkitClipPath: 'inset(0)',
+    contain: 'paint',
+    transform: 'translateZ(0)',
+    isolation: 'isolate',
     zIndex: 5,
     pointerEvents: 'none',
   },
   playerImage: {
-    width: '100%',
-    height: '100%',
+    position: 'absolute',
     objectFit: 'cover',
+    maxWidth: 'none',
+    maxHeight: 'none',
     display: 'block',
     pointerEvents: 'none',
   },
@@ -277,7 +283,7 @@ export const PlayerCard = React.memo(({
     return merged;
   })();
 
-  const getPhotoContainerStyle = () => {
+  const getPhotoContainerStyle = (): React.CSSProperties => {
     let x = 30, y = 18, width = 55, height = 34;
 
     if (layout.player) {
@@ -303,15 +309,19 @@ export const PlayerCard = React.memo(({
     };
   };
 
-  const getPlayerImageStyle = () => {
+  const getPlayerImageStyle = (): React.CSSProperties => {
     const scale = layout.player?.scale ?? 1.15;
     const focusX = layout.player?.focusX ?? 50;
     const focusY = layout.player?.focusY ?? 20;
 
     return {
       ...styles.playerImage,
-      transform: `scale(${scale})`,
-      objectPosition: `${focusX}% ${focusY}%`,
+      width: `${100 * scale}%`,
+      height: `${100 * scale}%`,
+      left: `${focusX}%`,
+      top: `${focusY}%`,
+      transform: `translate(-${focusX}%, -${focusY}%)`,
+      transformOrigin: `${focusX}% ${focusY}%`,
     };
   };
   const frameScale = layout.frame?.scale || 1;
