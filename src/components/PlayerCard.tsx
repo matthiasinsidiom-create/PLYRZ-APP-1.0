@@ -300,28 +300,21 @@ export const PlayerCard = React.memo(({
       }
     }
 
+    const zoom = layout.player?.scale ?? 1.15;
+    const focusX = layout.player?.focusX ?? 50;
+    const focusY = layout.player?.focusY ?? 20;
+    const photoUrl = player.photo_url || "/assets/players/mueller.png";
+
     return {
       ...styles.photoContainer,
       left: `${x}%`,
       top: `${y}%`,
       width: `${width}%`,
       height: `${height}%`,
-    };
-  };
-
-  const getPlayerImageStyle = (): React.CSSProperties => {
-    const scale = layout.player?.scale ?? 1.15;
-    const focusX = layout.player?.focusX ?? 50;
-    const focusY = layout.player?.focusY ?? 20;
-
-    return {
-      ...styles.playerImage,
-      width: `${100 * scale}%`,
-      height: `${100 * scale}%`,
-      left: `${focusX}%`,
-      top: `${focusY}%`,
-      transform: `translate(-${focusX}%, -${focusY}%)`,
-      transformOrigin: `${focusX}% ${focusY}%`,
+      backgroundImage: `url("${photoUrl.replace(/\"/g, '%22')}")`,
+      backgroundRepeat: 'no-repeat',
+      backgroundPosition: `${focusX}% ${focusY}%`,
+      backgroundSize: `${100 * zoom}% auto`,
     };
   };
   const frameScale = layout.frame?.scale || 1;
@@ -546,15 +539,11 @@ export const PlayerCard = React.memo(({
       />
       
       {/* PLAYER IMAGE */}
-      <div style={getPhotoContainerStyle()}>
-        <img 
-          src={player.photo_url || "/assets/players/mueller.png"} 
-          referrerPolicy="no-referrer"
-          crossOrigin="anonymous"
-          style={getPlayerImageStyle()} 
-          alt={player.full_name} 
-        />
-      </div>
+      <div
+        style={getPhotoContainerStyle()}
+        role="img"
+        aria-label={player.full_name}
+      />
       
       {/* NAME BANNER */}
       <div style={{ ...styles.nameContainer, top: `${layout.name.y}%`, left: `${layout.name.x - 50}%` }}>
