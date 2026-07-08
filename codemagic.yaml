@@ -108,8 +108,8 @@ workflows:
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
 
-  android-apk:
-    name: Android APK Build
+  android-release:
+    name: Android Release Build APK + AAB
     max_build_duration: 60
     instance_type: mac_mini_m2
 
@@ -140,11 +140,12 @@ workflows:
           echo "Checking Capacitor plugins..."
           cat android/app/src/main/assets/capacitor.plugins.json || true
 
-      - name: Build APK
+      - name: Build Android APK and AAB
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease bundleRelease
 
     artifacts:
-      - android/app/build/outputs/apk/debug/*.apk
+      - android/app/build/outputs/apk/release/*.apk
+      - android/app/build/outputs/bundle/release/*.aab
