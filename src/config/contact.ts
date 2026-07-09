@@ -1,18 +1,21 @@
-// Format: international, no '+', no spaces, no leading 0
-// Example Austria: 0664 1234567 -> 436641234567
-export const WHATSAPP_BUSINESS_PHONE = "4369010027978";
+export const PREMIUM_SUPPORT_EMAIL = "support@plyrz.at";
+export const PREMIUM_EMAIL_SUBJECT = "PLYRZ Premium Anfrage";
 
-export function createWhatsAppPremiumLink(playerName?: string, clubName?: string, playerId?: string): string {
-  let message = 'Hallo, ich interessiere mich für PLYRZ Premium für meine Spielerkarte. Bitte schickt mir weitere Infos.';
-  
-  if (playerName || clubName || playerId) {
-    message = 'Hallo, ich interessiere mich für PLYRZ Premium.\n';
-    if (playerName) message += `Spieler: ${playerName}\n`;
-    if (clubName) message += `Verein: ${clubName}\n`;
-    if (playerId) message += `Player-ID: ${playerId}\n`;
-    message += 'Bitte schickt mir weitere Infos.';
-  }
+export function createPremiumEmailLink(playerName?: string, clubName?: string, playerId?: string): string {
+  const body = [
+    "Servus PLYRZ Team,",
+    "",
+    "ich interessiere mich für PLYRZ Premium.",
+    "",
+    playerName ? `Name in der App: ${playerName}` : "Name in der App:",
+    clubName ? `Verein: ${clubName}` : "Verein:",
+    "Mannschaft:",
+    playerId ? `Player-ID: ${playerId}` : "",
+    "",
+    "Bitte sendet mir die weiteren Infos zu Premium.",
+    "",
+    "Danke!"
+  ].filter(line => line !== "").join("\n");
 
-  const encodedMessage = encodeURIComponent(message);
-  return `https://wa.me/${WHATSAPP_BUSINESS_PHONE}?text=${encodedMessage}`;
+  return `mailto:${PREMIUM_SUPPORT_EMAIL}?subject=${encodeURIComponent(PREMIUM_EMAIL_SUBJECT)}&body=${encodeURIComponent(body)}`;
 }
