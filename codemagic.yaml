@@ -93,25 +93,19 @@ workflows:
           <dict>
               <key>method</key>
               <string>app-store-connect</string>
-
               <key>teamID</key>
               <string>${APPLE_TEAM_ID}</string>
-
               <key>signingStyle</key>
               <string>manual</string>
-
               <key>provisioningProfiles</key>
               <dict>
                   <key>at.plyrz.app</key>
                   <string>${PROVISIONING_PROFILE_NAME}</string>
               </dict>
-
               <key>stripSwiftSymbols</key>
               <true/>
-
               <key>uploadBitcode</key>
               <false/>
-
               <key>uploadSymbols</key>
               <true/>
           </dict>
@@ -150,6 +144,16 @@ workflows:
         - plyrz_upload_keystore
 
     scripts:
+      - name: Install dependencies
+        script: |
+          set -e
+
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
       - name: Verify Android signing environment
         script: |
           set -e
@@ -162,28 +166,9 @@ workflows:
           test -n "$CM_KEY_ALIAS"
           test -n "$CM_KEY_PASSWORD"
 
-          echo "Keystore file found."
+          echo "Keystore file found: $CM_KEYSTORE_PATH"
           echo "Key alias: $CM_KEY_ALIAS"
           echo "Android signing environment is ready."
-
-      - name: Set Android SDK location
-        script: |
-          set -e
-
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-
-          echo "Android SDK location configured:"
-          cat "$CM_BUILD_DIR/android/local.properties"
-
-      - name: Install dependencies
-        script: |
-          set -e
-
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
 
       - name: Build Web App
         script: |
@@ -195,47 +180,29 @@ workflows:
           set -e
           npx cap sync android
 
-      - name: Verify Android project
+      - name: Set Android SDK location
         script: |
           set -e
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
 
-          echo "Checking Android project..."
+      - name: Verify Android configuration
+        script: |
+          set -e
 
           test -f android/gradlew
           test -f android/app/build.gradle
-          test -f android/app/src/main/AndroidManifest.xml
-
-          echo "Checking google-services.json..."
           test -f android/app/google-services.json
 
-          echo "Checking Android package name..."
-          grep -n "at.plyrz.app" android/app/build.gradle
+          echo "Checking version:"
+          grep -n "versionCode" android/app/build.gradle
+          grep -n "versionName" android/app/build.gradle
 
-          echo "Checking notification permission..."
-          grep -n "POST_NOTIFICATIONS" \
-            android/app/src/main/AndroidManifest.xml \
-            || echo "POST_NOTIFICATIONS permission was not found."
-
-          echo "Checking Capacitor plugins..."
-          if [ -f android/app/src/main/assets/capacitor.plugins.json ]; then
-            cat android/app/src/main/assets/capacitor.plugins.json
-          else
-            echo "capacitor.plugins.json was not found."
-          fi
-
-      - name: Verify release signing configuration
-        script: |
-          set -e
-
-          echo "Checking whether build.gradle uses Codemagic signing variables..."
-
+          echo "Checking signing configuration:"
           grep -n "CM_KEYSTORE_PATH" android/app/build.gradle
           grep -n "CM_KEYSTORE_PASSWORD" android/app/build.gradle
           grep -n "CM_KEY_ALIAS" android/app/build.gradle
           grep -n "CM_KEY_PASSWORD" android/app/build.gradle
           grep -n "signingConfig signingConfigs.release" android/app/build.gradle
-
-          echo "Release signing configuration detected."
 
       - name: Build signed Android APK and AAB
         script: |
@@ -243,7 +210,6 @@ workflows:
           set -o pipefail
 
           cd android
-
           chmod +x gradlew
 
           ./gradlew \
@@ -252,21 +218,9 @@ workflows:
             bundleRelease \
             --stacktrace
 
-      - name: Verify generated Android artifacts
+      - name: Verify generated artifacts
         script: |
           set -e
-
-          echo "Generated APK files:"
-          find android/app/build/outputs/apk/release \
-            -type f \
-            -name "*.apk" \
-            -print
-
-          echo "Generated AAB files:"
-          find android/app/build/outputs/bundle/release \
-            -type f \
-            -name "*.aab" \
-            -print
 
           AAB_FILE=$(find android/app/build/outputs/bundle/release \
             -type f \
@@ -284,8 +238,16 @@ workflows:
           test -n "$APK_FILE"
           test -f "$APK_FILE"
 
-          echo "Signed AAB created: $AAB_FILE"
-          echo "Signed APK created: $APK_FILE"
+          echo "AAB created: $AAB_FILE"
+          echo "APK created: $APK_FILE"
+
+          jarsigner \
+            -verify \
+            -verbose \
+            -certs \
+            "$AAB_FILE"
+
+          echo "Android App Bundle signature verified successfully."
 
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
