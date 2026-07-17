@@ -78,7 +78,15 @@ export const Leaderboard: React.FC = () => {
 
   const filteredPlayers = players.filter(player => {
     const matchesClub = selectedClub === 'all' || player.teams?.club_id === selectedClub;
-    const matchesLeague = selectedLeague === 'all' || player.teams?.clubs?.league_id === selectedLeague;
+    
+    let matchesLeague = true;
+    if (isAdmin) {
+      matchesLeague = selectedLeague === 'all' || player.teams?.clubs?.league_id === selectedLeague;
+    } else {
+      const targetLeague = profile?.selected_league_id || (players.length > 0 ? players[0].teams?.clubs?.league_id : 'all');
+      matchesLeague = targetLeague === 'all' || player.teams?.clubs?.league_id === targetLeague;
+    }
+
     const matchesSearch = player.full_name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesClub && matchesLeague && matchesSearch;
   });
@@ -167,16 +175,18 @@ export const Leaderboard: React.FC = () => {
             />
           </div>
           <div className="flex gap-2">
-            <select 
-              value={selectedLeague}
-              onChange={(e) => setSelectedLeague(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors text-sm font-bold uppercase tracking-wider"
-            >
-              <option value="all">Alle Ligen</option>
-              {leagues.map(l => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
+            {isAdmin && (
+              <select 
+                value={selectedLeague}
+                onChange={(e) => setSelectedLeague(e.target.value)}
+                className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3 focus:outline-none focus:border-emerald-500/50 transition-colors text-sm font-bold uppercase tracking-wider"
+              >
+                <option value="all">Alle Ligen</option>
+                {leagues.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            )}
             <select 
               value={selectedClub}
               onChange={(e) => setSelectedClub(e.target.value)}

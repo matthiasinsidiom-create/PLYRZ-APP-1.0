@@ -165,13 +165,13 @@ export const Dashboard: React.FC = () => {
     loadTopPlayers();
 
     // Trigger deactivation of Gerersdorf players once for the admin
-    if (isAdmin) {
-      supabaseService.deactivateGerersdorfPlayers().then(res => {
-        if (res?.success) {
-          console.log('DEBUG: [ADMIN] FCU Gerersdorf players deactivation triggered successfully.');
-        }
-      });
-    }
+    // if (isAdmin) {
+    //   supabaseService.deactivateGerersdorfPlayers().then(res => {
+    //     if (res?.success) {
+    //       console.log('DEBUG: [ADMIN] FCU Gerersdorf players deactivation triggered successfully.');
+    //     }
+    //   });
+    // }
   }, [profile, isAdmin]);
 
   const [heroFixture, setHeroFixture] = useState<Fixture | null>(null);

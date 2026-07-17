@@ -2130,7 +2130,7 @@ export const supabaseService = {
               return true;
             }
             
-            if (p.teams?.clubs?.name?.includes('Gerersdorf')) return false;
+            // if (p.teams?.clubs?.name?.includes('Gerersdorf')) return false;
             return true;
           });
         }
@@ -2190,8 +2190,9 @@ export const supabaseService = {
         return true;
       }
       
-      const isGerersdorf = p.teams?.clubs?.name?.includes('Gerersdorf');
-      return !isGerersdorf;
+      // const isGerersdorf = p.teams?.clubs?.name?.includes('Gerersdorf');
+      // return !isGerersdorf;
+      return true;
     });
 
     console.log(`DEBUG: [FILTER] getPlayers: Total loaded: ${rawPlayersData.length}, Selected: ${playersData.length}`);
@@ -2315,10 +2316,10 @@ export const supabaseService = {
             if (visibility.clubIds && pClubId && visibility.clubIds.includes(pClubId)) {
               // Club Admin, allow access
             } else {
-              const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
-              if (involvesGerersdorf) {
-                return null;
-              }
+              // const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
+              // if (involvesGerersdorf) {
+              //   return null;
+              // }
             }
           }
 
@@ -2385,10 +2386,10 @@ export const supabaseService = {
         if (visibility.clubIds && pClubId && visibility.clubIds.includes(pClubId)) {
           // Club Admin, allow access
         } else {
-          const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
-          if (involvesGerersdorf) {
-            return null;
-          }
+          // const involvesGerersdorf = mapped.teams?.clubs?.name?.includes('Gerersdorf');
+          // if (involvesGerersdorf) {
+          //   return null;
+          // }
         }
       }
 
@@ -2427,8 +2428,9 @@ export const supabaseService = {
           
           const homeClub = f.home_team?.clubs?.name;
           const awayClub = f.away_team?.clubs?.name;
-          const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
-          return !involvesGerersdorf;
+          // const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
+          // return !involvesGerersdorf;
+          return true;
         });
 
         // Map the count from fixture_lineups
@@ -2490,8 +2492,9 @@ export const supabaseService = {
 
       const homeClub = f.home_team?.clubs?.name;
       const awayClub = f.away_team?.clubs?.name;
-      const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
-      return !involvesGerersdorf;
+      // const involvesGerersdorf = homeClub?.includes('Gerersdorf') || awayClub?.includes('Gerersdorf');
+      // return !involvesGerersdorf;
+      return true;
     });
 
     console.log(`DEBUG: [FILTER] getFixtures: Total loaded: ${data?.length || 0}, Filtered: ${filteredData.length}`);
