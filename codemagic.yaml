@@ -56,7 +56,7 @@ workflows:
           echo "Setting iOS release version to: $APP_VERSION"
 
           test -n "$APP_APPLE_ID"
-          test "$APP_APPLE_ID" != "HIER_DEINE_NUMERISCHE_APPLE_ID"
+          test "$APP_APPLE_ID" != "6762552423"
 
           # Deine bestehenden Variablennamen auf die von
           # Codemagic CLI erwarteten Namen abbilden.
