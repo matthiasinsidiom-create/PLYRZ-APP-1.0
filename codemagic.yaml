@@ -15,14 +15,10 @@ workflows:
         APPLE_TEAM_ID: "Y2Y64P58P7"
         PROVISIONING_PROFILE_NAME: "PLYRZ AppStore Profile Push"
 
-        # Sichtbare App-Version.
-        # Bei einem neuen Store-Update manuell erhöhen:
-        # 1.0.1 -> 1.0.2 -> 1.1.0 usw.
+        # Sichtbare Version im App Store.
+        # Beim nächsten größeren Update manuell ändern:
+        # 1.0.1 -> 1.0.2
         APP_VERSION: "1.0.1"
-
-        # Numerische Apple-ID aus App Store Connect.
-        # App Store Connect > PLYRZ > App-Informationen > Apple-ID
-        APP_APPLE_ID: "6762552423"
 
       groups:
         - app_store_credentials
@@ -31,6 +27,7 @@ workflows:
       - name: Install dependencies
         script: |
           set -e
+          set -o pipefail
 
           if [ -f package-lock.json ]; then
             npm ci
@@ -41,93 +38,124 @@ workflows:
       - name: Build Web App
         script: |
           set -e
+          set -o pipefail
+
           npm run build
 
       - name: Sync Capacitor iOS
         script: |
           set -e
+          set -o pipefail
+
           npx cap sync ios
 
-      - name: Set iOS version and automatic build number
+      - name: Set automatic iOS build number
         script: |
           set -e
           set -o pipefail
 
-          echo "Setting iOS release version to: $APP_VERSION"
+          IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER}"
 
-          test -n "$APP_APPLE_ID"
-          test "$APP_APPLE_ID" != "6762552423"
-
-          # Deine bestehenden Variablennamen auf die von
-          # Codemagic CLI erwarteten Namen abbilden.
-          export APP_STORE_CONNECT_KEY_IDENTIFIER="$APP_STORE_CONNECT_KEY_ID"
-          export APP_STORE_CONNECT_PRIVATE_KEY="$APP_STORE_CONNECT_PUBLISHER_PRIVATE_KEY"
-
-          test -n "$APP_STORE_CONNECT_KEY_IDENTIFIER"
-          test -n "$APP_STORE_CONNECT_ISSUER_ID"
-          test -n "$APP_STORE_CONNECT_PRIVATE_KEY"
-
-          echo "Reading latest build number from App Store Connect..."
-
-          LATEST_BUILD_NUMBER=$(
-            app-store-connect get-latest-app-store-build-number \
-              "$APP_APPLE_ID" \
-              --app-store-version="$APP_VERSION" \
-              --platform=IOS
-          )
-
-          if ! [[ "$LATEST_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "No existing build found for version $APP_VERSION."
-            echo "Using Codemagic project build number as fallback."
-
-            IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-1}"
-          else
-            IOS_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          if [ -z "$APP_VERSION" ]; then
+            echo "ERROR: APP_VERSION is missing."
+            exit 1
           fi
 
-          echo "Latest Apple build number: ${LATEST_BUILD_NUMBER:-none}"
-          echo "New iOS build number: $IOS_BUILD_NUMBER"
+          if [ -z "$IOS_BUILD_NUMBER" ]; then
+            echo "ERROR: PROJECT_BUILD_NUMBER is unavailable."
+            exit 1
+          fi
 
-          # Für nachfolgende Skripte verfügbar machen.
+          if ! [[ "$IOS_BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Invalid build number: $IOS_BUILD_NUMBER"
+            exit 1
+          fi
+
+          echo "Setting iOS version: $APP_VERSION"
+          echo "Setting iOS build number: $IOS_BUILD_NUMBER"
+
+          # Für alle nachfolgenden Codemagic-Schritte speichern.
           echo "IOS_BUILD_NUMBER=$IOS_BUILD_NUMBER" >> "$CM_ENV"
 
-          cd ios/App
+          PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
+          INFO_PLIST_PATH="ios/App/App/Info.plist"
 
-          # Versionsnummer und Buildnummer im Xcode-Projekt setzen.
-          xcrun agvtool new-marketing-version "$APP_VERSION"
-          xcrun agvtool new-version -all "$IOS_BUILD_NUMBER"
+          test -f "$PBXPROJ_PATH"
+          test -f "$INFO_PLIST_PATH"
 
-          cd "$CM_BUILD_DIR"
+          # Xcode-Marketing-Version setzen.
+          sed -i '' \
+            "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $APP_VERSION;/g" \
+            "$PBXPROJ_PATH"
 
-          # Zusätzliche Kontrolle.
-          echo "Configured project versions:"
-          grep -n "MARKETING_VERSION" ios/App/App.xcodeproj/project.pbxproj \
-            | head -n 10 || true
+          # Xcode-Buildnummer setzen.
+          sed -i '' \
+            "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $IOS_BUILD_NUMBER;/g" \
+            "$PBXPROJ_PATH"
 
-          grep -n "CURRENT_PROJECT_VERSION" ios/App/App.xcodeproj/project.pbxproj \
-            | head -n 10 || true
+          # Info.plist zusätzlich absichern.
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleShortVersionString $APP_VERSION" \
+            "$INFO_PLIST_PATH" \
+          || /usr/libexec/PlistBuddy \
+            -c "Add :CFBundleShortVersionString string $APP_VERSION" \
+            "$INFO_PLIST_PATH"
+
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" \
+            "$INFO_PLIST_PATH" \
+          || /usr/libexec/PlistBuddy \
+            -c "Add :CFBundleVersion string $IOS_BUILD_NUMBER" \
+            "$INFO_PLIST_PATH"
+
+          echo ""
+          echo "Configured Xcode marketing versions:"
+          grep -n "MARKETING_VERSION" "$PBXPROJ_PATH" || true
+
+          echo ""
+          echo "Configured Xcode build numbers:"
+          grep -n "CURRENT_PROJECT_VERSION" "$PBXPROJ_PATH" || true
+
+          echo ""
+          echo "Info.plist version:"
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleShortVersionString" \
+            "$INFO_PLIST_PATH"
+
+          echo "Info.plist build:"
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleVersion" \
+            "$INFO_PLIST_PATH"
 
       - name: Apply provisioning profiles
         script: |
           set -e
-          xcode-project use-profiles --project "$XCODE_PROJECT"
+          set -o pipefail
 
-      - name: Raw Xcode Archive
+          xcode-project use-profiles \
+            --project "$XCODE_PROJECT"
+
+      - name: Archive iOS app
         script: |
           set -e
           set -o pipefail
 
-          test -n "$APP_VERSION"
-          test -n "$IOS_BUILD_NUMBER"
+          if [ -z "$IOS_BUILD_NUMBER" ]; then
+            echo "ERROR: IOS_BUILD_NUMBER is missing."
+            exit 1
+          fi
 
-          mkdir -p build/logs
-          mkdir -p build/ios/xcarchive
+          mkdir -p "$CM_BUILD_DIR/build/logs"
+          mkdir -p "$CM_BUILD_DIR/build/ios/xcarchive"
 
-          echo "Archiving PLYRZ version $APP_VERSION ($IOS_BUILD_NUMBER)"
+          echo "Archiving PLYRZ"
+          echo "Version: $APP_VERSION"
+          echo "Build: $IOS_BUILD_NUMBER"
 
           xcodebuild \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
+            -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
             archive \
@@ -137,15 +165,21 @@ workflows:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             CODE_SIGN_STYLE=Manual \
-            2>&1 | tee build/logs/xcodebuild-archive.log
+            2>&1 | tee "$CM_BUILD_DIR/build/logs/xcodebuild-archive.log"
 
-      - name: Verify archived version
+      - name: Verify archived iOS version
         script: |
           set -e
+          set -o pipefail
 
-          ARCHIVE_INFO_PLIST="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive/Products/Applications/App.app/Info.plist"
+          ARCHIVE_APP_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive/Products/Applications/App.app"
+          ARCHIVE_INFO_PLIST="$ARCHIVE_APP_PATH/Info.plist"
 
-          test -f "$ARCHIVE_INFO_PLIST"
+          if [ ! -f "$ARCHIVE_INFO_PLIST" ]; then
+            echo "ERROR: Archived Info.plist was not found:"
+            echo "$ARCHIVE_INFO_PLIST"
+            exit 1
+          fi
 
           ARCHIVED_VERSION=$(
             /usr/libexec/PlistBuddy \
@@ -159,30 +193,48 @@ workflows:
               "$ARCHIVE_INFO_PLIST"
           )
 
+          ARCHIVED_BUNDLE_ID=$(
+            /usr/libexec/PlistBuddy \
+              -c "Print :CFBundleIdentifier" \
+              "$ARCHIVE_INFO_PLIST"
+          )
+
+          echo "Archived bundle ID: $ARCHIVED_BUNDLE_ID"
           echo "Archived version: $ARCHIVED_VERSION"
           echo "Archived build: $ARCHIVED_BUILD"
 
+          if [ "$ARCHIVED_BUNDLE_ID" != "at.plyrz.app" ]; then
+            echo "ERROR: Wrong bundle identifier."
+            echo "Expected: at.plyrz.app"
+            echo "Found: $ARCHIVED_BUNDLE_ID"
+            exit 1
+          fi
+
           if [ "$ARCHIVED_VERSION" != "$APP_VERSION" ]; then
-            echo "ERROR: Expected version $APP_VERSION, got $ARCHIVED_VERSION"
+            echo "ERROR: Wrong archived version."
+            echo "Expected: $APP_VERSION"
+            echo "Found: $ARCHIVED_VERSION"
             exit 1
           fi
 
           if [ "$ARCHIVED_BUILD" != "$IOS_BUILD_NUMBER" ]; then
-            echo "ERROR: Expected build $IOS_BUILD_NUMBER, got $ARCHIVED_BUILD"
+            echo "ERROR: Wrong archived build number."
+            echo "Expected: $IOS_BUILD_NUMBER"
+            echo "Found: $ARCHIVED_BUILD"
             exit 1
           fi
 
           echo "Archive version verification successful."
 
-      - name: Export IPA
+      - name: Create export options
         script: |
           set -e
           set -o pipefail
 
-          mkdir -p build/logs
-          mkdir -p build/ios/ipa
+          mkdir -p "$CM_BUILD_DIR/build/ios"
+          mkdir -p "$CM_BUILD_DIR/build/ios/ipa"
 
-          cat > build/ios/exportOptions.plist <<EOF
+          cat > "$CM_BUILD_DIR/build/ios/exportOptions.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -214,12 +266,47 @@ workflows:
           </plist>
           EOF
 
+          echo "Created exportOptions.plist:"
+          cat "$CM_BUILD_DIR/build/ios/exportOptions.plist"
+
+      - name: Export IPA
+        script: |
+          set -e
+          set -o pipefail
+
           xcodebuild \
             -exportArchive \
             -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
             -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
             -exportOptionsPlist "$CM_BUILD_DIR/build/ios/exportOptions.plist" \
-            2>&1 | tee build/logs/xcodebuild-export.log
+            2>&1 | tee "$CM_BUILD_DIR/build/logs/xcodebuild-export.log"
+
+      - name: Verify exported IPA
+        script: |
+          set -e
+          set -o pipefail
+
+          IPA_FILE=$(
+            find "$CM_BUILD_DIR/build/ios/ipa" \
+              -type f \
+              -name "*.ipa" \
+              | head -n 1
+          )
+
+          if [ -z "$IPA_FILE" ]; then
+            echo "ERROR: No IPA file was generated."
+            exit 1
+          fi
+
+          if [ ! -f "$IPA_FILE" ]; then
+            echo "ERROR: IPA file does not exist."
+            exit 1
+          fi
+
+          echo "IPA successfully generated:"
+          echo "$IPA_FILE"
+
+          ls -lh "$IPA_FILE"
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -249,6 +336,7 @@ workflows:
       - name: Install dependencies
         script: |
           set -e
+          set -o pipefail
 
           if [ -f package-lock.json ]; then
             npm ci
@@ -259,6 +347,7 @@ workflows:
       - name: Verify Android signing environment
         script: |
           set -e
+          set -o pipefail
 
           echo "Checking Android signing variables..."
 
@@ -275,29 +364,57 @@ workflows:
       - name: Build Web App
         script: |
           set -e
+          set -o pipefail
+
           npm run build
 
       - name: Sync Capacitor Android
         script: |
           set -e
+          set -o pipefail
+
           npx cap sync android
 
       - name: Set Android SDK location
         script: |
           set -e
+          set -o pipefail
+
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+
+      - name: Set automatic Android version code
+        script: |
+          set -e
+          set -o pipefail
+
+          ANDROID_VERSION_CODE="${PROJECT_BUILD_NUMBER}"
+
+          if [ -z "$ANDROID_VERSION_CODE" ]; then
+            echo "ERROR: PROJECT_BUILD_NUMBER is unavailable."
+            exit 1
+          fi
+
+          if ! [[ "$ANDROID_VERSION_CODE" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Invalid Android version code: $ANDROID_VERSION_CODE"
+            exit 1
+          fi
+
+          echo "ANDROID_VERSION_CODE=$ANDROID_VERSION_CODE" >> "$CM_ENV"
+
+          echo "Android version code: $ANDROID_VERSION_CODE"
 
       - name: Verify Android configuration
         script: |
           set -e
+          set -o pipefail
 
           test -f android/gradlew
           test -f android/app/build.gradle
           test -f android/app/google-services.json
 
-          echo "Checking version:"
-          grep -n "versionCode" android/app/build.gradle
-          grep -n "versionName" android/app/build.gradle
+          echo "Checking version configuration:"
+          grep -n "versionCode" android/app/build.gradle || true
+          grep -n "versionName" android/app/build.gradle || true
 
           echo "Checking signing configuration:"
           grep -n "CM_KEYSTORE_PATH" android/app/build.gradle
@@ -318,30 +435,45 @@ workflows:
             clean \
             assembleRelease \
             bundleRelease \
+            -PversionCode="$ANDROID_VERSION_CODE" \
             --stacktrace
 
-      - name: Verify generated artifacts
+      - name: Verify generated Android artifacts
         script: |
           set -e
+          set -o pipefail
 
-          AAB_FILE=$(find android/app/build/outputs/bundle/release \
-            -type f \
-            -name "*.aab" \
-            | head -n 1)
+          AAB_FILE=$(
+            find android/app/build/outputs/bundle/release \
+              -type f \
+              -name "*.aab" \
+              | head -n 1
+          )
 
-          APK_FILE=$(find android/app/build/outputs/apk/release \
-            -type f \
-            -name "*.apk" \
-            | head -n 1)
+          APK_FILE=$(
+            find android/app/build/outputs/apk/release \
+              -type f \
+              -name "*.apk" \
+              | head -n 1
+          )
 
-          test -n "$AAB_FILE"
-          test -f "$AAB_FILE"
+          if [ -z "$AAB_FILE" ] || [ ! -f "$AAB_FILE" ]; then
+            echo "ERROR: Android App Bundle was not generated."
+            exit 1
+          fi
 
-          test -n "$APK_FILE"
-          test -f "$APK_FILE"
+          if [ -z "$APK_FILE" ] || [ ! -f "$APK_FILE" ]; then
+            echo "ERROR: Android APK was not generated."
+            exit 1
+          fi
 
-          echo "AAB created: $AAB_FILE"
-          echo "APK created: $APK_FILE"
+          echo "AAB created:"
+          echo "$AAB_FILE"
+          ls -lh "$AAB_FILE"
+
+          echo "APK created:"
+          echo "$APK_FILE"
+          ls -lh "$APK_FILE"
 
           jarsigner \
             -verify \
