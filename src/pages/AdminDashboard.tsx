@@ -10,7 +10,9 @@ import {
   LayoutGrid,
   ListOrdered,
   Image as ImageIcon,
-  ArrowLeft
+  ArrowLeft,
+  Bell,
+  MessageSquare
 } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService';
 
@@ -140,6 +142,20 @@ const AdminDashboard: React.FC = () => {
               count="Export" 
               color="bg-sky-500" 
               onClick={() => navigate('/admin/export-cards')} 
+            />
+            <AdminCard 
+              title="Benachrichtigungen"
+              icon={Bell}
+              count="Push"
+              color="bg-rose-500"
+              onClick={() => navigate('/admin/push')}
+            />
+            <AdminCard 
+              title="Popup News"
+              icon={MessageSquare}
+              count="News"
+              color="bg-indigo-500"
+              onClick={() => navigate('/admin/news')}
             />
           </div>
         )}

@@ -12,6 +12,8 @@ import AdminFixtures from './pages/admin/Fixtures';
 import AdminMatchControl from './pages/admin/MatchControl';
 import AdminLineups from './pages/admin/Lineups';
 import AdminCardExport from './pages/admin/CardExport';
+import PushNotifications from './pages/admin/PushNotifications';
+import PopupNews from './pages/admin/PopupNews';
 import { Onboarding } from './pages/Onboarding';
 import { PlayerClaim } from './pages/PlayerClaim';
 import { MatchList } from './pages/fan/MatchList';
@@ -27,6 +29,7 @@ import { Table } from './pages/fan/Table';
 import { RatingLogicScreen } from './pages/fan/RatingLogicScreen';
 import { VoteList } from './pages/fan/VoteList';
 import { BottomNav } from './components/BottomNav';
+import { PopupNewsModal } from './components/PopupNewsModal';
 import { motion } from 'framer-motion';
 import { setupPushNotifications } from './lib/pushNotifications';
 import { supabaseService } from './services/supabaseService';
@@ -183,6 +186,7 @@ const AppContent: React.FC = () => {
   
   return (
     <div className="h-full w-full flex flex-col">
+      <PopupNewsModal />
       <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -200,6 +204,8 @@ const AppContent: React.FC = () => {
               <Route path="/admin/fixtures/:id" element={<AdminMatchControl />} />
               <Route path="/admin/lineups" element={<AdminLineups />} />
               <Route path="/admin/export-cards" element={<AdminCardExport />} />
+              <Route path="/admin/push" element={<PushNotifications />} />
+              <Route path="/admin/news" element={<PopupNews />} />
             </>
           )}
 
