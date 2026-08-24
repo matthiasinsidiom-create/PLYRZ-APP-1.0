@@ -405,10 +405,12 @@ export const Dashboard: React.FC = () => {
       // 2. LIVE MATCH
       else {
         const liveMatch = f.find(fixture => {
+          const isFinished = fixture.status === 'finished' || !!fixture.results_processed_at || fixture.match_phase === 'full_time';
+          if (isFinished) return false;
           const isLive = fixture.status === 'live';
           const kickoff = new Date(fixture.kickoff_at);
           const isStarted = now >= kickoff;
-          return (isLive || (fixture.status === 'upcoming' && isStarted)) && !fixture.results_processed_at;
+          return isLive || (fixture.status === 'upcoming' && isStarted);
         });
 
         if (liveMatch) {
@@ -629,7 +631,7 @@ export const Dashboard: React.FC = () => {
                     );
                   })()}
                 </div>
-                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{getLiveMatchMinute(heroFixture, now) || '1. HZ'}</div>
+                <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{getLiveMatchMinute(heroFixture) || '1. HZ'}</div>
               </div>
 
               <div className="flex-1 flex flex-col items-center gap-2">

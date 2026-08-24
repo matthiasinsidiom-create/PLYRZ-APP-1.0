@@ -24,6 +24,7 @@ import {
   sendTestPush,
   PushDebugState 
 } from '../../lib/pushNotifications';
+import { DeleteAccountModal } from '../../components/DeleteAccountModal';
 
 const PushDebug: React.FC = () => {
   const [debugState, setDebugState] = React.useState<PushDebugState>(getPushState());
@@ -127,6 +128,7 @@ export const Profile: React.FC = () => {
   const { profile, user, signOut, refreshProfile, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [resetting, setResetting] = React.useState(false);
+  const [showDeleteModal, setShowDeleteModal] = React.useState(false);
 
   if (!profile || !user) return null;
 
@@ -258,13 +260,23 @@ export const Profile: React.FC = () => {
               </span>
               <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-emerald-500 transition-colors" />
             </a>
+            
+            <button 
+              onClick={() => setShowDeleteModal(true)}
+              className="w-full bg-red-500/5 border border-red-500/10 rounded-2xl p-4 flex items-center justify-between group hover:border-red-500/30 transition-all mt-4"
+            >
+              <span className="text-sm font-bold uppercase tracking-tight italic text-red-500/80 group-hover:text-red-500 transition-colors">
+                Konto löschen
+              </span>
+              <ChevronRight className="w-5 h-5 text-red-500/50 group-hover:text-red-500 transition-colors" />
+            </button>
           </div>
         </div>
 
         {/* Sign Out */}
         <button
           onClick={() => signOut()}
-          className="w-full bg-red-500/10 border border-red-500/20 text-red-500 font-black italic uppercase tracking-tighter py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-red-500 hover:text-white transition-all"
+          className="w-full bg-zinc-900 border border-zinc-800 text-zinc-400 font-black italic uppercase tracking-tighter py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-zinc-800 hover:text-white transition-all"
         >
           <LogOut className="w-5 h-5" />
           Abmelden
@@ -281,6 +293,11 @@ export const Profile: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <DeleteAccountModal 
+        isOpen={showDeleteModal} 
+        onClose={() => setShowDeleteModal(false)} 
+      />
     </div>
   );
 };

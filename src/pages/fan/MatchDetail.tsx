@@ -158,7 +158,7 @@ export const MatchDetail: React.FC = () => {
       : new Date(fixture.kickoff_at)
   ) : null;
 
-  const isActuallyLive = !!fixture && !fixture.results_processed_at && (
+  const isActuallyLive = !!fixture && !fixture.results_processed_at && fixture.status !== 'finished' && fixture.match_phase !== 'full_time' && (
     fixture.status === 'live' || 
     (fixture.status === 'upcoming' && kickoffDate && now >= kickoffDate)
   );
@@ -246,6 +246,48 @@ export const MatchDetail: React.FC = () => {
     }
     if (fixture.status === 'finished') {
       console.log("DEBUG: [LIFECYCLE] Match already finished, skipping redundant trigger");
+      return;
+    }
+
+    const homeLineupCount = lineup.filter(l => l.team_id === fixture.home_team_id).length;
+    const awayLineupCount = lineup.filter(l => l.team_id === fixture.away_team_id).length;
+    const hasBothLineups = homeLineupCount > 0 && awayLineupCount > 0;
+
+    if (!hasBothLineups) {
+      console.log(`DEBUG: [LIFECYCLE] Incomplete lineups (Home: ${homeLineupCount}, Away: ${awayLineupCount}). Finishing match directly without voting.`);
+      const nowIso = new Date().toISOString();
+      setFixture(prev => prev ? { 
+        ...prev, 
+        status: 'finished',
+        match_phase: 'full_time',
+        voting_open_at: undefined,
+        voting_close_at: undefined,
+        results_processed_at: nowIso
+      } : null);
+
+      try {
+        const { error: directError } = await supabase
+          .from('fixtures')
+          .update({
+            status: 'finished',
+            match_phase: 'full_time',
+            voting_open_at: null,
+            voting_close_at: null,
+            results_processed_at: nowIso,
+            updated_at: nowIso
+          })
+          .eq('id', id);
+
+        if (directError) {
+          console.error("DEBUG: [LIFECYCLE] Error directly ending match:", directError);
+          alert(`Fehler beim Beenden des Spiels: ${directError.message || 'Unbekannter Fehler'}`);
+        } else {
+          alert('Spiel erfolgreich beendet. Da keine vollständigen Aufstellungen hinterlegt sind, entfällt das Voting.');
+        }
+      } catch (directErr) {
+        console.error("DEBUG: [LIFECYCLE] Direct finish failed:", directErr);
+      }
+      await loadData();
       return;
     }
 

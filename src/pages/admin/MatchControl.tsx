@@ -288,13 +288,26 @@ const AdminMatchControl: React.FC = () => {
       }
     }
 
+    if (updates.status === 'finished') {
+      const hasHome = (lineup?.home?.length || 0) > 0;
+      const hasAway = (lineup?.away?.length || 0) > 0;
+      if (!hasHome || !hasAway) {
+        fixtureUpdates.voting_open_at = null;
+        fixtureUpdates.voting_close_at = null;
+        fixtureUpdates.results_processed_at = new Date().toISOString();
+        fixtureUpdates.match_phase = 'full_time';
+      }
+    }
+
     try {
       const updated = await supabaseService.updateFixture(id, fixtureUpdates);
       setFixture(updated);
       setStatusModal({
         isOpen: true,
-        title: 'Success',
-        message: 'Fixture updated successfully.',
+        title: 'Erfolg',
+        message: updates.status === 'finished' && ((lineup?.home?.length || 0) === 0 || (lineup?.away?.length || 0) === 0)
+          ? 'Spiel erfolgreich beendet. Da keine vollständige Aufstellung vorliegt, entfällt das Voting.'
+          : 'Spiel erfolgreich aktualisiert.',
         type: 'success'
       });
     } catch (err) {
@@ -1374,7 +1387,11 @@ const AdminMatchControl: React.FC = () => {
                 <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-2">Spielstatus ändern?</h3>
                 <p className="text-xs text-zinc-400 leading-relaxed mb-8">
                   Möchtest du den Status wirklich auf <span className="text-white font-bold">{pendingStatus === 'finished' ? 'Beendet' : 'Abgebrochen'}</span> setzen? 
-                  {pendingStatus === 'finished' ? ' Die Abstimmung für Spieler des Spiels kann dann nicht mehr verändert werden.' : ' Keine Ergebnisse werden gewertet.'}
+                  {pendingStatus === 'finished' ? (
+                    ((lineup?.home?.length || 0) === 0 || (lineup?.away?.length || 0) === 0)
+                      ? ' Da nicht für beide Mannschaften Aufstellungen hinterlegt sind, wird das Spiel direkt als beendet gewertet und kein Voting gestartet.'
+                      : ' Die Abstimmung für Spieler des Spiels wird gestartet.'
+                  ) : ' Keine Ergebnisse werden gewertet.'}
                 </p>
                 
                 <div className="flex flex-col gap-3 w-full">

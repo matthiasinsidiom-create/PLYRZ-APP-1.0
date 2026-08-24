@@ -80,7 +80,7 @@ export function calculateMatchScore(fixture: Fixture | null, events: MatchEvent[
  * Robustly calculates the current match minute based on match_phase and start times.
  */
 export function getLiveMatchMinute(fixture: Fixture | null, now = new Date()): string {
-  if (!fixture || fixture.status === 'finished' || fixture.status === 'cancelled') {
+  if (!fixture || fixture.status === 'finished' || fixture.status === 'cancelled' || !!fixture.results_processed_at || fixture.match_phase === 'full_time') {
     return '';
   }
 

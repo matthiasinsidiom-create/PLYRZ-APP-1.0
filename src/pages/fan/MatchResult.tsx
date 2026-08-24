@@ -604,29 +604,6 @@ const MatchResult: React.FC = () => {
     );
   }
 
-  // If we reach here, we have results or it's processed with no lineup
-  if (fixture?.results_processed_at && results.length === 0) {
-    return (
-      <div className="min-h-screen bg-transparent text-white p-6 flex flex-col items-center justify-center">
-        <div className="max-w-md w-full space-y-8 text-center bg-zinc-900/40 backdrop-blur-xl border border-white/5 p-12 rounded-[3rem]">
-          <div className="w-20 h-20 bg-zinc-800 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <Info className="w-10 h-10 text-zinc-600" />
-          </div>
-          <div className="space-y-4">
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none">Keine Daten</h2>
-            <p className="text-zinc-500 font-medium">Für dieses Spiel wurden keine Bewertungen oder Statistiken erfasst.</p>
-          </div>
-          <button 
-            onClick={() => navigate('/matches')}
-            className="w-full bg-emerald-500 text-black font-black italic uppercase tracking-tight py-5 rounded-2xl hover:bg-emerald-400 transition-all"
-          >
-            ZUR ÜBERSICHT
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const homeWinner = (fixture.home_score || 0) > (fixture.away_score || 0);
   const awayWinner = (fixture.away_score || 0) > (fixture.home_score || 0);
 
@@ -722,6 +699,27 @@ const MatchResult: React.FC = () => {
       </div>
 
       <div className="max-w-xl mx-auto px-4 space-y-16 mt-4 relative z-10">
+        {/* Info when no ratings exist because of empty lineups */}
+        {results.length === 0 && (
+          <div className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 p-8 rounded-[2.5rem] text-center space-y-3">
+            <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-2">
+              <Info className="w-6 h-6 text-zinc-500" />
+            </div>
+            <h3 className="text-lg font-black italic uppercase tracking-tight">Spiel beendet</h3>
+            <p className="text-zinc-500 text-xs font-medium leading-relaxed max-w-sm mx-auto">
+              Für dieses Spiel wurden keine Mannschafts-Aufstellungen hinterlegt. Das Spielergebnis wurde erfolgreich erfasst.
+            </p>
+            <div className="pt-2">
+              <button 
+                onClick={() => navigate('/matches')}
+                className="px-6 py-3 bg-emerald-500 text-black font-black italic uppercase tracking-tight text-xs rounded-xl hover:bg-emerald-400 transition-all"
+              >
+                Zur Übersicht
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* TOP PERFORMER (MVP) */}
         {mvp && (
           <motion.section 

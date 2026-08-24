@@ -158,11 +158,11 @@ export const MatchList: React.FC = () => {
             {filteredFixtures.length > 0 ? (
               filteredFixtures.map((fixture) => {
                 const kickoffDate = new Date(fixture.kickoff_at);
-                const isLive = fixture.status === 'live' || (fixture.status === 'upcoming' && now >= kickoffDate);
-                const isFinished = fixture.status === 'finished';
-                const isUpcoming = fixture.status === 'upcoming' && !isLive;
+                const isFinished = fixture.status === 'finished' || !!fixture.results_processed_at || fixture.match_phase === 'full_time';
+                const isLive = !isFinished && (fixture.status === 'live' || (fixture.status === 'upcoming' && now >= kickoffDate));
+                const isUpcoming = fixture.status === 'upcoming' && !isLive && !isFinished;
                 const isCancelled = fixture.status === 'cancelled';
-                const isVoting = isFinished && !fixture.results_processed_at && fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
+                const isVoting = isFinished && !fixture.results_processed_at && !!fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
 
                 return (
                   <button
