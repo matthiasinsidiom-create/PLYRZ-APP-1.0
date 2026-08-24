@@ -44,10 +44,10 @@ export const MatchCard: React.FC<MatchCardProps> = ({
     }
   };
 
-  const isLive = fixture.status === 'live';
-  const isFinished = fixture.status === 'finished';
-  const isUpcoming = fixture.status === 'upcoming';
-  const isVoting = isFinished && !fixture.results_processed_at && fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
+  const isFinished = fixture.status === 'finished' || !!fixture.results_processed_at || fixture.match_phase === 'full_time';
+  const isLive = !isFinished && fixture.status === 'live';
+  const isUpcoming = fixture.status === 'upcoming' && !isFinished;
+  const isVoting = isFinished && !fixture.results_processed_at && !!fixture.voting_close_at && new Date() < new Date(fixture.voting_close_at);
 
   return (
     <motion.div

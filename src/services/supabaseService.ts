@@ -1223,7 +1223,7 @@ export const supabaseService = {
     // 1. Fetch current fixture to check existing voting window and status
     const { data: currentFixture, error: fetchError } = await supabase
       .from('fixtures')
-      .select('status, voting_open_at, voting_close_at')
+      .select('status, home_team_id, away_team_id, voting_open_at, voting_close_at')
       .eq('id', id)
       .single();
     
@@ -1240,9 +1240,31 @@ export const supabaseService = {
       updated_at: new Date().toISOString()
     };
 
-    // Note: Voting window automation (voting_open_at, voting_close_at) 
-    // is now managed entirely by a backend PostgreSQL trigger (handle_fixture_voting_window).
-    // The trigger automatically sets the window based on match_type when status changes to 'finished'.
+    // If setting to finished, check if both teams have lineup players
+    if (finalUpdates.status === 'finished') {
+      const homeTeamId = finalUpdates.home_team_id || currentFixture?.home_team_id;
+      const awayTeamId = finalUpdates.away_team_id || currentFixture?.away_team_id;
+
+      const { data: lineups } = await supabase
+        .from('fixture_lineups')
+        .select('team_id')
+        .eq('fixture_id', id);
+
+      const homeLineupCount = lineups?.filter(l => l.team_id === homeTeamId).length || 0;
+      const awayLineupCount = lineups?.filter(l => l.team_id === awayTeamId).length || 0;
+
+      if (homeLineupCount === 0 || awayLineupCount === 0) {
+        console.log(`DEBUG: [SERVICE] Fixture ${id} finished with incomplete lineups (Home: ${homeLineupCount}, Away: ${awayLineupCount}). Skipping voting window.`);
+        finalUpdates.voting_open_at = null;
+        finalUpdates.voting_close_at = null;
+        if (!finalUpdates.results_processed_at) {
+          finalUpdates.results_processed_at = new Date().toISOString();
+        }
+        if (!finalUpdates.match_phase || finalUpdates.match_phase === 'first_half' || finalUpdates.match_phase === 'second_half' || finalUpdates.match_phase === 'halftime') {
+          finalUpdates.match_phase = 'full_time';
+        }
+      }
+    }
 
     const { data, error } = await supabase
       .from('fixtures')
@@ -1256,7 +1278,8 @@ export const supabaseService = {
       throw error;
     }
 
-    if (finalUpdates.status === 'finished' && currentFixture?.status !== 'finished') {
+    // Only send voting_open push if voting window was actually opened
+    if (finalUpdates.status === 'finished' && currentFixture?.status !== 'finished' && data?.voting_open_at && data?.voting_close_at) {
       try {
         const { data: pushData, error: pushError } = await supabase.functions.invoke('send-fixture-push', {
           body: { type: 'voting_open', fixtureId: id }
@@ -1915,6 +1938,34 @@ export const supabaseService = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Authentication required');
 
+    // 1. Try local Express Backend Endpoint first (reliable, direct DB access with service role)
+    try {
+      console.log(`DEBUG: [SERVICE] Calling /api/process-fixture-ratings...`);
+      const response = await fetch('/api/process-fixture-ratings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ fixtureId })
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        if (json.success) {
+          console.log(`DEBUG: [SERVICE] Backend rating processing succeeded:`, json);
+          return json;
+        } else {
+          console.warn(`DEBUG: [SERVICE] Backend processing reported failure:`, json.error);
+        }
+      } else {
+        console.warn(`DEBUG: [SERVICE] Backend /api/process-fixture-ratings returned status ${response.status}`);
+      }
+    } catch (backendErr: any) {
+      console.warn(`DEBUG: [SERVICE] Backend endpoint call failed, falling back to edge function:`, backendErr.message);
+    }
+
+    // 2. Fallback to Supabase Edge Function
     try {
       console.log(`DEBUG: [SERVICE] Invoking edge function 'match-processor'...`);
       const { data, error: invokeError } = await supabase.functions.invoke('match-processor', {
@@ -2548,18 +2599,21 @@ export const supabaseService = {
 
       if (candidates.length === 0) return [];
 
-      // Verify lineup existence via list of fixtureIds
+      // Verify lineup existence for both teams via list of fixtureIds
       const fixtureIds = candidates.map(f => f.id);
       const { data: lineups, error: lineupsError } = await supabase
         .from('fixture_lineups')
-        .select('fixture_id')
+        .select('fixture_id, team_id')
         .in('fixture_id', fixtureIds);
 
       if (lineupsError) throw lineupsError;
 
-      const lineupFixtureIds = new Set(lineups?.map(l => l.fixture_id) || []);
-      
-      const returned = candidates.filter(f => lineupFixtureIds.has(f.id) || (f.lineup_count && f.lineup_count > 0));
+      const returned = candidates.filter(f => {
+        const fixtureLineups = lineups?.filter(l => l.fixture_id === f.id) || [];
+        const homeCount = fixtureLineups.filter(l => l.team_id === f.home_team_id).length;
+        const awayCount = fixtureLineups.filter(l => l.team_id === f.away_team_id).length;
+        return homeCount > 0 && awayCount > 0;
+      });
       return returned as any[];
     } catch (e) {
       console.error('DEBUG: Error in getOpenVotingFixtures:', e);
@@ -3020,13 +3074,11 @@ export const supabaseService = {
   },
 
   async finishMatch(id: string) {
-    const nowIso = new Date().toISOString();
     const { error } = await supabase.rpc('finish_match', { p_fixture_id: id });
     if (error) {
       return this.updateFixture(id, { 
         status: 'finished',
-        match_phase: 'finished', 
-        finished_at: nowIso 
+        match_phase: 'full_time'
       });
     }
   },
