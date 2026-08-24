@@ -74,8 +74,12 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
       .eq('fixture_id', fixtureId);
     
     if (lineupError) throw new Error(`Lineup fetch failed: ${lineupError.message}`);
-    if (!lineupData || lineupData.length === 0) {
-      console.log(`[PROCESSOR] No players in lineup for ${fixtureId}. Marking as processed and skipping.`);
+    
+    const homeLineups = lineupData?.filter((e: any) => e.team_id === fixture.home_team_id) || [];
+    const awayLineups = lineupData?.filter((e: any) => e.team_id === fixture.away_team_id) || [];
+
+    if (!lineupData || lineupData.length === 0 || homeLineups.length === 0 || awayLineups.length === 0) {
+      console.log(`[PROCESSOR] Incomplete lineups (Home: ${homeLineups.length}, Away: ${awayLineups.length}) for ${fixtureId}. Marking as processed and skipping.`);
       await supabase
         .from('fixtures')
         .update({ results_processed_at: now })
@@ -410,7 +414,7 @@ serve(async (req) => {
 
     const authHeader = req.headers.get('Authorization');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '';
     const CRON_SECRET = Deno.env.get('CRON_SECRET');
 
     // Cron Authentication (Optional if configured)

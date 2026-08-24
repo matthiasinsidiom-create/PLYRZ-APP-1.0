@@ -6,6 +6,7 @@ import cors from "cors";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { supabaseAdmin } from "./src/lib/supabaseAdmin.ts";
+import { processFixtureRatingsEngine } from "./src/lib/ratingEngine.ts";
 
 async function startServer() {
   const app = express();
@@ -206,6 +207,93 @@ async function startServer() {
     } catch (e: any) {
       console.error("[PROXY] Exception in user-context:", e);
       res.status(500).json({ error: e.message || "Unknown error" });
+    }
+  });
+
+  app.post("/api/delete-account", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: "Missing or invalid Authorization header" });
+      }
+      
+      const token = authHeader.split(' ')[1];
+      const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      
+      if (userError || !user) {
+        return res.status(401).json({ error: 'Unauthorized or invalid token' });
+      }
+
+      const userId = user.id;
+      console.log(`[API] Starting account deletion for user: ${userId}`);
+
+      // 1. Remove player claim
+      await supabaseAdmin.from('players').update({ claimed_by_user_id: null }).eq('claimed_by_user_id', userId);
+      // 2. Delete club admins
+      await supabaseAdmin.from('club_admins').delete().eq('user_id', userId);
+      // 3. Delete push tokens
+      await supabaseAdmin.from('push_tokens').delete().eq('user_id', userId);
+      // 4. Delete push notification log
+      await supabaseAdmin.from('push_notification_log').delete().eq('user_id', userId);
+      // 5. Delete player votes
+      await supabaseAdmin.from('player_votes').delete().eq('user_id', userId);
+      // 6. Delete match checkins
+      await supabaseAdmin.from('match_checkins').delete().eq('user_id', userId);
+      // 7. Delete premium requests
+      await supabaseAdmin.from('player_premium_requests').delete().eq('user_id', userId);
+      // 8. Delete profile
+      await supabaseAdmin.from('profiles').delete().eq('id', userId);
+      
+      // 9. Delete Auth User
+      const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (deleteUserError) {
+        throw deleteUserError;
+      }
+
+      console.log(`[API] Successfully deleted user: ${userId}`);
+      res.json({ success: true, message: 'Account successfully deleted' });
+    } catch (e: any) {
+      console.error("[API] Exception deleting account:", e);
+      res.status(500).json({ error: e.message || "Unknown error" });
+    }
+  });
+
+  // Manual rating processor endpoint (invoked by admins or when edge function is unavailable)
+  app.post("/api/process-fixture-ratings", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: "Missing or invalid Authorization header" });
+      }
+
+      const token = authHeader.split(' ')[1];
+      const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      
+      if (userError || !user) {
+        return res.status(401).json({ success: false, error: "Unauthorized user token" });
+      }
+
+      const { fixtureId } = req.body;
+      if (!fixtureId || typeof fixtureId !== 'string' || !isValidUUID(fixtureId)) {
+        return res.status(400).json({ success: false, error: "Valid fixtureId parameter is required" });
+      }
+
+      console.log(`[API] User ${user.id} processing ratings for fixture: ${fixtureId}`);
+
+      const results = await processFixtureRatingsEngine(supabaseAdmin, fixtureId);
+      
+      res.json({
+        success: true,
+        message: `Successfully processed fixture ${fixtureId}`,
+        processed: results.length,
+        results
+      });
+    } catch (e: any) {
+      console.error("[API] Exception processing ratings:", e);
+      res.status(500).json({
+        success: false,
+        error: e.message || "Failed to process fixture ratings"
+      });
     }
   });
 
@@ -440,34 +528,12 @@ async function startServer() {
 
       for (const fixture of fixtures) {
         console.log(`[CRON] Processing fixture ${fixture.id}...`);
-        
-        // Prevent remote 500 errors by checking lineup locally first
-        const { count } = await supabaseAdmin
-          .from('fixture_lineups')
-          .select('*', { count: 'exact', head: true })
-          .eq('fixture_id', fixture.id);
-
-        if (count === 0) {
-          console.log(`[CRON] No players in lineup for ${fixture.id}. Marking as processed and skipping.`);
-          await supabaseAdmin
-            .from('fixtures')
-            .update({ results_processed_at: now })
-            .eq('id', fixture.id);
-          continue;
+        try {
+          const results = await processFixtureRatingsEngine(supabaseAdmin, fixture.id);
+          console.log(`[CRON] Successfully processed fixture ${fixture.id} (${results.length} ratings created)`);
+        } catch (procErr: any) {
+          console.error(`[CRON] Error processing fixture ${fixture.id}:`, procErr.message);
         }
-
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/match-processor`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 
-          },
-          // Using manual mode to bypass broken CRON_SECRET Gateway JWT validation
-          body: JSON.stringify({ type: 'manual', fixtureId: fixture.id })
-        });
-
-        const text = await response.text();
-        console.log(`[CRON] Match Processor Result for ${fixture.id}: ${response.status}`, text);
       }
 
     } catch (err: any) {
