@@ -1171,7 +1171,7 @@ export const MatchDetail: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-    <div className="min-h-screen bg-zinc-950 text-white font-sans pb-32">
+    <div className="min-h-full bg-zinc-950 text-white font-sans pb-[calc(10rem+env(safe-area-inset-bottom))]">
       {/* Header */}
       <div className="p-3 pt-3 flex items-center justify-between sticky top-0 bg-zinc-950/95 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-2">

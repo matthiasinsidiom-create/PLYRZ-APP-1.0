@@ -100,7 +100,7 @@ export const MatchList: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-24">
+    <div className="min-h-full bg-transparent text-white font-sans pb-[calc(10rem+env(safe-area-inset-bottom))]">
       {/* Round Header */}
       <div className="sticky top-0 pt-[10px] bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5 shadow-2xl">
         <div className="p-4 flex items-center justify-between max-w-2xl mx-auto">

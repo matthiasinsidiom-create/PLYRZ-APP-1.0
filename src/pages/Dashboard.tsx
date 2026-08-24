@@ -755,7 +755,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Main Content Area - Top Aligned */}
-      <div className="relative z-10 w-full pt-[100px] pb-28">
+      <div className="relative z-10 w-full pt-[100px] pb-[calc(10rem+env(safe-area-inset-bottom))]">
         <div className="max-w-xl mx-auto px-5 space-y-12">
           
           {/* A. HERO SECTION (ONLY ONE) */}

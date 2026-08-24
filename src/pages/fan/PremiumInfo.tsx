@@ -84,20 +84,21 @@ export const PremiumInfo: React.FC = () => {
   const isPremiumActive = claimedPlayer?.is_premium && (!claimedPlayer.premium_until || new Date(claimedPlayer.premium_until).getTime() + 86400000 > Date.now());
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-2xl">
-      <button 
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-zinc-400 hover:text-white mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-5 h-5" />
-        Zurück
-      </button>
+    <div className="w-full min-h-full px-4 pt-6 sm:pt-8 pb-[calc(12rem+env(safe-area-inset-bottom))]">
+      <div className="max-w-2xl mx-auto">
+        <button 
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-zinc-400 hover:text-white mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Zurück
+        </button>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-zinc-900 rounded-3xl border border-amber-500/20 overflow-hidden"
-      >
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-zinc-900 rounded-3xl border border-amber-500/20 overflow-hidden shadow-2xl"
+        >
         <div className="p-8 pb-0 text-center relative">
           <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-amber-500/10 to-transparent pointer-events-none" />
           
@@ -228,7 +229,8 @@ export const PremiumInfo: React.FC = () => {
             )}
           </div>
         </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 };

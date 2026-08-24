@@ -87,7 +87,7 @@ export const PlayerClaim: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans p-6">
+    <div className="min-h-full bg-transparent text-white font-sans p-6 pb-[calc(10rem+env(safe-area-inset-bottom))]">
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="flex items-center gap-4">
           <button onClick={() => navigate(-1)} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">

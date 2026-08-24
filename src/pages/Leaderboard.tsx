@@ -110,7 +110,7 @@ export const Leaderboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white font-sans pb-28 overflow-x-hidden w-full max-w-full">
+    <div className="min-h-full bg-zinc-950 text-white font-sans pb-[calc(10rem+env(safe-area-inset-bottom))] overflow-x-hidden w-full max-w-full">
       {/* Header */}
       <div className="p-6 pt-[10px] flex items-center justify-between sticky top-0 bg-zinc-950/80 backdrop-blur-xl z-50 border-b border-white/5">
         <div className="flex items-center gap-4">

@@ -609,7 +609,7 @@ const MatchResult: React.FC = () => {
 
   return (
     <SafeAreaWrapper>
-    <div className="min-h-screen bg-transparent text-white font-sans pb-28 selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
+    <div className="min-h-full bg-transparent text-white font-sans pb-[calc(10rem+env(safe-area-inset-bottom))] selection:bg-emerald-500/30 overflow-x-hidden w-full max-w-full">
       {/* Premium Header */}
       <div className="relative pt-3 pb-10 overflow-hidden">
         <div className="relative z-10 max-w-xl mx-auto px-4 flex flex-col">

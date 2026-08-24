@@ -185,9 +185,15 @@ const AppContent: React.FC = () => {
   }
   
   return (
-    <div className="h-full w-full flex flex-col">
+    <div className="h-full w-full flex flex-col relative overflow-hidden">
       <PopupNewsModal />
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div 
+        id="main-scroll-view"
+        className="flex-1 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain"
+        style={{
+          WebkitOverflowScrolling: 'touch'
+        }}
+      >
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/onboarding" element={<Onboarding />} />
@@ -247,7 +253,7 @@ export default function App() {
   console.log('App: Rendering BrowserRouter...');
   return (
     <div 
-      className="h-screen w-full bg-zinc-950 overflow-hidden"
+      className="min-h-[100dvh] h-[100dvh] w-full bg-zinc-950 overflow-hidden"
       style={{
         backgroundImage: 'linear-gradient(rgba(9, 9, 11, 0.8), rgba(9, 9, 11, 0.8)), url("https://upvzomofjjwaxkfogpuc.supabase.co/storage/v1/object/public/assets/background/background.png")',
         backgroundSize: 'cover',
@@ -257,7 +263,7 @@ export default function App() {
     >
       <HashRouter>
         <AuthProvider>
-          <div className="h-full w-full overflow-auto selection:bg-emerald-500 selection:text-white">
+          <div className="h-full w-full flex flex-col overflow-hidden selection:bg-emerald-500 selection:text-white">
             <AppContent />
           </div>
         </AuthProvider>

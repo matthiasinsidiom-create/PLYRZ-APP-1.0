@@ -188,7 +188,7 @@ export const PlayerDetail: React.FC = () => {
   const glowColor = tier === 'gold' ? '#fbbf24' : tier === 'silver' ? '#94a3b8' : '#b45309';
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans pb-24 overflow-x-hidden w-full max-w-full">
+    <div className="min-h-full bg-transparent text-white font-sans pb-[calc(10rem+env(safe-area-inset-bottom))] overflow-x-hidden w-full max-w-full">
       {/* Header */}
       <div className="p-6 pt-[10px] sticky top-0 bg-black/20 backdrop-blur-xl z-50 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-4">
