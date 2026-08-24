@@ -18,7 +18,7 @@ workflows:
         # Sichtbare Version im App Store.
         # Beim nächsten größeren Update manuell ändern:
         # 1.0.1 -> 1.0.2
-        APP_VERSION: "1.0.4"
+        APP_VERSION: "1.0.3"
 
       groups:
         - app_store_credentials
