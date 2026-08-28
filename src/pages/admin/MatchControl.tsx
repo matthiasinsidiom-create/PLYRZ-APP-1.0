@@ -1190,12 +1190,12 @@ const AdminMatchControl: React.FC = () => {
       {/* Live Goal Modal */}
       <AnimatePresence>
         {showLiveGoalModal && (
-          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
             <motion.div
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative max-h-[85vh] flex flex-col"
             >
               <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/30">
                 <div className="flex items-center gap-3">
@@ -1226,7 +1226,7 @@ const AdminMatchControl: React.FC = () => {
                 </button>
               </div>
 
-              <div className="p-6">
+              <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
                 {liveGoalFormType === 'opponent' ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">

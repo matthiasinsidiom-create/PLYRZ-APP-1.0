@@ -241,8 +241,8 @@ const AppContent: React.FC = () => {
         </Routes>
       </div>
       
-      {/* Only show bottom nav for fan routes, not admin, login or onboarding */}
-      {!location.pathname.startsWith('/admin') && location.pathname !== '/onboarding' && (
+      {/* Only show bottom nav for fan routes, not admin, team-admin, login or onboarding */}
+      {!location.pathname.startsWith('/admin') && !location.pathname.startsWith('/team-admin') && location.pathname !== '/onboarding' && (
         <BottomNav hasAdminAccess={hasAdminAccess} />
       )}
     </div>

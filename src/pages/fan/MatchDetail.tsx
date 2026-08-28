@@ -1864,10 +1864,11 @@ export const MatchDetail: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
       {/* Confirmation Modal */}
       <AnimatePresence>
         {showConfirmProcess && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -1924,12 +1925,12 @@ export const MatchDetail: React.FC = () => {
       {/* Opponent Goal Modal */}
       <AnimatePresence>
         {isAddingOpponentGoal && (
-          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
             <motion.div
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative max-h-[85vh] flex flex-col"
             >
               <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/30">
                 <div className="flex items-center gap-3">
@@ -1951,7 +1952,7 @@ export const MatchDetail: React.FC = () => {
                 </button>
               </div>
 
-              <div className="p-6">
+              <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1995,12 +1996,12 @@ export const MatchDetail: React.FC = () => {
       {/* Assist Selection Modal */}
       <AnimatePresence>
         {assistSelectionPlayerId && (
-          <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
             <motion.div
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[80vh]"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
             >
               <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/30">
                 <div className="flex items-center gap-3">
@@ -2027,7 +2028,7 @@ export const MatchDetail: React.FC = () => {
                   <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
                     <input 
-                      type="text"
+                      type="text" 
                       placeholder="Spieler suchen..."
                       value={playerSearchQuery}
                       onChange={(e) => setPlayerSearchQuery(e.target.value)}
@@ -2083,7 +2084,7 @@ export const MatchDetail: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
-      <div className="h-20" /> {/* Spacer */}
+      <div className="h-28" /> {/* Spacer */}
     </div>
     </SafeAreaWrapper>
   );
