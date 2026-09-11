@@ -1240,31 +1240,31 @@ export const supabaseService = {
       updated_at: new Date().toISOString()
     };
 
-    // If setting to finished, check if both teams have lineup players
-    if (finalUpdates.status === 'finished') {
-      const homeTeamId = finalUpdates.home_team_id || currentFixture?.home_team_id;
-      const awayTeamId = finalUpdates.away_team_id || currentFixture?.away_team_id;
+      // If setting to finished, check if any team has lineup players
+      if (finalUpdates.status === 'finished') {
+        const homeTeamId = finalUpdates.home_team_id || currentFixture?.home_team_id;
+        const awayTeamId = finalUpdates.away_team_id || currentFixture?.away_team_id;
 
-      const { data: lineups } = await supabase
-        .from('fixture_lineups')
-        .select('team_id')
-        .eq('fixture_id', id);
+        const { data: lineups } = await supabase
+          .from('fixture_lineups')
+          .select('team_id')
+          .eq('fixture_id', id);
 
-      const homeLineupCount = lineups?.filter(l => l.team_id === homeTeamId).length || 0;
-      const awayLineupCount = lineups?.filter(l => l.team_id === awayTeamId).length || 0;
+        const homeLineupCount = lineups?.filter(l => l.team_id === homeTeamId).length || 0;
+        const awayLineupCount = lineups?.filter(l => l.team_id === awayTeamId).length || 0;
 
-      if (homeLineupCount === 0 || awayLineupCount === 0) {
-        console.log(`DEBUG: [SERVICE] Fixture ${id} finished with incomplete lineups (Home: ${homeLineupCount}, Away: ${awayLineupCount}). Skipping voting window.`);
-        finalUpdates.voting_open_at = null;
-        finalUpdates.voting_close_at = null;
-        if (!finalUpdates.results_processed_at) {
-          finalUpdates.results_processed_at = new Date().toISOString();
-        }
-        if (!finalUpdates.match_phase || finalUpdates.match_phase === 'first_half' || finalUpdates.match_phase === 'second_half' || finalUpdates.match_phase === 'halftime') {
-          finalUpdates.match_phase = 'full_time';
+        if (homeLineupCount === 0 && awayLineupCount === 0) {
+          console.log(`DEBUG: [SERVICE] Fixture ${id} finished with no lineups. Skipping voting window.`);
+          finalUpdates.voting_open_at = null;
+          finalUpdates.voting_close_at = null;
+          if (!finalUpdates.results_processed_at) {
+            finalUpdates.results_processed_at = new Date().toISOString();
+          }
+          if (!finalUpdates.match_phase || finalUpdates.match_phase === 'first_half' || finalUpdates.match_phase === 'second_half' || finalUpdates.match_phase === 'halftime') {
+            finalUpdates.match_phase = 'full_time';
+          }
         }
       }
-    }
 
     const { data, error } = await supabase
       .from('fixtures')
@@ -2599,7 +2599,7 @@ export const supabaseService = {
 
       if (candidates.length === 0) return [];
 
-      // Verify lineup existence for both teams via list of fixtureIds
+      // Verify lineup existence for at least one team via list of fixtureIds
       const fixtureIds = candidates.map(f => f.id);
       const { data: lineups, error: lineupsError } = await supabase
         .from('fixture_lineups')
@@ -2612,7 +2612,7 @@ export const supabaseService = {
         const fixtureLineups = lineups?.filter(l => l.fixture_id === f.id) || [];
         const homeCount = fixtureLineups.filter(l => l.team_id === f.home_team_id).length;
         const awayCount = fixtureLineups.filter(l => l.team_id === f.away_team_id).length;
-        return homeCount > 0 && awayCount > 0;
+        return homeCount > 0 || awayCount > 0;
       });
       return returned as any[];
     } catch (e) {

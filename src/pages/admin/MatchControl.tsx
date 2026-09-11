@@ -291,7 +291,7 @@ const AdminMatchControl: React.FC = () => {
     if (updates.status === 'finished') {
       const hasHome = (lineup?.home?.length || 0) > 0;
       const hasAway = (lineup?.away?.length || 0) > 0;
-      if (!hasHome || !hasAway) {
+      if (!hasHome && !hasAway) {
         fixtureUpdates.voting_open_at = null;
         fixtureUpdates.voting_close_at = null;
         fixtureUpdates.results_processed_at = new Date().toISOString();
@@ -305,8 +305,8 @@ const AdminMatchControl: React.FC = () => {
       setStatusModal({
         isOpen: true,
         title: 'Erfolg',
-        message: updates.status === 'finished' && ((lineup?.home?.length || 0) === 0 || (lineup?.away?.length || 0) === 0)
-          ? 'Spiel erfolgreich beendet. Da keine vollständige Aufstellung vorliegt, entfällt das Voting.'
+        message: updates.status === 'finished' && (lineup?.home?.length || 0) === 0 && (lineup?.away?.length || 0) === 0
+          ? 'Spiel erfolgreich beendet. Da keine Aufstellung vorliegt, entfällt das Voting.'
           : 'Spiel erfolgreich aktualisiert.',
         type: 'success'
       });
@@ -674,11 +674,12 @@ const AdminMatchControl: React.FC = () => {
   const isProcessed = !!fixture.results_processed_at;
   const hasHomeLineup = lineup.home.length >= 11;
   const hasAwayLineup = lineup.away.length >= 11;
+  const hasAnyLineup = lineup.home.length > 0 || lineup.away.length > 0;
   const hasScore = fixture.home_score !== null && fixture.away_score !== null;
   const hasEvents = events.length > 0;
-  // Allow processing if lineups and score exist. 
+  // Allow processing if at least one lineup and score exist. 
   // If already processed, the button will act as "Re-process".
-  const canProcess = hasHomeLineup && hasAwayLineup && hasScore;
+  const canProcess = hasAnyLineup && hasScore;
 
   return (
     <div className="min-h-screen bg-transparent p-4 pb-24 text-white font-sans">
@@ -901,7 +902,7 @@ const AdminMatchControl: React.FC = () => {
           <HubCard 
             title="Aufstellungen" 
             icon={<Users className="w-5 h-5" />}
-            status={hasHomeLineup && hasAwayLineup ? 'complete' : 'pending'}
+            status={hasHomeLineup || hasAwayLineup ? 'complete' : 'pending'}
             isActive={activeSection === 'lineups'}
             onClick={() => setActiveSection('lineups')}
           >
@@ -1128,8 +1129,7 @@ const AdminMatchControl: React.FC = () => {
                 <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500">Pre-Processing Checkliste</h4>
                 <div className="space-y-3">
                   <ChecklistItem label="Ergebnis eingetragen" checked={hasScore} />
-                  <ChecklistItem label="Aufstellung Heim (min. 11)" checked={hasHomeLineup} />
-                  <ChecklistItem label="Aufstellung Auswärts (min. 11)" checked={hasAwayLineup} />
+                  <ChecklistItem label="Aufstellung erfasst (min. 1 Team)" checked={hasAnyLineup} />
                   <ChecklistItem label="Spielereignisse erfasst" checked={hasEvents} />
                   <ChecklistItem label="Spielergebnisse noch nicht verarbeitet" checked={!isProcessed} />
                 </div>

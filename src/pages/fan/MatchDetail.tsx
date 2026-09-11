@@ -251,10 +251,10 @@ export const MatchDetail: React.FC = () => {
 
     const homeLineupCount = lineup.filter(l => l.team_id === fixture.home_team_id).length;
     const awayLineupCount = lineup.filter(l => l.team_id === fixture.away_team_id).length;
-    const hasBothLineups = homeLineupCount > 0 && awayLineupCount > 0;
+    const hasAnyLineup = homeLineupCount > 0 || awayLineupCount > 0;
 
-    if (!hasBothLineups) {
-      console.log(`DEBUG: [LIFECYCLE] Incomplete lineups (Home: ${homeLineupCount}, Away: ${awayLineupCount}). Finishing match directly without voting.`);
+    if (!hasAnyLineup) {
+      console.log(`DEBUG: [LIFECYCLE] No lineups found for either team (Home: ${homeLineupCount}, Away: ${awayLineupCount}). Finishing match directly without voting.`);
       const nowIso = new Date().toISOString();
       setFixture(prev => prev ? { 
         ...prev, 
@@ -282,7 +282,7 @@ export const MatchDetail: React.FC = () => {
           console.error("DEBUG: [LIFECYCLE] Error directly ending match:", directError);
           alert(`Fehler beim Beenden des Spiels: ${directError.message || 'Unbekannter Fehler'}`);
         } else {
-          alert('Spiel erfolgreich beendet. Da keine vollständigen Aufstellungen hinterlegt sind, entfällt das Voting.');
+          alert('Spiel erfolgreich beendet. Da keine Aufstellung hinterlegt ist, entfällt das Voting.');
         }
       } catch (directErr) {
         console.error("DEBUG: [LIFECYCLE] Direct finish failed:", directErr);

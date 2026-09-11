@@ -1035,35 +1035,41 @@ const MatchResult: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-y-16">
-              {teamBreakdown.home.map((entry, index) => (
-                <motion.div 
-                  key={entry.player_id}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.05 }}
-                  className="flex flex-col items-center group w-full"
-                >
-                  <div className="w-full flex justify-center items-center">
-                    <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
-                      <PlayerCard 
-                        player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
-                        clubLogo={entry.players?.teams?.clubs?.logo_url}
-                        jerseyNumber={entry.jersey_number}
-                        lineupRole={entry.lineup_role}
-                        onClick={() => navigate(`/players/${entry.player_id}`)}
-                        className="shadow-2xl"
-                      />
+            {teamBreakdown.home.length === 0 ? (
+              <div className="p-8 text-center bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Keine Aufstellung hinterlegt</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-y-16">
+                {teamBreakdown.home.map((entry, index) => (
+                  <motion.div 
+                    key={entry.player_id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex flex-col items-center group w-full"
+                  >
+                    <div className="w-full flex justify-center items-center">
+                      <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
+                        <PlayerCard 
+                          player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
+                          clubLogo={entry.players?.teams?.clubs?.logo_url}
+                          jerseyNumber={entry.jersey_number}
+                          lineupRole={entry.lineup_role}
+                          onClick={() => navigate(`/players/${entry.player_id}`)}
+                          className="shadow-2xl"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="mt-4 w-full flex justify-center items-center">
-                    <PerformancePanel entry={entry} />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                    
+                    <div className="mt-4 w-full flex justify-center items-center">
+                      <PerformancePanel entry={entry} />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Away Team Section */}
@@ -1091,35 +1097,41 @@ const MatchResult: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-y-16">
-              {teamBreakdown.away.map((entry, index) => (
-                <motion.div 
-                  key={entry.player_id}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.05 }}
-                  className="flex flex-col items-center group w-full"
-                >
-                  <div className="w-full flex justify-center items-center">
-                    <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
-                      <PlayerCard 
-                        player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
-                        clubLogo={entry.players?.teams?.clubs?.logo_url}
-                        jerseyNumber={entry.jersey_number}
-                        lineupRole={entry.lineup_role}
-                        onClick={() => navigate(`/players/${entry.player_id}`)}
-                        className="shadow-2xl"
-                      />
+            {teamBreakdown.away.length === 0 ? (
+              <div className="p-8 text-center bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-800">
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Keine Aufstellung hinterlegt</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-y-16">
+                {teamBreakdown.away.map((entry, index) => (
+                  <motion.div 
+                    key={entry.player_id}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex flex-col items-center group w-full"
+                  >
+                    <div className="w-full flex justify-center items-center">
+                      <div className="relative flex justify-center items-center origin-top scale-[0.8] sm:scale-[0.85] group-hover:scale-[0.85] sm:group-hover:scale-[0.9] transition-transform duration-500 -mb-[98px] sm:-mb-[73px] z-10">
+                        <PlayerCard 
+                          player={entry.players || { full_name: 'Unbekannt', id: entry.player_id, photo_url: null, position: 'Abwehr' } as any} 
+                          clubLogo={entry.players?.teams?.clubs?.logo_url}
+                          jerseyNumber={entry.jersey_number}
+                          lineupRole={entry.lineup_role}
+                          onClick={() => navigate(`/players/${entry.player_id}`)}
+                          className="shadow-2xl"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="mt-4 w-full flex justify-center items-center">
-                    <PerformancePanel entry={entry} />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                    
+                    <div className="mt-4 w-full flex justify-center items-center">
+                      <PerformancePanel entry={entry} />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>
