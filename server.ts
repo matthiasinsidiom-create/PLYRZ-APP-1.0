@@ -258,27 +258,57 @@ async function startServer() {
     }
   });
 
-  // Manual rating processor endpoint (invoked by admins or when edge function is unavailable)
+  // Rating processor endpoint (invoked automatically upon voting close, by cron, by fans, or by admins)
   app.post("/api/process-fixture-ratings", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ success: false, error: "Missing or invalid Authorization header" });
-      }
-
-      const token = authHeader.split(' ')[1];
-      const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-      
-      if (userError || !user) {
-        return res.status(401).json({ success: false, error: "Unauthorized user token" });
-      }
-
       const { fixtureId } = req.body;
       if (!fixtureId || typeof fixtureId !== 'string' || !isValidUUID(fixtureId)) {
         return res.status(400).json({ success: false, error: "Valid fixtureId parameter is required" });
       }
 
-      console.log(`[API] User ${user.id} processing ratings for fixture: ${fixtureId}`);
+      // Check fixture state
+      const { data: fixture, error: fixError } = await supabaseAdmin
+        .from('fixtures')
+        .select('id, status, voting_close_at, results_processed_at, home_team_id, away_team_id')
+        .eq('id', fixtureId)
+        .single();
+
+      if (fixError || !fixture) {
+        return res.status(404).json({ success: false, error: "Fixture not found" });
+      }
+
+      // If already processed, return success immediately
+      if (fixture.results_processed_at) {
+        return res.json({
+          success: true,
+          message: `Fixture ${fixtureId} results are already processed`,
+          alreadyProcessed: true
+        });
+      }
+
+      // Check if voting window has closed
+      const isVotingClosed = fixture.status === 'finished' && 
+        (!fixture.voting_close_at || new Date() >= new Date(fixture.voting_close_at));
+
+      if (!isVotingClosed) {
+        // If voting is still open or match is not finished, require admin authorization
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return res.status(401).json({ success: false, error: "Voting is still open. Admin authorization required." });
+        }
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+        if (userError || !user) {
+          return res.status(401).json({ success: false, error: "Unauthorized user token" });
+        }
+        const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single();
+        const isSystemAdmin = profile?.role === 'admin' || profile?.role === 'superadmin';
+        if (!isSystemAdmin) {
+          return res.status(403).json({ success: false, error: "Only admins can process ratings before voting closes." });
+        }
+      }
+
+      console.log(`[API] Processing ratings for fixture: ${fixtureId} (voting closed: ${isVotingClosed})`);
 
       const results = await processFixtureRatingsEngine(supabaseAdmin, fixtureId);
       
@@ -516,16 +546,8 @@ async function startServer() {
         return;
       }
 
-      console.log(`[CRON] Found ${fixtures.length} fixtures ready for result processing... triggering edge function.`);
+      console.log(`[CRON] Found ${fixtures.length} fixtures ready for result processing...`);
       
-      const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-      const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      
-      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-        console.error('[CRON] Missing credentials to invoke match-processor.');
-        return;
-      }
-
       for (const fixture of fixtures) {
         console.log(`[CRON] Processing fixture ${fixture.id}...`);
         try {
@@ -541,7 +563,9 @@ async function startServer() {
     }
   };
 
-  setInterval(autoProcessFixtures, 30000); // 30 seconds check
+  // Run immediately on boot and check every 10 seconds
+  autoProcessFixtures();
+  setInterval(autoProcessFixtures, 10000); // 10 seconds check
 
   const server = app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
