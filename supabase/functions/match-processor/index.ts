@@ -78,8 +78,8 @@ async function processFixtureRatings(supabase: any, fixtureId: string) {
     const homeLineups = lineupData?.filter((e: any) => e.team_id === fixture.home_team_id) || [];
     const awayLineups = lineupData?.filter((e: any) => e.team_id === fixture.away_team_id) || [];
 
-    if (!lineupData || lineupData.length === 0 || homeLineups.length === 0 || awayLineups.length === 0) {
-      console.log(`[PROCESSOR] Incomplete lineups (Home: ${homeLineups.length}, Away: ${awayLineups.length}) for ${fixtureId}. Marking as processed and skipping.`);
+    if (!lineupData || lineupData.length === 0) {
+      console.log(`[PROCESSOR] No lineups found for ${fixtureId}. Marking as processed and skipping.`);
       await supabase
         .from('fixtures')
         .update({ results_processed_at: now })
