@@ -86,8 +86,8 @@ export async function processFixtureRatingsEngine(supabase: SupabaseClient, fixt
   const homeLineups = lineupData?.filter((e: any) => e.team_id === fixture.home_team_id) || [];
   const awayLineups = lineupData?.filter((e: any) => e.team_id === fixture.away_team_id) || [];
 
-  if (!lineupData || lineupData.length === 0 || homeLineups.length === 0 || awayLineups.length === 0) {
-    console.log(`[RATING ENGINE] Incomplete lineups (Home: ${homeLineups.length}, Away: ${awayLineups.length}) for ${fixtureId}. Marking as processed.`);
+  if (!lineupData || lineupData.length === 0) {
+    console.log(`[RATING ENGINE] No lineups found for fixture ${fixtureId}. Marking as processed.`);
     await supabase
       .from('fixtures')
       .update({ 
@@ -316,7 +316,7 @@ export async function processFixtureRatingsEngine(supabase: SupabaseClient, fixt
       player_id: p.playerId,
       old_overall: Math.round(p.oldOverall), 
       new_overall: newOverall, 
-      delta_overall: Number(Math.max(-2, Math.min(3, finalDelta)).toFixed(4)),
+      delta_overall: Number(Math.max(-2, Math.min(2, finalDelta)).toFixed(4)),
       positive_votes: p.upVotes, 
       negative_votes: p.downVotes, 
       neutral_votes: p.neutralVotes,
