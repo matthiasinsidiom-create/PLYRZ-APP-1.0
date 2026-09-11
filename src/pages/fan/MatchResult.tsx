@@ -310,11 +310,10 @@ const MatchResult: React.FC = () => {
     }
   };
 
-  // Auto-process for admins if voting is closed but results are missing
+  // Auto-process if voting is closed but results are missing (for all users: fans and admins)
   useEffect(() => {
     const shouldAutoProcess = 
       id && 
-      isAdmin && 
       fixture && 
       fixture.status === 'finished' && 
       !fixture.results_processed_at && 
@@ -324,12 +323,12 @@ const MatchResult: React.FC = () => {
     if (shouldAutoProcess) {
       const closeAt = fixture.voting_close_at ? new Date(fixture.voting_close_at) : null;
       if (!closeAt || new Date() >= closeAt) {
-        console.log(`DEBUG: [UI] Admin detected on finished result page. Auto-triggering calculation for ${id}...`);
+        console.log(`DEBUG: [UI] Voting closed and results pending. Auto-triggering calculation for ${id}...`);
         setAutoProcessed(true);
         handleManualProcess();
       }
     }
-  }, [id, isAdmin, fixture?.status, fixture?.results_processed_at, processing, autoProcessed]);
+  }, [id, fixture?.status, fixture?.results_processed_at, fixture?.voting_close_at, processing, autoProcessed]);
 
   useEffect(() => {
     if (id) {
@@ -581,14 +580,14 @@ const MatchResult: React.FC = () => {
               </button>
             )}
 
-            {!isVotingOpen && !fixture?.results_processed_at && isAdmin && (
+            {!isVotingOpen && !fixture?.results_processed_at && (
               <button 
                 onClick={handleManualProcess}
                 disabled={processing}
                 className="w-full bg-zinc-800 text-white font-bold py-5 rounded-2xl hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-white/5 active:scale-[0.98]"
               >
-                {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}
-                {processing ? 'Wird berechnet...' : 'Ergebnisse manuell berechnen'}
+                {processing ? <Loader2 className="w-5 h-5 animate-spin text-emerald-400" /> : <RefreshCw className="w-5 h-5 text-emerald-400" />}
+                {processing ? 'Ergebnisse werden berechnet...' : 'Ergebnisse jetzt laden'}
               </button>
             )}
 

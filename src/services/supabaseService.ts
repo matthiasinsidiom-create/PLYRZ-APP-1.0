@@ -1932,21 +1932,43 @@ export const supabaseService = {
   },
 
   async processFixtureRatings(fixtureId: string) {
-    console.log(`DEBUG: [SERVICE] Starting manual rating processing for fixture: ${fixtureId}`);
-    await this.checkAdmin(fixtureId);
+    console.log(`DEBUG: [SERVICE] Starting rating processing for fixture: ${fixtureId}`);
+    
+    // Check current fixture status
+    const { data: fixture } = await supabase
+      .from('fixtures')
+      .select('id, status, voting_close_at, results_processed_at')
+      .eq('id', fixtureId)
+      .single();
+
+    if (fixture?.results_processed_at) {
+      console.log(`DEBUG: [SERVICE] Fixture ${fixtureId} is already processed.`);
+      return { success: true, message: 'Already processed', alreadyProcessed: true };
+    }
+
+    const isVotingClosed = fixture?.status === 'finished' && 
+      (!fixture?.voting_close_at || new Date() >= new Date(fixture.voting_close_at));
+
+    // If voting is NOT yet closed, only an admin can force early processing
+    if (!isVotingClosed) {
+      await this.checkAdmin(fixtureId);
+    }
     
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('Authentication required');
 
     // 1. Try local Express Backend Endpoint first (reliable, direct DB access with service role)
     try {
       console.log(`DEBUG: [SERVICE] Calling /api/process-fixture-ratings...`);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
       const response = await fetch('/api/process-fixture-ratings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
+        headers,
         body: JSON.stringify({ fixtureId })
       });
 
@@ -1971,9 +1993,6 @@ export const supabaseService = {
       const { data, error: invokeError } = await supabase.functions.invoke('match-processor', {
         body: { 
           fixtureId,
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
         }
       });
 

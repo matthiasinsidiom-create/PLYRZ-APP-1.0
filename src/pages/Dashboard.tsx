@@ -193,6 +193,30 @@ export const Dashboard: React.FC = () => {
       setPlayers(p);
 
       const now = new Date();
+
+      // Auto-process any finished fixture where voting has closed but results are not yet calculated
+      const pendingFixtures = f.filter(fixture => 
+        fixture.status === 'finished' && 
+        !fixture.results_processed_at && 
+        fixture.voting_close_at && 
+        now >= new Date(fixture.voting_close_at)
+      );
+
+      if (pendingFixtures.length > 0) {
+        pendingFixtures.forEach(pFix => {
+          console.log(`DEBUG: [DASHBOARD] Triggering auto-processing for completed fixture ${pFix.id}`);
+          supabaseService.processFixtureRatings(pFix.id)
+            .then(res => {
+              if (res && !res.alreadyProcessed) {
+                // Refresh dashboard fixtures once processed
+                supabaseService.getFixtures(profile.selected_league_id).then(updatedF => {
+                  setFixtures(updatedF);
+                }).catch(() => {});
+              }
+            })
+            .catch(err => console.warn(`DEBUG: [DASHBOARD] Background process error for ${pFix.id}:`, err));
+        });
+      }
       
       // Calculate Current Round
       // 1. Find next upcoming match

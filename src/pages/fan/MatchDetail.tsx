@@ -988,10 +988,9 @@ export const MatchDetail: React.FC = () => {
     }
   };
 
-  const handleProcessResults = async () => {
-    if (!id) return;
-    console.log(`DEBUG: [LIFECYCLE] --- RESULT PROCESSING TRIGGERED ---`);
-    console.log(`DEBUG: [LIFECYCLE] Admin: ${profile?.display_name}`);
+  const handleProcessResults = async (isManualClick = false) => {
+    if (!id || isProcessing) return;
+    console.log(`DEBUG: [LIFECYCLE] --- RESULT PROCESSING TRIGGERED (manual: ${isManualClick}) ---`);
     setIsProcessing(true);
     let originalError: any = null;
     
@@ -1004,7 +1003,7 @@ export const MatchDetail: React.FC = () => {
     
     try {
       // Add a small delay to allow DB processing to finish if API timed out but started
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const updatedFixture = await supabaseService.getFixtureById(id);
       let resultsExist = !!updatedFixture.results_processed_at;
@@ -1024,17 +1023,14 @@ export const MatchDetail: React.FC = () => {
         console.log(`DEBUG: [LIFECYCLE] Processing SUCCESS verified. Results are available.`);
         setIsProcessed(true);
         setProcessedCount(updatedFixture.fixture_lineups?.length || 11);
-        
-        setTimeout(() => {
-          navigate(`/matches/${id}/result`);
-        }, 1500);
-      } else {
+        navigate(`/matches/${id}/result`);
+      } else if (isManualClick && originalError) {
         console.error('DEBUG: [LIFECYCLE] Processing FAILED to create results:', originalError);
         alert(originalError instanceof Error ? originalError.message : 'Failed to process results');
       }
     } catch (refreshErr) {
       console.error('DEBUG: [LIFECYCLE] Error checking processing status:', refreshErr);
-      if (originalError) {
+      if (isManualClick && originalError) {
         alert(originalError instanceof Error ? originalError.message : 'Failed to process results');
       }
     } finally {
@@ -1042,69 +1038,24 @@ export const MatchDetail: React.FC = () => {
     }
   };
 
-  // Auto-trigger processing when voting window closes (for admins)
+  // Auto-trigger processing when voting window closes (for all users: fans and admins)
   useEffect(() => {
-    if (!isMatchAdmin || !fixture || fixture.results_processed_at || fixture.status !== 'finished' || !fixture.voting_close_at) return;
+    if (!fixture || fixture.results_processed_at || fixture.status !== 'finished' || !fixture.voting_close_at) return;
 
     const checkWindow = () => {
       const now = new Date();
       const closeAt = new Date(fixture.voting_close_at!);
       
       if (now >= closeAt && !isProcessing) {
-        console.log("DEBUG: [LIFECYCLE] Voting window closed. Auto-triggering result processing...");
-        handleProcessResults();
+        console.log("DEBUG: [LIFECYCLE] Voting window closed. Auto-triggering result processing for everyone...");
+        handleProcessResults(false);
       }
     };
 
-    const interval = setInterval(checkWindow, 5000);
+    checkWindow();
+    const interval = setInterval(checkWindow, 3000);
     return () => clearInterval(interval);
-  }, [isMatchAdmin, fixture, isProcessing]);
-
-  // Polling for normal users
-  useEffect(() => {
-    let interval: any;
-    
-    const checkResults = async () => {
-      if (!id) return;
-      
-      try {
-        const { data: updatedFixture } = await supabase.from('fixtures').select('results_processed_at').eq('id', id).single();
-        
-        if (updatedFixture?.results_processed_at) {
-          const { data: history } = await supabase.from('player_rating_history').select('id').eq('fixture_id', id).limit(1);
-          
-          if (history && history.length > 0) {
-            setIsPollingResults(false);
-            if (interval) clearInterval(interval);
-            loadData(); // Update full state
-            navigate(`/matches/${id}/result`); // Navigate to results
-          }
-        }
-      } catch (err) {
-        console.error("DEBUG: Polling error", err);
-      }
-    };
-
-    if (fixture?.status === 'finished' && fixture.voting_close_at && !fixture.results_processed_at && !isMatchAdmin) {
-      const closeAt = new Date(fixture.voting_close_at);
-      if (new Date() >= closeAt && !pollTimeout) {
-        setIsPollingResults(true);
-        interval = setInterval(checkResults, 5000);
-        
-        // Timeout after 60 seconds
-        const timeout = setTimeout(() => {
-          setIsPollingResults(false);
-          setPollTimeout(true);
-          if (interval) clearInterval(interval);
-        }, 60000);
-
-        return () => {
-          if (interval) clearInterval(interval);
-          clearTimeout(timeout);
-        };
-      }
-    }
-  }, [fixture?.status, fixture?.voting_close_at, fixture?.results_processed_at, pollTimeout, isMatchAdmin, id, navigate]);
+  }, [fixture?.status, fixture?.voting_close_at, fixture?.results_processed_at, isProcessing, id]);
 
   if (loading) {
     return (
@@ -1706,22 +1657,20 @@ export const MatchDetail: React.FC = () => {
                         <p className="text-xs font-black uppercase tracking-widest">Voting beendet</p>
                       </div>
                       <p className="text-zinc-500 text-[10px] font-medium">
-                        {pollTimeout && !isMatchAdmin
-                          ? "Ergebnisse werden noch verarbeitet."
-                          : "Das Voting-Fenster ist geschlossen. Die Ergebnisse werden in Kürze berechnet."}
+                        Das Voting-Fenster ist geschlossen. Die Ergebnisse werden jetzt automatisch berechnet und geladen.
                       </p>
-                      {isPollingResults && !pollTimeout && !isMatchAdmin && (
-                        <div className="mt-2 flex items-center gap-2 text-emerald-500">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest">Suche nach Ergebnissen...</span>
-                        </div>
-                      )}
-                      {pollTimeout && !isMatchAdmin && (
+                      <div className="mt-2 flex items-center gap-2 text-emerald-500">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">
+                          {isProcessing ? "Ergebnisse werden berechnet..." : "Ergebnisse werden geladen..."}
+                        </span>
+                      </div>
+                      {!isProcessing && (
                         <button 
-                          onClick={() => { setPollTimeout(false); setIsPollingResults(true); }}
+                          onClick={() => handleProcessResults(true)}
                           className="mt-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
                         >
-                          Ergebnisse erneut prüfen
+                          Ergebnisse jetzt laden
                         </button>
                       )}
                     </div>
